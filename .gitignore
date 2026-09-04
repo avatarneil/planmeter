@@ -1,0 +1,12 @@
+*.app
+.DS_Store
+.env
+.env.*
+!.env.example
+.build/
+.swiftpm/
+DerivedData/
+dist/
+ios/PlanMeterMobile/build/
+xcuserdata/
+*.xcuserstate

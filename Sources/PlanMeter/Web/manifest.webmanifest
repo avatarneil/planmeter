@@ -1,0 +1,9 @@
+{
+  "name": "PlanMeter",
+  "short_name": "PlanMeter",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#0891b2",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

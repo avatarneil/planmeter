@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PlanMeter">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <title>PlanMeter</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>PlanMeter</h1>
+      <div class="sub" id="subtitle"></div>
+    </div>
+    <div class="actions">
+      <button class="icon" id="refresh" title="Refresh" aria-label="Refresh">&#x21bb;</button>
+      <button class="icon" id="settings" title="Settings" aria-label="Settings">&#x2699;</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="pairing" class="card hidden">
+      <h2>Pair with your Mac</h2>
+      <p class="muted">On the Mac, open PlanMeter → Remote and create a pairing code. Scan it here or enter the eight digits shown below the Web QR. Both devices need to be on your tailnet.</p>
+      <div id="scanner" class="scanner hidden">
+        <video id="scan-video" playsinline muted autoplay></video>
+        <div class="scan-frame" aria-hidden="true"></div>
+        <button id="scan-stop" class="scan-stop">Cancel</button>
+      </div>
+      <div id="pair-options" class="pair-options">
+        <button id="scan-start" class="primary">Scan pairing code</button>
+        <form id="pair-code-form" class="pair-code-form">
+          <label for="pair-code">Or enter the Home Screen code</label>
+          <div class="pair-code-row">
+            <input id="pair-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9" pattern="[0-9 ]{8,9}" placeholder="1234 5678" aria-describedby="pairing-status">
+            <button id="pair-code-submit" type="submit">Pair</button>
+          </div>
+        </form>
+        <label class="file-button" for="photo">Take a photo of the code
+          <input id="photo" type="file" accept="image/*" capture="environment">
+        </label>
+        <div class="paste-row">
+          <input id="paste-link" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="or paste the pairing link">
+          <button id="paste-pair">Pair</button>
+        </div>
+      </div>
+      <div id="pairing-status" class="status"></div>
+      <ul class="notes">
+        <li>Added this page to your Home Screen? Pair from here: iOS opens camera-scanned codes in Safari, which keeps its own storage.</li>
+        <li>Pairing codes are single use and expire in 5 minutes.</li>
+        <li>After 5 incorrect attempts, the Mac cancels the code.</li>
+        <li>This browser keeps a non-extractable key; the Mac pins it.</li>
+        <li>Every request is end-to-end encrypted on top of Tailscale and TLS.</li>
+      </ul>
+    </section>
+
+    <section id="dashboard" class="hidden">
+      <div class="segmented" id="range" role="tablist">
+        <button data-days="1" role="tab">24h</button>
+        <button data-days="7" role="tab">7d</button>
+        <button data-days="30" role="tab" class="active" aria-selected="true">30d</button>
+        <button data-days="90" role="tab">90d</button>
+      </div>
+      <div id="error" class="error hidden"></div>
+      <div id="groups"></div>
+      <section class="card" id="chart-card">
+        <h2>Cost over time</h2>
+        <div id="chart"></div>
+        <div id="legend" class="legend"></div>
+      </section>
+      <section class="card" id="limits-card"></section>
+      <section class="card" id="models-card"></section>
+      <p class="foot" id="foot"></p>
+    </section>
+
+    <section id="settings-panel" class="card hidden">
+      <h2>Settings</h2>
+      <dl class="kv" id="settings-kv"></dl>
+      <p class="muted small">Transport: your tailnet (WireGuard) and TLS from Tailscale Serve. Payloads: AES-256-GCM under a fresh ECDH key per request, signed by this browser's non-extractable key. The Mac only answers paired devices.</p>
+      <div class="row">
+        <button id="close-settings">Done</button>
+        <button id="unpair" class="danger">Unpair</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/pair-parse.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Run Swift tests
+        run: swift test
+
+      - name: Build macOS app bundle
+        run: make app
+
+      - name: Build iOS and watchOS apps for the simulator
+        run: >-
+          xcodebuild
+          -project ios/PlanMeterMobile/PlanMeterMobile.xcodeproj
+          -scheme PlanMeterMobile
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build
