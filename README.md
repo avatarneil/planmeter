@@ -29,8 +29,9 @@ For the Mac app, CLI, and MCP server:
 - Xcode 16 or newer, including the Swift 6 toolchain and command-line build tools.
 - `make`, supplied by the Xcode command-line tools.
 
-There are no third-party Swift package dependencies. Tailscale is not needed for the desktop app,
-CLI, or MCP server. It is required only for remote access:
+Sparkle 2 is the sole third-party Swift package dependency and provides signed, in-app macOS
+updates. Tailscale is not needed for the desktop app, CLI, MCP server, or update checks. It is
+required only for remote access:
 
 - Install and connect either the Tailscale macOS app or the Homebrew `tailscale` package.
 - The native iOS client only needs both devices on the same tailnet.
@@ -52,6 +53,11 @@ open dist/PlanMeter.app
 
 `make app` creates an ad-hoc-signed local build. To copy it to `/Applications`, run `make install`.
 
+The macOS app checks GitHub Releases for updates daily and presents an update when one is available.
+Use **PlanMeter → Check for Updates…** to check immediately. Update archives are verified with both
+Sparkle's EdDSA signature and Apple code signing before installation; automatic installation is off
+by default.
+
 ### Signed macOS releases
 
 Distributing the app outside the Mac App Store requires an Apple Developer Program membership and a
@@ -71,11 +77,14 @@ ticket to the app, and recreate the archive so the stapled app is the GitHub Rel
 make release-macos SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)'
 ```
 
-This produces an Apple-Silicon-only, notarized ZIP and SHA-256 checksum under `dist/`. Create the
+This produces an Apple-Silicon-only, notarized ZIP, Sparkle appcast, and SHA-256 checksum under
+`dist/`. Upload all three files to the matching GitHub Release; the app reads `appcast.xml` through
+GitHub's stable `releases/latest/download` URL. Create the
 `planmeter-notary` Keychain profile once with
 `xcrun notarytool store-credentials planmeter-notary`. `VERSION` is the release source of truth;
-`make check-version` verifies that the macOS app, iOS/watchOS targets, and MCP server are aligned
-before building or testing.
+`BUILD_NUMBER` is Sparkle's monotonically increasing comparison version. `make check-version`
+verifies that the macOS app, iOS/watchOS targets, and MCP server are aligned before building or
+testing. Sparkle's private EdDSA update key remains in the release maintainer's Keychain.
 
 ## What it reads
 

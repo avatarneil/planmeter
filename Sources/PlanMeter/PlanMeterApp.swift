@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct PlanMeterApp: App {
     @State private var model = AppModel()
+    @StateObject private var updates = UpdateController()
 
     var body: some Scene {
         WindowGroup("PlanMeter", id: "main") {
@@ -18,6 +19,10 @@ struct PlanMeterApp: App {
         }
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { updates.checkForUpdates() }
+                    .disabled(!updates.canCheckForUpdates)
+            }
             CommandGroup(after: .toolbar) {
                 Button("Refresh") { Task { await model.refresh() } }
                     .keyboardShortcut("r", modifiers: .command)

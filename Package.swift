@@ -10,6 +10,9 @@ let package = Package(
         .library(name: "PlanMeterRemote", targets: ["PlanMeterRemote"]),
         .library(name: "PlanMeterWatchShared", targets: ["PlanMeterWatchShared"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
+    ],
     targets: [
         .target(
             name: "PlanMeterCore",
@@ -29,11 +32,21 @@ let package = Package(
         ),
         .executableTarget(
             name: "PlanMeter",
-            dependencies: ["PlanMeterCore", "PlanMeterRemote"],
+            dependencies: [
+                "PlanMeterCore",
+                "PlanMeterRemote",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             // The web client is copied into the .app by scripts/bundle.sh and
             // read from the source tree during `swift run`.
             exclude: ["Web"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            linkerSettings: [
+                .unsafeFlags(
+                    ["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"],
+                    .when(platforms: [.macOS])
+                ),
+            ]
         ),
         .executableTarget(
             name: "planmeter-cli",

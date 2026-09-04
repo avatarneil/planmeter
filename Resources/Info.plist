@@ -19,9 +19,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
     <key>LSMinimumSystemVersion</key>
@@ -32,5 +32,15 @@
     <string>Copyright © 2026 Neil Goldader. MIT License.</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUFeedURL</key>
+    <string>https://github.com/avatarneil/planmeter/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>KaqKSZ4tYwI5izTZ9PaHHE3JRb4fqgNU7Noz2rhqVu8=</string>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>
