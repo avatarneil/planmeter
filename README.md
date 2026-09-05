@@ -148,7 +148,10 @@ API-equivalent usage costs, not subscription bills, and do not block spending or
 
 Open PlanMeter once, then right-click the desktop, choose **Edit Widgets**, and find
 **PlanMeter → AI Spend**. Small widgets show estimated spend and personal-limit progress;
-medium widgets add the top providers. Click a widget to open the dashboard.
+medium widgets add the top providers. Large widgets add an hourly/daily spending chart,
+token totals, cached-input percentage, cache savings, and all providers. Extra-large widgets
+also show the six highest-spending accounts with token counts. Click a widget to open the dashboard.
+Trend periods without usage remain visible, and every total follows the same selected groups and period.
 
 Widgets follow the menu bar's selected plan groups, period, and limit. Keep PlanMeter running
 in the menu bar for fresh data: it publishes after each scan (normally every five minutes) and

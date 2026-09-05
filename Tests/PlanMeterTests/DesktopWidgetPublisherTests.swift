@@ -30,5 +30,22 @@ final class DesktopWidgetPublisherTests: XCTestCase {
         XCTAssertEqual(snapshot.scannedAt, model.lastScan)
         XCTAssertEqual(snapshot.rangeID, model.menuBarSpendRange.rawValue)
         XCTAssertLessThan(snapshot.cost, 100)
+        let detail = try XCTUnwrap(snapshot.detail)
+        XCTAssertEqual(detail.trend.reduce(0) { $0 + $1.cost }, snapshot.cost, accuracy: 0.00001)
+        XCTAssertEqual(detail.accounts.reduce(0) { $0 + $1.cost }, snapshot.cost, accuracy: 0.00001)
+        XCTAssertEqual(detail.trend.map(\.date), detail.trend.map(\.date).sorted())
+        XCTAssertEqual(detail.accounts.count, model.accounts.filter { model.menuBarSpendGroups.contains(model.group(for: $0)) }.count)
     }
+    @MainActor
+    func testEmptyPeriodsAreIncludedInTrend() async throws {
+        let model = AppModel()
+        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 4, hour: 12, minute: 30))!
+        model.lastScan = now
+        let snapshot = try XCTUnwrap(model.desktopSnapshot(now: now))
+        let detail = try XCTUnwrap(snapshot.detail)
+        XCTAssertGreaterThan(detail.trend.count, 1)
+        XCTAssertTrue(detail.trend.allSatisfy { $0.cost == 0 })
+        XCTAssertTrue(detail.trend.allSatisfy { $0.date < now })
+    }
+
 }

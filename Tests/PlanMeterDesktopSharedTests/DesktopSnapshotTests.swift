@@ -50,6 +50,25 @@ final class DesktopSnapshotTests: XCTestCase {
         XCTAssertTrue(snapshot.isStale(at: justBeforeMidnight.addingTimeInterval(900), calendar: calendar))
     }
 
+    func testOlderSnapshotWithoutDetailsStillLoads() throws {
+        let data = try JSONEncoder().encode(DesktopSnapshot.preview)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object.removeValue(forKey: "detail")
+        let decoded = try XCTUnwrap(DesktopSnapshot.decode(JSONSerialization.data(withJSONObject: object)))
+        XCTAssertNil(decoded.detail)
+        XCTAssertEqual(decoded.cost, DesktopSnapshot.preview.cost)
+    }
+
+    func testDetailValidationAndRoundTrip() throws {
+        var snapshot = DesktopSnapshot.preview
+        XCTAssertEqual(DesktopSnapshot.decode(try JSONEncoder().encode(snapshot)), snapshot)
+        snapshot.detail?.trend[0].cost = -1
+        XCTAssertFalse(snapshot.isValid)
+        snapshot = .preview
+        snapshot.detail?.cachedInputShare = 1.5
+        XCTAssertFalse(snapshot.isValid)
+    }
+
     func testLimitFractionPreservesOverage() {
         var snapshot = DesktopSnapshot.preview
         snapshot.cost = 125

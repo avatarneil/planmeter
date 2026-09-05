@@ -73,9 +73,14 @@ enum SnapshotMode {
     @MainActor
     static func captureDesktop(to prefix: String, model: AppModel) async {
         let payload = CommandLine.arguments.contains("--widget-preview") ? DesktopSnapshot.preview : model.desktopSnapshot()
-        for (name, width, snapshot) in [("small", 170.0, payload), ("medium", 360.0, payload), ("empty", 170.0, Optional<DesktopSnapshot>.none)] {
-            let view = DesktopSpendView(snapshot: snapshot, date: Date(), medium: width > 200)
-                .padding(16).frame(width: width, height: 170)
+        let variants: [(String, Double, Double, DesktopSpendView.Size, DesktopSnapshot?)] = [
+            ("small", 170, 170, .small, payload), ("medium", 360, 170, .medium, payload),
+            ("large", 360, 360, .large, payload), ("extra-large", 720, 360, .extraLarge, payload),
+            ("empty", 170, 170, .small, nil),
+        ]
+        for (name, width, height, size, snapshot) in variants {
+            let view = DesktopSpendView(snapshot: snapshot, date: Date(), size: size)
+                .padding(16).frame(width: width, height: height)
                 .background(Color(nsColor: .windowBackgroundColor))
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2
@@ -85,7 +90,7 @@ enum SnapshotMode {
             do { try png.write(to: URL(fileURLWithPath: "\(prefix)-\(name).png")) }
             catch { print("snapshot-desktop: \(error)"); exit(1) }
         }
-        print("snapshot-desktop: wrote \(prefix)-{small,medium,empty}.png")
+        print("snapshot-desktop: wrote \(prefix)-{small,medium,large,extra-large,empty}.png")
         NSApp.terminate(nil)
     }
 

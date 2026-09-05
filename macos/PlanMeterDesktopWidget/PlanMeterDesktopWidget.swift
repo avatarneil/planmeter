@@ -33,8 +33,17 @@ struct SpendWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: SpendEntry
 
+    private var size: DesktopSpendView.Size {
+        switch family {
+        case .systemMedium: return .medium
+        case .systemLarge: return .large
+        case .systemExtraLarge: return .extraLarge
+        default: return .small
+        }
+    }
+
     var body: some View {
-        DesktopSpendView(snapshot: entry.snapshot, date: entry.date, medium: family == .systemMedium)
+        DesktopSpendView(snapshot: entry.snapshot, date: entry.date, size: size)
             .containerBackground(for: .widget) {
                 LinearGradient(colors: [Color(.windowBackgroundColor), Color.teal.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
             }
@@ -50,6 +59,6 @@ struct PlanMeterDesktopWidget: Widget {
         }
         .configurationDisplayName("AI Spend")
         .description("Your selected tools, spending limit, and room to go. Follows PlanMeter’s menu bar settings.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
     }
 }
