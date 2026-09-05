@@ -126,6 +126,13 @@ totals for the selected range, each account underneath, and the Codex weekly win
 with buttons to open the main window or quit. Data refreshes every five minutes while the app runs,
 and the app keeps running in the menu bar after the main window is closed.
 
+Choose **Set limit** in the popover to set a personal USD target for the menu bar total,
+with a warning threshold (80% by default). Each menu bar period remembers its own limit;
+the target follows whichever plan groups you select. The menu bar shows percent used and
+a distinct status symbol. The popover shows progress, dollars remaining or over, and controls
+to edit or remove the limit. Limits are optional and persist across launches. They compare
+API-equivalent usage costs, not subscription bills, and do not block spending or send notifications.
+
 ## MCP server
 
 `planmeter-mcp` (bundled at `PlanMeter.app/Contents/MacOS/planmeter-mcp`) is a stdio MCP server

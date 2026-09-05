@@ -57,6 +57,8 @@ struct MenuBarView: View {
                 .help("Customize the menu bar total")
             }
 
+            SpendThresholdCard()
+
             let summaries = model.groupSummaries
             let grand = model.total
             ForEach(summaries) { summary in
@@ -133,11 +135,19 @@ struct MenuBarLabel: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        let spend = model.menuBarTotal.costUsd
         HStack(spacing: 4) {
-            Image(systemName: "chart.bar.fill")
-            Text(Format.usd(model.menuBarTotal.costUsd))
+            Image(systemName: model.menuBarSpendThreshold.map {
+                thresholdSymbol($0.status(spend: spend))
+            } ?? "chart.bar.fill")
+            Text(Format.usd(spend))
                 .monospacedDigit()
                 .font(.system(size: 12, weight: .medium))
+            if let threshold = model.menuBarSpendThreshold {
+                Text(Format.percent(threshold.fraction(spend: spend)))
+                    .monospacedDigit()
+                    .font(.system(size: 11))
+            }
         }
         .help("\(model.menuBarSpendRange.displayName) · \(model.menuBarSpendGroups.map(\.displayName).sorted().joined(separator: ", "))")
     }

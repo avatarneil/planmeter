@@ -108,6 +108,12 @@ final class AppModel {
     var menuBarSpendRange: MenuBarSpendRange = AppModel.loadMenuBarSpendRange() {
         didSet { AppModel.saveMenuBarSpendRange(menuBarSpendRange) }
     }
+    var menuBarSpendThresholds = SpendThreshold.load(from: GroupOverrides.defaults()) {
+        didSet { SpendThreshold.save(menuBarSpendThresholds, to: GroupOverrides.defaults()) }
+    }
+    var menuBarSpendThreshold: SpendThreshold? {
+        menuBarSpendThresholds[menuBarSpendRange.rawValue]
+    }
     var showAccounts = false
     var showRemote = false
     let remote = RemoteState()
