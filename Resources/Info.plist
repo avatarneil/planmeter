@@ -42,5 +42,16 @@
     <string>KaqKSZ4tYwI5izTZ9PaHHE3JRb4fqgNU7Noz2rhqVu8=</string>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.neilgoldader.planmeter.desktop</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>planmeter-desktop</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

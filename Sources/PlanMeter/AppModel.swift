@@ -95,7 +95,8 @@ final class AppModel {
     var isScanning = false
     var lastScan: Date?
     var lastError: String?
-    var groupOverrides: [String: PlanGroup] = GroupOverrides.load() { didSet { GroupOverrides.save(groupOverrides) } }
+    var desktopWidgetError: String?
+    var groupOverrides: [String: PlanGroup] = GroupOverrides.load() { didSet { GroupOverrides.save(groupOverrides); publishDesktopWidget() } }
     var menuBarSpendGroups: Set<PlanGroup> = AppModel.loadMenuBarSpendGroups() {
         didSet {
             guard !menuBarSpendGroups.isEmpty else {
@@ -103,13 +104,14 @@ final class AppModel {
                 return
             }
             AppModel.saveMenuBarSpendGroups(menuBarSpendGroups)
+            publishDesktopWidget()
         }
     }
     var menuBarSpendRange: MenuBarSpendRange = AppModel.loadMenuBarSpendRange() {
-        didSet { AppModel.saveMenuBarSpendRange(menuBarSpendRange) }
+        didSet { AppModel.saveMenuBarSpendRange(menuBarSpendRange); publishDesktopWidget() }
     }
     var menuBarSpendThresholds = SpendThreshold.load(from: GroupOverrides.defaults()) {
-        didSet { SpendThreshold.save(menuBarSpendThresholds, to: GroupOverrides.defaults()) }
+        didSet { SpendThreshold.save(menuBarSpendThresholds, to: GroupOverrides.defaults()); publishDesktopWidget() }
     }
     var menuBarSpendThreshold: SpendThreshold? {
         menuBarSpendThresholds[menuBarSpendRange.rawValue]
@@ -216,6 +218,7 @@ final class AppModel {
     func recompute() {
         let window = range.window()
         buckets = Aggregation.buckets(cells: cells, rates: rates, from: window.from, to: window.to, resolution: range.resolution)
+        publishDesktopWidget()
     }
 
     // MARK: Accounts and groups

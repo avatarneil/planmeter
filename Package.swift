@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14), .iOS(.v17), .watchOS(.v10)],
     products: [
         .executable(name: "PlanMeter", targets: ["PlanMeter"]),
+        .library(name: "PlanMeterDesktopShared", targets: ["PlanMeterDesktopShared"]),
         .library(name: "PlanMeterCore", targets: ["PlanMeterCore"]),
         .library(name: "PlanMeterRemote", targets: ["PlanMeterRemote"]),
         .library(name: "PlanMeterWatchShared", targets: ["PlanMeterWatchShared"]),
@@ -14,6 +15,7 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     ],
     targets: [
+        .target(name: "PlanMeterDesktopShared", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "PlanMeterCore",
             swiftSettings: [.swiftLanguageMode(.v5)],
@@ -33,6 +35,7 @@ let package = Package(
         .executableTarget(
             name: "PlanMeter",
             dependencies: [
+                "PlanMeterDesktopShared",
                 "PlanMeterCore",
                 "PlanMeterRemote",
                 .product(name: "Sparkle", package: "Sparkle"),
@@ -60,6 +63,7 @@ let package = Package(
             path: "Sources/PlanMeterMCP",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(name: "PlanMeterDesktopSharedTests", dependencies: ["PlanMeterDesktopShared"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "PlanMeterTests",
             dependencies: ["PlanMeter"],

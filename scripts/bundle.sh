@@ -26,6 +26,18 @@ cp "$BIN_DIR/planmeter-mcp" "$APP/Contents/MacOS/planmeter-mcp"
 ditto "$BIN_DIR/Sparkle.framework" "$SPARKLE_FRAMEWORK"
 cp "$ROOT/.build/checkouts/Sparkle/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+# Optional alternate identity for an independently registered local test build.
+python3 - "$APP/Contents/Info.plist" <<'PYINFO'
+import os, pathlib, plistlib, sys
+path = pathlib.Path(sys.argv[1])
+info = plistlib.loads(path.read_bytes())
+if os.environ.get('APP_BUNDLE_ID'):
+    info['CFBundleIdentifier'] = os.environ['APP_BUNDLE_ID']
+if os.environ.get('APP_DISPLAY_NAME'):
+    info['CFBundleDisplayName'] = info['CFBundleName'] = os.environ['APP_DISPLAY_NAME']
+    info['SUEnableAutomaticChecks'] = False
+path.write_bytes(plistlib.dumps(info, sort_keys=False))
+PYINFO
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 # Static web client served to browsers over the tailnet.
 mkdir -p "$APP/Contents/Resources/Web"
@@ -85,7 +97,8 @@ codesign "${SIGN_ARGS[@]}" "$SPARKLE_FRAMEWORK/Versions/B/Updater.app"
 codesign "${SIGN_ARGS[@]}" "$SPARKLE_FRAMEWORK"
 codesign "${SIGN_ARGS[@]}" "$APP/Contents/MacOS/planmeter-cli"
 codesign "${SIGN_ARGS[@]}" "$APP/Contents/MacOS/planmeter-mcp"
-codesign "${SIGN_ARGS[@]}" "$APP"
+"$ROOT/scripts/bundle-desktop-widget.sh" "$APP" "$SIGNING_IDENTITY" "$CONFIG" "$BUILD_ARCH"
+codesign "${SIGN_ARGS[@]}" --entitlements "$DIST/PlanMeter.entitlements" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 echo "Built $APP ($SIGNING_DESCRIPTION)"

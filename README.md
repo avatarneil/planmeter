@@ -144,6 +144,38 @@ under the warning threshold, amber when approaching the limit, and coral at or a
 to edit or remove the limit. Limits are optional and persist across launches. They compare
 API-equivalent usage costs, not subscription bills, and do not block spending or send notifications.
 
+## Desktop widgets (macOS 14+)
+
+Open PlanMeter once, then right-click the desktop, choose **Edit Widgets**, and find
+**PlanMeter → AI Spend**. Small widgets show estimated spend and personal-limit progress;
+medium widgets add the top providers. Click a widget to open the dashboard.
+
+Widgets follow the menu bar's selected plan groups, period, and limit. Keep PlanMeter running
+in the menu bar for fresh data: it publishes after each scan (normally every five minutes) and
+when those settings change. macOS controls when widgets redraw. If the app stops, the widget
+shows its last snapshot and a refresh prompt after 15 minutes, or at midnight for Today.
+Only aggregate costs and counts are shared with the sandboxed extension; it never reads
+transcripts or credentials.
+
+`make app` compiles and embeds the extension, including in CI. Live app-to-widget sharing
+requires an Apple Development or Developer ID signature; ad-hoc builds compile the widget
+but do not have an authorized app-group container. The bundle script derives a team-prefixed
+app group from the actual signature and signs both app and extension with matching entitlements.
+No provisioning profile is needed for this macOS app-group naming scheme.
+
+For a separately registered local test app (without making a release):
+
+```bash
+CONFIG=debug APP_BUNDLE_ID=com.neilgoldader.planmeter.widget-test \
+  APP_DISPLAY_NAME="PlanMeter Widget Test" \
+  SIGNING_IDENTITY="Developer ID Application: Name (TEAMID)" make app
+open dist/PlanMeter.app
+```
+
+The test app shares menu bar preferences but has its own widget snapshot container. To render
+widget layouts without adding them to the desktop, run the bundled executable with
+`--snapshot-desktop /tmp/planmeter-widget --widget-preview` (omit `--widget-preview` for actual usage).
+
 ## MCP server
 
 `planmeter-mcp` (bundled at `PlanMeter.app/Contents/MacOS/planmeter-mcp`) is a stdio MCP server

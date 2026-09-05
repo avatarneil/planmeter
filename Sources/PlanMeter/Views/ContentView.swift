@@ -3,6 +3,7 @@ import PlanMeterCore
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -69,6 +70,12 @@ struct ContentView: View {
         .sheet(isPresented: $model.showRemote) {
             RemoteSettingsView()
                 .environment(model)
+        }
+        .onOpenURL { url in
+            guard url.scheme == "planmeter-desktop", url.host == "dashboard" else { return }
+            model.usageDetail = nil
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
         }
         .navigationTitle("PlanMeter")
         .navigationSubtitle(subtitle)

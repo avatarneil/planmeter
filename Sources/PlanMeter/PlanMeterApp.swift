@@ -12,6 +12,7 @@ struct PlanMeterApp: App {
                 .frame(minWidth: 900, minHeight: 640)
                 .task {
                     await model.start()
+                    if let path = SnapshotMode.desktopPath { await SnapshotMode.captureDesktop(to: path, model: model) }
                     if let path = SnapshotMode.path { await SnapshotMode.capture(to: path) }
                     if let path = SnapshotMode.menuPath { await SnapshotMode.captureMenu(to: path, model: model) }
                     if let path = SnapshotMode.remotePath { await SnapshotMode.captureRemote(to: path, model: model) }
