@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import PlanMeterCore
 
@@ -129,17 +130,23 @@ struct MenuBarView: View {
     }
 }
 
-/// Menu bar label: icon plus the configured total cost so the number is visible
-/// without opening anything.
+/// Menu bar label: a compact spend gauge and total, visible without opening anything.
 struct MenuBarLabel: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let spend = model.menuBarTotal.costUsd
         HStack(spacing: 4) {
-            Image(systemName: model.menuBarSpendThreshold.map {
-                thresholdSymbol($0.status(spend: spend))
-            } ?? "chart.bar.fill")
+            if let threshold = model.menuBarSpendThreshold {
+                Image(nsImage: spendGauge(fraction: threshold.fraction(spend: spend)))
+                    .accessibilityLabel("Spend limit used")
+                    .accessibilityValue(Format.percent(threshold.fraction(spend: spend)))
+                if threshold.status(spend: spend) != .comfortable {
+                    Image(systemName: thresholdSymbol(threshold.status(spend: spend)))
+                }
+            } else {
+                Image(systemName: "chart.bar.fill")
+            }
             Text(Format.usd(spend))
                 .monospacedDigit()
                 .font(.system(size: 12, weight: .medium))
@@ -151,4 +158,26 @@ struct MenuBarLabel: View {
         }
         .help("\(model.menuBarSpendRange.displayName) · \(model.menuBarSpendGroups.map(\.displayName).sorted().joined(separator: ", "))")
     }
+}
+
+/// Draw as a template image: menu bar labels reliably support images, and macOS
+/// supplies the right contrast for light/dark wallpapers and selected items.
+private func spendGauge(fraction: Double) -> NSImage {
+    let fraction = fraction.isFinite ? min(1, max(0, fraction)) : 0
+    let image = NSImage(size: NSSize(width: 26, height: 12), flipped: false) { _ in
+        NSColor.black.setStroke()
+        let outline = NSBezierPath(roundedRect: NSRect(x: 0.5, y: 1.5, width: 25, height: 9), xRadius: 3, yRadius: 3)
+        outline.lineWidth = 1
+        outline.stroke()
+        if fraction > 0 {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(roundedRect: NSRect(x: 2, y: 3, width: 22, height: 6), xRadius: 1.5, yRadius: 1.5).addClip()
+            NSColor.black.setFill()
+            NSBezierPath(rect: NSRect(x: 2, y: 3, width: 22 * fraction, height: 6)).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        return true
+    }
+    image.isTemplate = true
+    return image
 }
