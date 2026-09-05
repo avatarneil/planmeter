@@ -122,6 +122,9 @@ struct SourcesCard: View {
                 ForEach(model.discovery.notes, id: \.self) { note in
                     Label(note, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
                 }
+                if let error = model.desktopWidgetError {
+                    Text(error).font(.caption).foregroundStyle(.orange)
+                }
                 if let error = model.lastError {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
                 }

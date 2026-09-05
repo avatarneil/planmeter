@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PlanMeterDesktopShared
 
 /// `PlanMeter --snapshot /path/out.png [--size WxH]` renders the main window
 /// after the first scan and exits. Used for visual checks without needing
@@ -59,6 +60,37 @@ enum SnapshotMode {
         }
         try? png.write(to: URL(fileURLWithPath: path))
         print("snapshot-remote: wrote \(path)")
+        NSApp.terminate(nil)
+    }
+
+    /// `--snapshot-desktop /tmp/widget` writes small, medium, and empty widget previews.
+    static var desktopPath: String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--snapshot-desktop"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    @MainActor
+    static func captureDesktop(to prefix: String, model: AppModel) async {
+        let payload = CommandLine.arguments.contains("--widget-preview") ? DesktopSnapshot.preview : model.desktopSnapshot()
+        let variants: [(String, Double, Double, DesktopSpendView.Size, DesktopSnapshot?)] = [
+            ("small", 170, 170, .small, payload), ("medium", 360, 170, .medium, payload),
+            ("large", 360, 360, .large, payload), ("extra-large", 720, 360, .extraLarge, payload),
+            ("empty", 170, 170, .small, nil),
+        ]
+        for (name, width, height, size, snapshot) in variants {
+            let view = DesktopSpendView(snapshot: snapshot, date: Date(), size: size)
+                .padding(16).frame(width: width, height: height)
+                .background(Color(nsColor: .windowBackgroundColor))
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
+            do { try png.write(to: URL(fileURLWithPath: "\(prefix)-\(name).png")) }
+            catch { print("snapshot-desktop: \(error)"); exit(1) }
+        }
+        print("snapshot-desktop: wrote \(prefix)-{small,medium,large,extra-large,empty}.png")
         NSApp.terminate(nil)
     }
 
