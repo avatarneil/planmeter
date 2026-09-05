@@ -7,7 +7,7 @@ import PlanMeterCore
 // agents actually use: initialize, ping, tools/list, tools/call. Everything is
 // read-only against the same transcripts and cache the app uses.
 
-let serverVersion = "0.3.0"
+let serverVersion = "0.3.1"
 let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 struct Tool {

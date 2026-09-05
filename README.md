@@ -290,6 +290,9 @@ make install      # copy to /Applications (quits a running copy first)
 make install-mcp  # register the bundled MCP server with Claude Code, Codex, OpenCode
 ```
 
+Release ZIPs keep AppleDouble metadata outside the signed app and must pass signature,
+notarization, and Gatekeeper checks after both `ditto` and `unzip` extraction.
+
 Handy flags on the app binary: `--snapshot out.png [--size WxH]` renders the main window and
 exits; `--snapshot-menu out.png` renders the menu bar popover. `planmeter-cli --days N [--json]`
 prints the same numbers in the terminal.

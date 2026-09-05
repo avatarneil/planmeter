@@ -34,8 +34,10 @@ fi
 
 BUILD_ARCH=arm64 SIGNING_IDENTITY="$SIGNING_IDENTITY" "$ROOT/scripts/bundle.sh"
 
+# Keep AppleDouble metadata outside the signed .app. Some extractors leave
+# inline ._ sidecars beside framework symlinks, breaking Gatekeeper validation.
 rm -f "$ARCHIVE" "$CHECKSUM"
-ditto -c -k --keepParent "$APP" "$ARCHIVE"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
 xcrun notarytool submit "$ARCHIVE" --keychain-profile "$NOTARY_PROFILE" --wait
 xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
@@ -45,7 +47,8 @@ spctl --assess --type execute --verbose=2 "$APP"
 # ZIP archives cannot themselves be stapled, so recreate the archive from the
 # stapled app and publish a checksum alongside it.
 rm -f "$ARCHIVE"
-ditto -c -k --keepParent "$APP" "$ARCHIVE"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
+"$ROOT/scripts/verify-release-archive.sh" "$ARCHIVE"
 (
   cd "$ROOT/dist"
   shasum -a 256 "$ARCHIVE_NAME" > "$ARCHIVE_NAME.sha256"
