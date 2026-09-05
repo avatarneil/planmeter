@@ -155,54 +155,61 @@ struct MenuBarView: View {
     }
 }
 
-/// Menu bar label: a compact spend gauge and total, visible without opening anything.
+/// Render the amount and its colorful underline together: MenuBarExtra labels
+/// reliably support images, while arbitrary stacked SwiftUI layouts may flatten.
 struct MenuBarLabel: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         let spend = model.menuBarTotal.costUsd
-        HStack(spacing: 4) {
+        Group {
             if let threshold = model.menuBarSpendThreshold {
-                Image(nsImage: spendGauge(fraction: threshold.fraction(spend: spend)))
-                    .accessibilityLabel("Spend limit used")
-                    .accessibilityValue(Format.percent(threshold.fraction(spend: spend)))
-                if threshold.status(spend: spend) != .comfortable {
-                    Image(systemName: thresholdSymbol(threshold.status(spend: spend)))
-                }
+                let fraction = threshold.fraction(spend: spend)
+                Image(nsImage: spendLabelImage(amount: Format.usd(spend), fraction: fraction,
+                                              status: threshold.status(spend: spend), dark: colorScheme == .dark))
+                    .renderingMode(.original)
+                    .accessibilityLabel("\(Format.usd(spend)), \(Format.percent(fraction)) of spend limit used")
             } else {
-                Image(systemName: "chart.bar.fill")
-            }
-            Text(Format.usd(spend))
-                .monospacedDigit()
-                .font(.system(size: 12, weight: .medium))
-            if let threshold = model.menuBarSpendThreshold {
-                Text(Format.percent(threshold.fraction(spend: spend)))
+                Label(Format.usd(spend), systemImage: "chart.bar.fill")
                     .monospacedDigit()
-                    .font(.system(size: 11))
+                    .font(.system(size: 12, weight: .medium))
             }
         }
         .help("\(model.menuBarSpendRange.displayName) · \(model.menuBarSpendGroups.map(\.displayName).sorted().joined(separator: ", "))")
     }
 }
 
-/// Draw as a template image: menu bar labels reliably support images, and macOS
-/// supplies the right contrast for light/dark wallpapers and selected items.
-private func spendGauge(fraction: Double) -> NSImage {
-    let fraction = fraction.isFinite ? min(1, max(0, fraction)) : 0
-    let image = NSImage(size: NSSize(width: 26, height: 12), flipped: false) { _ in
-        NSColor.black.setStroke()
-        let outline = NSBezierPath(roundedRect: NSRect(x: 0.5, y: 1.5, width: 25, height: 9), xRadius: 3, yRadius: 3)
-        outline.lineWidth = 1
-        outline.stroke()
-        if fraction > 0 {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(roundedRect: NSRect(x: 2, y: 3, width: 22, height: 6), xRadius: 1.5, yRadius: 1.5).addClip()
-            NSColor.black.setFill()
-            NSBezierPath(rect: NSRect(x: 2, y: 3, width: 22 * fraction, height: 6)).fill()
-            NSGraphicsContext.restoreGraphicsState()
+private func spendLabelImage(amount: String, fraction: Double, status: SpendThreshold.Status, dark: Bool) -> NSImage {
+    let foreground: NSColor = dark ? .white : .black
+    let amountText = NSAttributedString(string: amount, attributes: [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+        .foregroundColor: foreground,
+    ])
+    let percentText = NSAttributedString(string: Format.percent(fraction), attributes: [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
+        .foregroundColor: foreground.withAlphaComponent(0.65),
+    ])
+    let width = ceil(amountText.size().width + percentText.size().width + 6)
+    let fill = fraction.isFinite ? min(1, max(0, fraction)) : 0
+    let image = NSImage(size: NSSize(width: width, height: 22), flipped: false) { _ in
+        amountText.draw(at: NSPoint(x: 0, y: 6))
+        percentText.draw(at: NSPoint(x: width - percentText.size().width, y: 7))
+
+        // A borderless runway under the text, with a bright leading tip.
+        let track = NSRect(x: 0, y: 1, width: width, height: 3)
+        foreground.withAlphaComponent(0.16).setFill()
+        NSBezierPath(roundedRect: track, xRadius: 1.5, yRadius: 1.5).fill()
+        if fill > 0 {
+            let accent = spendTint(status)
+            let filled = NSRect(x: 0, y: 1, width: max(3, width * fill), height: 3)
+            let path = NSBezierPath(roundedRect: filled, xRadius: 1.5, yRadius: 1.5)
+            NSGradient(starting: accent.withAlphaComponent(0.65), ending: accent)?.draw(in: path, angle: 0)
+            accent.setFill()
+            NSBezierPath(ovalIn: NSRect(x: filled.maxX - 3, y: 1, width: 3, height: 3)).fill()
         }
         return true
     }
-    image.isTemplate = true
+    image.isTemplate = false // Preserve the status colors in the menu bar.
     return image
 }

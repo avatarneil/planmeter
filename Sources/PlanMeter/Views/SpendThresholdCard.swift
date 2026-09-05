@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import PlanMeterCore
 
@@ -6,6 +7,14 @@ func thresholdSymbol(_ status: SpendThreshold.Status) -> String {
     case .comfortable: return "checkmark.circle"
     case .approaching: return "exclamationmark.circle"
     case .reached: return "exclamationmark.triangle.fill"
+    }
+}
+
+func spendTint(_ status: SpendThreshold.Status) -> NSColor {
+    switch status {
+    case .comfortable: return NSColor(srgbRed: 0.10, green: 0.72, blue: 0.63, alpha: 1)
+    case .approaching: return NSColor(srgbRed: 0.96, green: 0.63, blue: 0.16, alpha: 1)
+    case .reached: return NSColor(srgbRed: 0.96, green: 0.34, blue: 0.40, alpha: 1)
     }
 }
 
@@ -32,7 +41,7 @@ struct SpendThresholdCard: View {
             if let threshold = model.menuBarSpendThreshold {
                 let spend = model.menuBarTotal.costUsd
                 let status = threshold.status(spend: spend)
-                let color: Color = status == .reached ? .red : status == .approaching ? .orange : .green
+                let color = Color(nsColor: spendTint(status))
                 HStack(alignment: .firstTextBaseline) {
                     Text(Format.usd(spend)).font(.title2.weight(.semibold)).monospacedDigit()
                     Text("of \(Format.usd(threshold.limit))").font(.caption).foregroundStyle(.secondary)
