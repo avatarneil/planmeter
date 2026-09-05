@@ -59,6 +59,9 @@ struct ContentView: View {
                 .help("Pair the iOS app over Tailscale")
             }
         }
+        .sheet(item: $model.usageDetail) { scope in
+            UsageDetailSheet(scope: scope).environment(model)
+        }
         .sheet(isPresented: $model.showAccounts) {
             AccountsSheet()
                 .environment(model)
