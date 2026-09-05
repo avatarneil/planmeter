@@ -114,6 +114,7 @@ final class AppModel {
     var menuBarSpendThreshold: SpendThreshold? {
         menuBarSpendThresholds[menuBarSpendRange.rawValue]
     }
+    var usageDetail: UsageScope?
     var showAccounts = false
     var showRemote = false
     let remote = RemoteState()
@@ -309,6 +310,23 @@ final class AppModel {
         let defaults = GroupOverrides.defaults()
         defaults.set(range.rawValue, forKey: menuBarSpendRangeKey)
         defaults.synchronize()
+    }
+
+    func accounts(in scope: UsageScope) -> [Account] {
+        accounts.filter { scope.includes($0, group: group(for: $0)) }
+    }
+
+    func buckets(in scope: UsageScope) -> [Bucket] {
+        let ids = Set(accounts(in: scope).map(\.id))
+        return buckets.filter { ids.contains($0.accountId) }
+    }
+
+    func title(for scope: UsageScope) -> String {
+        switch scope {
+        case .account(let id): return account(for: id).displayName
+        case .provider(let provider): return provider.displayName
+        case .group(let group): return group.displayName
+        }
     }
 
     /// A configured accent color when it is unique among accounts; otherwise

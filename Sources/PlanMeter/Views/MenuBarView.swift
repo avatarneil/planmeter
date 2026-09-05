@@ -6,6 +6,7 @@ import PlanMeterCore
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @State private var detail: UsageScope?
 
     var body: some View {
         @Bindable var model = model
@@ -60,59 +61,83 @@ struct MenuBarView: View {
 
             SpendThresholdCard()
 
-            let summaries = model.groupSummaries
-            let grand = model.total
-            ForEach(summaries) { summary in
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Circle().fill(Palette.color(for: summary.group)).frame(width: 8, height: 8)
-                        Text(summary.group.displayName).font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(Format.usd(summary.aggregate.costUsd)).font(.subheadline.weight(.semibold)).monospacedDigit()
-                        Text(Format.tokens(summary.aggregate.totals.total)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                            .frame(width: 52, alignment: .trailing)
-                    }
-                    ShareBar(fraction: grand.costUsd > 0 ? summary.aggregate.costUsd / grand.costUsd : 0, color: Palette.color(for: summary.group))
-                    ForEach(summary.accounts, id: \.account.id) { row in
-                        HStack(spacing: 6) {
-                            Circle().fill(model.color(for: row.account)).frame(width: 6, height: 6)
-                            Text(row.account.displayName).font(.caption).lineLimit(1)
+            if let detail {
+                Button { self.detail = nil } label: {
+                    Label("All usage", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                ScrollView {
+                    UsageDetailView(scope: detail, compact: true)
+                }
+                .frame(height: 340)
+            } else {
+                let summaries = model.groupSummaries
+                let grand = model.total
+                ForEach(summaries) { summary in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Circle().fill(Palette.color(for: summary.group)).frame(width: 8, height: 8)
+                            Button { detail = .group(summary.group) } label: {
+                                Text(summary.group.displayName).font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Explore \(summary.group.displayName)")
                             Spacer()
-                            Text(Format.usd(row.aggregate.costUsd)).font(.caption).monospacedDigit()
-                                .foregroundStyle(row.aggregate.totals.total == 0 ? .secondary : .primary)
-                            Text(Format.tokens(row.aggregate.totals.total)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            Text(Format.usd(summary.aggregate.costUsd)).font(.subheadline.weight(.semibold)).monospacedDigit()
+                            Text(Format.tokens(summary.aggregate.totals.total)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                                 .frame(width: 52, alignment: .trailing)
                         }
-                        .padding(.leading, 14)
-                    }
-                }
-            }
-            if summaries.isEmpty {
-                Text(model.isScanning ? "Scanning…" : "No usage found.").font(.caption).foregroundStyle(.secondary)
-            }
-
-            let codexLimits = model.accounts.filter { $0.provider == .codex }.compactMap { account -> (Account, RateLimitWindow)? in
-                let plan = account.id.replacingOccurrences(of: "codex:plan:", with: "")
-                guard let w = model.rateLimits[plan]?.primary else { return nil }
-                return (account, w)
-            }
-            if !codexLimits.isEmpty {
-                Divider()
-                ForEach(codexLimits, id: \.0.id) { account, window in
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("\(account.displayName) · \(Format.windowName(minutes: window.windowMinutes))").font(.caption)
-                            Spacer()
-                            Text("\(Int(window.usedPercent.rounded()))% · resets \(Format.relative(window.resetDate))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        ShareBar(fraction: grand.costUsd > 0 ? summary.aggregate.costUsd / grand.costUsd : 0, color: Palette.color(for: summary.group))
+                        ForEach(summary.accounts, id: \.account.id) { row in
+                            HStack(spacing: 6) {
+                                Circle().fill(model.color(for: row.account)).frame(width: 6, height: 6)
+                                Button { detail = .account(row.account.id) } label: {
+                                    HStack(spacing: 3) {
+                                        Text(row.account.displayName).font(.caption).lineLimit(1)
+                                        Image(systemName: "chevron.right").font(.system(size: 8))
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .help("Explore \(row.account.displayName)")
+                                Spacer()
+                                Text(Format.usd(row.aggregate.costUsd)).font(.caption).monospacedDigit()
+                                    .foregroundStyle(row.aggregate.totals.total == 0 ? .secondary : .primary)
+                                Text(Format.tokens(row.aggregate.totals.total)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                                    .frame(width: 52, alignment: .trailing)
+                            }
+                            .padding(.leading, 14)
                         }
-                        ShareBar(fraction: window.usedPercent / 100, color: window.usedPercent > 90 ? .red : window.usedPercent > 70 ? .orange : .accentColor)
                     }
                 }
+                if summaries.isEmpty {
+                    Text(model.isScanning ? "Scanning…" : "No usage found.").font(.caption).foregroundStyle(.secondary)
+                }
+
+                let codexLimits = model.accounts.filter { $0.provider == .codex }.compactMap { account -> (Account, RateLimitWindow)? in
+                    let plan = account.id.replacingOccurrences(of: "codex:plan:", with: "")
+                    guard let w = model.rateLimits[plan]?.primary else { return nil }
+                    return (account, w)
+                }
+                if !codexLimits.isEmpty {
+                    Divider()
+                    ForEach(codexLimits, id: \.0.id) { account, window in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text("\(account.displayName) · \(Format.windowName(minutes: window.windowMinutes))").font(.caption)
+                                Spacer()
+                                Text("\(Int(window.usedPercent.rounded()))% · resets \(Format.relative(window.resetDate))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            }
+                            ShareBar(fraction: window.usedPercent / 100, color: window.usedPercent > 90 ? .red : window.usedPercent > 70 ? .orange : .accentColor)
+                        }
+                    }
+                }
+
             }
 
             Divider()
             HStack {
                 Button("Open PlanMeter") {
+                    if let detail { model.usageDetail = detail }
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 }

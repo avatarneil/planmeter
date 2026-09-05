@@ -61,6 +61,11 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
+            name: "PlanMeterTests",
+            dependencies: ["PlanMeter"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
             name: "PlanMeterCoreTests",
             dependencies: ["PlanMeterCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]

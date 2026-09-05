@@ -118,6 +118,17 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   Codex.
 - Costs are API-equivalent token prices, not what a subscription charges.
 
+## Usage drill-down
+
+Click a colored bar segment or a legend name in the main chart to open focused usage details.
+Switch between **By account**, **By provider**, and **Personal vs Work** to explore different
+slices. Details show a time chart, cost and token totals, and a model breakdown for the selected
+range. Click **Done** to return to the overview.
+
+In the menu bar popover, click an account or group name to see a compact chart and model
+breakdown. **All usage** goes back; **Open PlanMeter** opens the same details in the main app.
+Drilling down does not change which groups count toward your spending limit.
+
 ## Menu bar
 
 The app also installs a menu bar item showing spend. You can choose which plan groups and time
