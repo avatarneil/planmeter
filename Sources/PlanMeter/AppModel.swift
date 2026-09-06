@@ -5,18 +5,38 @@ import PlanMeterRemote
 import SwiftUI
 
 enum TimeRange: String, CaseIterable, Identifiable {
+    case today = "Today"
     case day = "24h"
     case week = "7 days"
     case month = "30 days"
     case quarter = "90 days"
 
-    var id: String { rawValue }
+    // Keep the existing spend-limit keys so saved limits survive range changes.
+    var id: String {
+        switch self {
+        case .today: return "today"
+        case .day: return "day"
+        case .week: return "week"
+        case .month: return "month"
+        case .quarter: return "quarter"
+        }
+    }
 
-    var resolution: Resolution { self == .day ? .hour : .day }
+    var displayName: String {
+        switch self {
+        case .today: return "Today"
+        case .day: return "Last 24 Hours"
+        case .week: return "Last 7 Days"
+        case .month: return "Last 30 Days"
+        case .quarter: return "Last 90 Days"
+        }
+    }
+
+    var resolution: Resolution { self == .today || self == .day ? .hour : .day }
 
     var dayCount: Int {
         switch self {
-        case .day: return 1
+        case .today, .day: return 1
         case .week: return 7
         case .month: return 30
         case .quarter: return 90
@@ -25,6 +45,8 @@ enum TimeRange: String, CaseIterable, Identifiable {
 
     func window(now: Date = Date(), calendar: Calendar = .current) -> (from: Date, to: Date) {
         switch self {
+        case .today:
+            return (calendar.startOfDay(for: now), now)
         case .day:
             let hour = Date(timeIntervalSince1970: floor(now.timeIntervalSince1970 / 3600) * 3600)
             return (hour.addingTimeInterval(-23 * 3600), hour.addingTimeInterval(3600))
@@ -43,37 +65,6 @@ enum Metric: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum MenuBarSpendRange: String, CaseIterable, Identifiable {
-    case today
-    case day
-    case week
-    case month
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .today: return "Today"
-        case .day: return "Last 24 Hours"
-        case .week: return "Last 7 Days"
-        case .month: return "Last 30 Days"
-        }
-    }
-
-    func window(now: Date = Date(), calendar: Calendar = .current) -> (from: Date, to: Date) {
-        switch self {
-        case .today:
-            return (calendar.startOfDay(for: now), now)
-        case .day:
-            return TimeRange.day.window(now: now, calendar: calendar)
-        case .week:
-            return TimeRange.week.window(now: now, calendar: calendar)
-        case .month:
-            return TimeRange.month.window(now: now, calendar: calendar)
-        }
-    }
-}
-
 struct GroupSummary: Identifiable {
     var group: PlanGroup
     var aggregate: Aggregate
@@ -84,7 +75,8 @@ struct GroupSummary: Identifiable {
 @Observable
 @MainActor
 final class AppModel {
-    var range: TimeRange = .month { didSet { recompute() } }
+    /// One session-wide range for the dashboard, popover, and widgets.
+    var range: TimeRange = .today { didSet { recompute() } }
     var metric: Metric = .cost
     var discovery = Discovery()
     var cells: [CellKey: Cell] = [:]
@@ -107,14 +99,11 @@ final class AppModel {
             publishDesktopWidget()
         }
     }
-    var menuBarSpendRange: MenuBarSpendRange = AppModel.loadMenuBarSpendRange() {
-        didSet { AppModel.saveMenuBarSpendRange(menuBarSpendRange); publishDesktopWidget() }
-    }
     var menuBarSpendThresholds = SpendThreshold.load(from: GroupOverrides.defaults()) {
         didSet { SpendThreshold.save(menuBarSpendThresholds, to: GroupOverrides.defaults()); publishDesktopWidget() }
     }
     var menuBarSpendThreshold: SpendThreshold? {
-        menuBarSpendThresholds[menuBarSpendRange.rawValue]
+        menuBarSpendThresholds[range.id]
     }
     var usageDetail: UsageScope?
     var showAccounts = false
@@ -128,7 +117,6 @@ final class AppModel {
     /// How often the menu bar figure is refreshed while the app sits idle.
     static let autoRefreshInterval: Duration = .seconds(5 * 60)
     private static let menuBarSpendGroupsKey = "menuBarSpendGroups"
-    private static let menuBarSpendRangeKey = "menuBarSpendRange"
 
     // MARK: Lifecycle
 
@@ -215,10 +203,11 @@ final class AppModel {
         }
     }
 
-    func recompute() {
-        let window = range.window()
-        buckets = Aggregation.buckets(cells: cells, rates: rates, from: window.from, to: window.to, resolution: range.resolution)
-        publishDesktopWidget()
+    func recompute(now: Date = Date()) {
+        let window = range.window(now: now)
+        buckets = Aggregation.buckets(cells: cells, rates: rates, from: window.from, to: window.to,
+                                      resolution: range.resolution)
+        publishDesktopWidget(now: now)
     }
 
     // MARK: Accounts and groups
@@ -272,8 +261,8 @@ final class AppModel {
 
     var total: Aggregate { Aggregation.total(buckets) }
 
-    /// Spend since local midnight, independent of the selected range. Shown
-    /// in the menu bar.
+    /// Spend since local midnight, independent of the selected range, for
+    /// the remote summary's dedicated Today total.
     var todayTotal: Aggregate {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
@@ -281,13 +270,11 @@ final class AppModel {
         return Aggregation.total(Aggregation.buckets(cells: cells, rates: rates, from: start, to: end, resolution: .day))
     }
 
-    /// Spend for the groups and period the user chose for the pre-click menu
-    /// bar figure. The popover itself continues to show every plan group.
+    /// The selected groups' spend from the same buckets as the visible usage.
+    /// The popover's breakdown continues to show every plan group.
     var menuBarTotal: Aggregate {
-        let window = menuBarSpendRange.window()
         let selectedAccountIds = Set(accounts.lazy.filter { self.menuBarSpendGroups.contains(self.group(for: $0)) }.map(\.id))
-        let selectedCells = cells.filter { selectedAccountIds.contains($0.key.accountId) }
-        return Aggregation.total(Aggregation.buckets(cells: selectedCells, rates: rates, from: window.from, to: window.to, resolution: .day))
+        return Aggregation.total(buckets.filter { selectedAccountIds.contains($0.accountId) })
     }
 
     private static func loadMenuBarSpendGroups() -> Set<PlanGroup> {
@@ -301,17 +288,6 @@ final class AppModel {
     private static func saveMenuBarSpendGroups(_ groups: Set<PlanGroup>) {
         let defaults = GroupOverrides.defaults()
         defaults.set(groups.map(\.rawValue).sorted(), forKey: menuBarSpendGroupsKey)
-        defaults.synchronize()
-    }
-
-    private static func loadMenuBarSpendRange() -> MenuBarSpendRange {
-        let rawValue = GroupOverrides.defaults().string(forKey: menuBarSpendRangeKey)
-        return rawValue.flatMap(MenuBarSpendRange.init(rawValue:)) ?? .today
-    }
-
-    private static func saveMenuBarSpendRange(_ range: MenuBarSpendRange) {
-        let defaults = GroupOverrides.defaults()
-        defaults.set(range.rawValue, forKey: menuBarSpendRangeKey)
         defaults.synchronize()
     }
 
