@@ -44,13 +44,6 @@ struct MenuBarView: View {
                             ))
                         }
                     }
-                    Section("Time Period") {
-                        Picker("Time Period", selection: $model.menuBarSpendRange) {
-                            ForEach(MenuBarSpendRange.allCases) { range in
-                                Text(range.displayName).tag(range)
-                            }
-                        }
-                    }
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
@@ -176,7 +169,7 @@ struct MenuBarLabel: View {
                     .font(.system(size: 12, weight: .medium))
             }
         }
-        .help("\(model.menuBarSpendRange.displayName) · \(model.menuBarSpendGroups.map(\.displayName).sorted().joined(separator: ", "))")
+        .help("\(model.range.displayName) · \(model.menuBarSpendGroups.map(\.displayName).sorted().joined(separator: ", "))")
     }
 }
 

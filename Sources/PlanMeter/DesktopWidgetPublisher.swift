@@ -7,7 +7,7 @@ extension AppModel {
     /// Uses the same account selection, pricing, and period as the menu bar.
     func desktopSnapshot(now: Date = Date()) -> DesktopSnapshot? {
         guard let lastScan else { return nil }
-        let window = menuBarSpendRange.window(now: now)
+        let window = range.window(now: now)
         let selected = accounts.filter { menuBarSpendGroups.contains(group(for: $0)) }
         let ids = Set(selected.map(\.id))
         let buckets = Aggregation.buckets(cells: cells.filter { ids.contains($0.key.accountId) }, rates: rates,
@@ -19,7 +19,7 @@ extension AppModel {
             let cost = Aggregation.total(buckets.filter { providerIDs.contains($0.accountId) }).costUsd
             return .init(id: provider.rawValue, name: provider.displayName, cost: cost)
         }.sorted { $0.cost == $1.cost ? $0.id < $1.id : $0.cost > $1.cost }
-        let hourly = menuBarSpendRange == .today || menuBarSpendRange == .day
+        let hourly = range.resolution == .hour
         let trendBuckets = hourly
             ? Aggregation.buckets(cells: cells.filter { ids.contains($0.key.accountId) }, rates: rates,
                                   from: window.from, to: window.to, resolution: .hour)
@@ -46,15 +46,15 @@ extension AppModel {
         let detail = DesktopSnapshot.Detail(hourly: hourly, trend: trend, accounts: accountDetails,
                                             cacheSavings: total.cacheSavingsUsd,
                                             cachedInputShare: total.totals.input > 0 ? Double(total.totals.cachedInput) / Double(total.totals.input) : 0)
-        return DesktopSnapshot(scannedAt: lastScan, generatedAt: now, rangeID: menuBarSpendRange.rawValue,
-                               rangeName: menuBarSpendRange.displayName, groups: menuBarSpendGroups.map(\.displayName).sorted(),
+        return DesktopSnapshot(scannedAt: lastScan, generatedAt: now, rangeID: range.id,
+                               rangeName: range.displayName, groups: menuBarSpendGroups.map(\.displayName).sorted(),
                                cost: total.costUsd, tokens: total.totals.total, unpricedTokens: total.unpricedTokens,
                                limit: menuBarSpendThreshold?.limit, warningPercent: menuBarSpendThreshold?.warningPercent ?? 80,
                                providers: providers, detail: detail)
     }
 
-    func publishDesktopWidget() {
-        guard let snapshot = desktopSnapshot(), let directory = DesktopWidgetStore.container else { return }
+    func publishDesktopWidget(now: Date = Date()) {
+        guard let snapshot = desktopSnapshot(now: now), let directory = DesktopWidgetStore.container else { return }
         do {
             try DesktopWidgetStore.save(snapshot, to: directory)
             desktopWidgetError = nil

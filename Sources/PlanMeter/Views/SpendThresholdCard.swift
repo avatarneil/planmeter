@@ -36,19 +36,21 @@ struct SpendThresholdCard: View {
                 }
                 .buttonStyle(.borderless)
             }
-            Text("\(model.menuBarSpendRange.displayName) · \(scope)")
+            Text("\(model.range.displayName) · \(scope)")
                 .font(.caption).foregroundStyle(.secondary)
-            if let threshold = model.menuBarSpendThreshold {
-                let spend = model.menuBarTotal.costUsd
-                let status = threshold.status(spend: spend)
-                let color = Color(nsColor: spendTint(status))
-                HStack(alignment: .firstTextBaseline) {
-                    Text(Format.usd(spend)).font(.title2.weight(.semibold)).monospacedDigit()
+            let spend = model.menuBarTotal.costUsd
+            HStack(alignment: .firstTextBaseline) {
+                Text(Format.usd(spend)).font(.title2.weight(.semibold)).monospacedDigit()
+                if let threshold = model.menuBarSpendThreshold {
                     Text("of \(Format.usd(threshold.limit))").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Text(Format.percent(threshold.fraction(spend: spend)))
                         .font(.subheadline.weight(.semibold)).monospacedDigit()
                 }
+            }
+            if let threshold = model.menuBarSpendThreshold {
+                let status = threshold.status(spend: spend)
+                let color = Color(nsColor: spendTint(status))
                 ProgressView(value: min(1, threshold.fraction(spend: spend))).tint(color)
                     .accessibilityLabel("Personal spend limit used")
                     .accessibilityValue(Format.percent(threshold.fraction(spend: spend)))
@@ -68,13 +70,13 @@ struct SpendThresholdCard: View {
                 .font(.caption2).foregroundStyle(.secondary)
             if isEditing {
                 Divider()
-                SpendThresholdEditor(range: model.menuBarSpendRange, threshold: model.menuBarSpendThreshold) { value in
-                    model.menuBarSpendThresholds[model.menuBarSpendRange.rawValue] = value
+                SpendThresholdEditor(range: model.range, threshold: model.menuBarSpendThreshold) { value in
+                    model.menuBarSpendThresholds[model.range.id] = value
                     isEditing = false
                 } cancel: {
                     isEditing = false
                 }
-                .id(model.menuBarSpendRange)
+                .id(model.range)
             }
         }
         .padding(10)
@@ -83,14 +85,14 @@ struct SpendThresholdCard: View {
 }
 
 private struct SpendThresholdEditor: View {
-    var range: MenuBarSpendRange
+    var range: TimeRange
     var threshold: SpendThreshold?
     var save: (SpendThreshold?) -> Void
     var cancel: () -> Void
     @State private var amount: String
     @State private var warningPercent: Double
 
-    init(range: MenuBarSpendRange, threshold: SpendThreshold?, save: @escaping (SpendThreshold?) -> Void, cancel: @escaping () -> Void) {
+    init(range: TimeRange, threshold: SpendThreshold?, save: @escaping (SpendThreshold?) -> Void, cancel: @escaping () -> Void) {
         self.range = range
         self.threshold = threshold
         self.save = save

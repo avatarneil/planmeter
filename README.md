@@ -131,9 +131,12 @@ Drilling down does not change which groups count toward your spending limit.
 
 ## Menu bar
 
-The app also installs a menu bar item showing spend. You can choose which plan groups and time
-period are included in the pre-click total from the menu bar popover. Its popover lists Personal and Work
-totals for the selected range, each account underneath, and the Codex weekly window per account,
+The app also installs a menu bar item showing spend. All Mac usage views start at **Today** (since local
+midnight) on launch. The range dropdown changes the menu bar total, spending-limit card, account and
+group breakdowns, detail charts, main dashboard, and desktop widgets together. Choose **24h**, **7 days**,
+**30 days**, or **90 days** to explore another period. The settings menu chooses which plan groups
+count toward the menu bar total and spending limit. Its popover lists Personal and Work
+totals for the selected range, each account underneath, and the provider's Codex weekly window per account,
 with buttons to open the main window or quit. Data refreshes every five minutes while the app runs,
 and the app keeps running in the menu bar after the main window is closed.
 
