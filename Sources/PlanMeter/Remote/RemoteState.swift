@@ -125,8 +125,8 @@ final class RemoteState {
         let port = self.port
         let (domain, active, message) = await Task.detached(priority: .utility) { () -> (String?, Bool, String?) in
             guard TailscaleServe.isAvailable else { return (nil, false, "Tailscale CLI not found. Install the macOS app or Homebrew package.") }
-            let domain = TailscaleServe.certDomain()
-            guard domain != nil else { return (nil, false, "This tailnet has HTTPS certificates disabled. Enable MagicDNS + HTTPS in the Tailscale admin console.") }
+            let certificate = TailscaleServe.certificateStatus()
+            guard let domain = certificate.domain else { return (nil, false, certificate.message) }
             var active = TailscaleServe.isActive(localPort: port)
             var message: String?
             if ensure && !active {
