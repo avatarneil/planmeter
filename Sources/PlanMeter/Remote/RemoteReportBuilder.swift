@@ -7,12 +7,12 @@ import PlanMeterRemote
 enum RemoteReportBuilder {
     static let maxDays = 365
 
-    static func reply(for request: RemoteRequest, model: AppModel) -> RemoteReply {
+    static func reply(for request: RemoteRequest, model: AppModel, now: Date = Date()) -> RemoteReply {
         let days = min(max(request.days ?? 30, 1), maxDays)
         switch request.method {
-        case .summary: return RemoteReply(summary: summary(model: model, days: days))
-        case .models: return RemoteReply(models: models(model: model, days: days, filter: request.account))
-        case .timeline: return RemoteReply(timeline: timeline(model: model, days: days, resolution: request.resolution == "hour" ? .hour : .day))
+        case .summary: return RemoteReply(summary: summary(model: model, days: days, now: now))
+        case .models: return RemoteReply(models: models(model: model, days: days, filter: request.account, now: now))
+        case .timeline: return RemoteReply(timeline: timeline(model: model, days: days, resolution: request.resolution == "hour" ? .hour : .day, now: now))
         case .limits: return RemoteReply(limits: limits(model: model))
         case .accounts: return RemoteReply(accounts: accounts(model: model))
         }
@@ -26,13 +26,15 @@ enum RemoteReportBuilder {
         RemoteAccount(id: a.id, name: a.displayName, provider: a.provider.rawValue, providerName: a.provider.displayName, group: model.group(for: a).rawValue, email: a.email, plan: a.planLabel, accentColorHex: a.accentColorHex)
     }
 
-    static func buckets(model: AppModel, days: Int, resolution: Resolution = .day) -> (buckets: [Bucket], from: Date, to: Date) {
-        let w = Report.window(days: days)
+    static func buckets(model: AppModel, days: Int, resolution: Resolution = .day, now: Date = Date()) -> (buckets: [Bucket], from: Date, to: Date) {
+        // Both remote clients label one day as "24h". Match the Mac's current
+        // hour plus the preceding 23 hourly buckets, rather than calendar today.
+        let w = days == 1 ? TimeRange.day.window(now: now) : Report.window(days: days, now: now)
         return (Aggregation.buckets(cells: model.cells, rates: model.rates, from: w.from, to: w.to, resolution: resolution), w.from, w.to)
     }
 
-    static func summary(model: AppModel, days: Int) -> RemoteSummary {
-        let (buckets, from, to) = buckets(model: model, days: days)
+    static func summary(model: AppModel, days: Int, now: Date = Date()) -> RemoteSummary {
+        let (buckets, from, to) = buckets(model: model, days: days, now: now)
         let byAccount = Aggregation.byAccount(buckets)
         var groups: [RemoteGroupUsage] = []
         for group in PlanGroup.allCases {
@@ -62,8 +64,8 @@ enum RemoteReportBuilder {
         )
     }
 
-    static func models(model: AppModel, days: Int, filter: String?) -> [RemoteModelRow] {
-        let (buckets, _, _) = buckets(model: model, days: days)
+    static func models(model: AppModel, days: Int, filter: String?, now: Date = Date()) -> [RemoteModelRow] {
+        let (buckets, _, _) = buckets(model: model, days: days, now: now)
         struct Key: Hashable { var account: String; var model: String }
         var agg: [Key: Aggregate] = [:]
         var unpriced: Set<Key> = []
@@ -85,8 +87,8 @@ enum RemoteReportBuilder {
         return rows
     }
 
-    static func timeline(model: AppModel, days: Int, resolution: Resolution) -> RemoteTimeline {
-        let (buckets, from, to) = buckets(model: model, days: days, resolution: resolution)
+    static func timeline(model: AppModel, days: Int, resolution: Resolution, now: Date = Date()) -> RemoteTimeline {
+        let (buckets, from, to) = buckets(model: model, days: days, resolution: resolution, now: now)
         struct Key: Hashable { var period: Date; var account: String }
         var agg: [Key: (Double, Int)] = [:]
         for b in buckets {
