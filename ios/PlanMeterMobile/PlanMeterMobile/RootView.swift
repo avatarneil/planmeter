@@ -8,7 +8,7 @@ struct RootView: View {
         Group {
             if model.isLocked {
                 LockView()
-            } else if model.server == nil {
+            } else if !model.usesCloud && model.server == nil {
                 PairingView()
             } else {
                 NavigationStack {

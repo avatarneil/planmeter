@@ -36,6 +36,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
             Task { @MainActor in
                 guard let self else { return }
                 self.isRefreshing = false
+                if reply[WatchPayload.clearContextKey] as? Bool == true { self.clear() }
                 if let data = reply[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) {
                     self.apply(p)
                 } else if let error = reply["error"] as? String {
@@ -50,6 +51,12 @@ final class WatchModel: NSObject, WCSessionDelegate {
         })
     }
 
+    private func clear() {
+        payload = nil
+        WatchPayload.clear()
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     private func apply(_ p: WatchPayload) {
         payload = p
         p.save()
@@ -61,6 +68,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
     nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         let context = session.receivedApplicationContext
         Task { @MainActor in
+            if context[WatchPayload.clearContextKey] as? Bool == true { self.clear() }
             if let data = context[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) {
                 self.apply(p)
             }
@@ -69,6 +77,10 @@ final class WatchModel: NSObject, WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        if applicationContext[WatchPayload.clearContextKey] as? Bool == true {
+            Task { @MainActor in self.clear() }
+            return
+        }
         guard let data = applicationContext[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) else { return }
         Task { @MainActor in self.apply(p) }
     }

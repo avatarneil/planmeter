@@ -109,6 +109,7 @@ final class AppModel {
     var showAccounts = false
     var showRemote = false
     let remote = RemoteState()
+    let cloudSync = CloudSyncState()
 
     private let cache = ScanCache()
     private var started = false
@@ -208,6 +209,7 @@ final class AppModel {
         buckets = Aggregation.buckets(cells: cells, rates: rates, from: window.from, to: window.to,
                                       resolution: range.resolution)
         publishDesktopWidget(now: now)
+        Task { await cloudSync.publish(model: self) }
     }
 
     // MARK: Accounts and groups

@@ -19,6 +19,9 @@ jobs:
       - name: Run Swift tests
         run: swift test
 
+      - name: Test iCloud provisioning validation
+        run: python3 -m unittest discover -s Tests/SigningTests
+
       - name: Build macOS app bundle
         run: make app
 

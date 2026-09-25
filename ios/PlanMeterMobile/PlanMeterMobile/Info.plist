@@ -33,6 +33,8 @@
             </array>
         </dict>
     </array>
+    <key>PlanMeterCodeSigningAllowed</key>
+    <string>$(CODE_SIGNING_ALLOWED)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSAppTransportSecurity</key>

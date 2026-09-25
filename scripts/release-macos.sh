@@ -18,6 +18,12 @@ if [ -z "${SIGNING_IDENTITY:-}" ]; then
   exit 1
 fi
 
+if [ -z "${ICLOUD_PROVISIONING_PROFILE:-}" ]; then
+  echo "Set ICLOUD_PROVISIONING_PROFILE to the Mac Developer ID profile with CloudKit enabled." >&2
+  exit 1
+fi
+export ICLOUD_ENVIRONMENT=Production
+
 "$ROOT/scripts/check-version.sh"
 swift package resolve
 if [ ! -x "$SPARKLE_TOOLS/generate_appcast" ]; then
