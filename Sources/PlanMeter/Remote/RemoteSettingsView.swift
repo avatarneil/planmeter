@@ -6,6 +6,7 @@ import PlanMeterRemote
 struct RemoteSettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmCloudDelete = false
     @State private var now = Date()
     @State private var qrKind: QRKind = .web
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -18,9 +19,35 @@ struct RemoteSettingsView: View {
 
     var body: some View {
         @Bindable var remote = model.remote
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Sync usage through iCloud", isOn: Binding(
+                        get: { model.cloudSync.isEnabled },
+                        set: { enabled in
+                            model.cloudSync.setEnabled(enabled)
+                            if enabled { Task { await model.cloudSync.publish(model: model) } }
+                        }
+                    ))
+                    .disabled(model.cloudSync.isBusy)
+                    Text("Use the same Apple Account on your Mac and iPhone. Uploads account names, usage totals, charts, model breakdowns, and limits to your private iCloud database. Prompts, transcripts, credentials, and source paths stay on this Mac.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(model.cloudSync.status).font(.caption)
+                    HStack {
+                        Button("Sync now") { Task { await model.cloudSync.publish(model: model) } }
+                            .disabled(!model.cloudSync.isEnabled || model.cloudSync.isBusy)
+                        Button("Delete iCloud snapshot…", role: .destructive) { confirmCloudDelete = true }
+                            .disabled(model.cloudSync.isBusy)
+                        if model.cloudSync.isBusy { ProgressView().controlSize(.small) }
+                    }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .confirmationDialog("Delete this Mac’s iCloud snapshot and stop uploading?", isPresented: $confirmCloudDelete) {
+                Button("Delete snapshot", role: .destructive) { Task { await model.cloudSync.deleteSnapshot() } }
+            }
             HStack {
-                Text("Remote access").font(.title2.weight(.semibold))
+                Text("Direct access").font(.title2.weight(.semibold))
                 Spacer()
                 Toggle("Enabled", isOn: $remote.isEnabled).toggleStyle(.switch)
             }
@@ -132,6 +159,7 @@ struct RemoteSettingsView: View {
             }
         }
         .padding(20)
+        }
         .frame(width: 800, height: 640)
         .onReceive(tick) { now = $0 }
         .task { await model.remote.refreshHTTPSStatus(ensure: false) }

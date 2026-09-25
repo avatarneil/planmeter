@@ -33,6 +33,11 @@
             </array>
         </dict>
     </array>
+    <key>PlanMeterCodeSigningAllowed</key>
+    <string>$(CODE_SIGNING_ALLOWED)</string>
+    <!-- All cryptography uses Apple operating-system frameworks. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSAppTransportSecurity</key>

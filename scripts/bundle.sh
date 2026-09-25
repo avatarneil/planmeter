@@ -98,6 +98,13 @@ codesign "${SIGN_ARGS[@]}" "$SPARKLE_FRAMEWORK"
 codesign "${SIGN_ARGS[@]}" "$APP/Contents/MacOS/planmeter-cli"
 codesign "${SIGN_ARGS[@]}" "$APP/Contents/MacOS/planmeter-mcp"
 "$ROOT/scripts/bundle-desktop-widget.sh" "$APP" "$SIGNING_IDENTITY" "$CONFIG" "$BUILD_ARCH"
+if [ -n "${ICLOUD_PROVISIONING_PROFILE:-}" ]; then
+  if [ "$SIGNING_IDENTITY" = "-" ]; then
+    echo "iCloud requires an Apple signing identity, not ad-hoc signing." >&2
+    exit 1
+  fi
+  python3 "$ROOT/scripts/configure-icloud-signing.py" "$ICLOUD_PROVISIONING_PROFILE" "$APP" "$DIST/PlanMeter.entitlements"
+fi
 codesign "${SIGN_ARGS[@]}" --entitlements "$DIST/PlanMeter.entitlements" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 

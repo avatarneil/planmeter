@@ -10,3 +10,8 @@ dist/
 ios/PlanMeterMobile/build/
 xcuserdata/
 *.xcuserstate
+
+__pycache__/
+*.pyc
+*.provisionprofile
+*.mobileprovision

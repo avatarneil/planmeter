@@ -16,7 +16,7 @@ fetched from LiteLLM and cached locally; remote access is off by default.
 | Component | Supported platform | Notes |
 | --- | --- | --- |
 | Mac app, CLI, MCP server | macOS 14 or newer on Apple silicon | This is the required host. Intel Macs, Windows, and Linux are not currently supported. |
-| iPhone/iPad companion | iOS/iPadOS 17 or newer | Optional; requires the Mac app and Tailscale. |
+| iPhone/iPad companion | iOS/iPadOS 17 or newer | Optional; requires the Mac app, with iCloud or Tailscale. |
 | Apple Watch app and complication | watchOS 10 or newer | Optional; receives data through the paired iPhone. |
 | Web client | A current browser with WebCrypto and IndexedDB | Optional; intended for a Tailscale HTTPS URL served by the Mac app. |
 
@@ -74,7 +74,7 @@ Before publishing, archive the app, submit it to Apple's notarization service, s
 ticket to the app, and recreate the archive so the stapled app is the GitHub Release asset:
 
 ```sh
-make release-macos SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)'
+ICLOUD_PROVISIONING_PROFILE='/path/to/PlanMeter.provisionprofile' make release-macos SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)'
 ```
 
 This produces an Apple-Silicon-only, notarized ZIP, Sparkle appcast, and SHA-256 checksum under
@@ -202,6 +202,59 @@ without leaving the terminal. Tools:
 bundled server exists at the path being registered. Results are JSON in both `content` text and
 `structuredContent`. Python 3 is only needed when the script updates OpenCode's JSON configuration.
 
+## iCloud sync
+
+Enable **Sync usage through iCloud** in the Mac app’s **Remote** sheet, then choose
+**Use iCloud** on the iPhone’s connection screen (or in Settings). Both devices must use
+the same Apple Account for iCloud. No pairing code, Tailscale, or incoming connection is needed.
+If multiple Macs publish, choose one in iPhone Settings; totals are not merged across Macs.
+
+The Mac uploads aggregate reports for 24h, 7d, 30d, and 90d after scanning (normally every five
+minutes while running). The phone fetches on launch, foregrounding, pull-to-refresh, and every
+five minutes while active. Range changes use the downloaded reports. The phone relays the selected
+report to the Watch and complications. This is snapshot sync, not continuous background delivery:
+the Mac must run to collect new data and the phone must refresh to update the Watch. The last
+upload stays available when the Mac sleeps; its original scan time remains visible.
+
+Uploads go to the current user’s **private CloudKit database**. They contain account display names,
+provider/plan labels, usage totals, charts, model breakdowns, and limit readings. Explicit email
+fields are removed and attribution IDs are hashed because they can contain paths. Display names
+may themselves contain identifying information. Prompts, transcripts, credentials, and source
+reports are excluded. Disabling sync stops uploads but retains the cloud snapshot; **Delete iCloud
+snapshot…** removes this Mac’s record and disables uploading. Other devices clear it on their next
+successful refresh. Changing the iCloud account pauses Mac uploads until explicitly re-enabled.
+
+### iCloud release configuration
+
+CloudKit needs Apple provisioning; ad-hoc Mac builds continue to work with local data and direct
+access but show an actionable error when iCloud is requested.
+
+1. Under team **Charles Goldader (R668T822R7)**, register the shared container
+   `iCloud.com.neilgoldader.planmeter`. Enable CloudKit for both `com.neilgoldader.planmeter`
+   and `com.neilgoldader.planmeter.mobile`, associating that same container with each App ID.
+2. Refresh the iOS provisioning profiles in Xcode. The phone target includes the CloudKit
+   entitlements; the Watch does not need its own CloudKit capability.
+3. Generate a Mac provisioning profile authorizing the container for the signing identity.
+   For a distributed Mac build use a **Developer ID** profile with the **Production** environment.
+   Pass its absolute path as `ICLOUD_PROVISIONING_PROFILE` alongside `SIGNING_IDENTITY` to
+   `make app` or `scripts/release-macos.sh`. The bundler validates and embeds the profile, then
+   merges the CloudKit entitlements with the existing desktop-widget entitlements before signing.
+   The release script requires this profile and selects Production. For local development, pass
+   `ICLOUD_ENVIRONMENT=Development` to `make app`. Do not commit profiles. Development builds on both devices must use Development; TestFlight
+   and distributed Mac builds must both use Production.
+4. In the container’s Development schema, create record type **UsageSnapshot** with field
+   **payload** of type **Asset**. Make the system **recordName** field queryable (the client lists
+   all snapshots). Publish a development snapshot and verify fetching it from an iPhone signed
+   into the same iCloud account. Deploy the schema and indexes to Production before TestFlight.
+5. Verify a production-signed Mac upload and TestFlight phone download with Tailscale off, then
+   check range switching, multiple-Mac selection, airplane-mode errors, deletion, iCloud sign-out,
+   and Watch refresh. CI checks compilation and report serialization; it cannot verify private
+   iCloud access or production provisioning.
+
+See Apple’s [iCloud configuration](https://developer.apple.com/documentation/xcode/configuring-icloud-services)
+and [schema deployment](https://developer.apple.com/documentation/cloudkit/deploying-an-icloud-container-s-schema)
+guides for the Apple account setup.
+
 ## iOS companion over Tailscale
 
 `ios/PlanMeterMobile` is a SwiftUI iPhone/iPad app that shows the same dashboard by talking to the
@@ -259,7 +312,7 @@ in a way the native app does not, which is why Tailscale Serve's TLS matters.
 `ios/PlanMeterMobile/PlanMeterWatch` is a watchOS companion embedded in the iPhone app, with a
 WidgetKit complication (`PlanMeterWatchWidget`) for today's spend, Personal vs Work, or the top
 Codex window as a gauge. Apple Watch has no Tailscale and its traffic does not use the phone's VPN,
-so the watch never talks to the Mac: the iPhone app fetches over the encrypted channel and relays a
+so the watch never talks to the Mac: the iPhone app fetches from iCloud or over the encrypted direct channel and relays a
 compact summary (`PlanMeterWatchShared.WatchPayload`) over Watch Connectivity, which Apple encrypts
 between the paired devices. The watch holds no pairing keys. Pages: today and the Personal/Work
 split, Codex limits as gauges, and the per-account list; the refresh button asks the phone to fetch
@@ -293,7 +346,7 @@ without the system's "Open in PlanMeter?" prompt. If codesign complains about "d
 make test         # unit tests for the parsers, pricing, aggregation, and the secure channel
 make app          # release build wrapped in dist/PlanMeter.app (ad-hoc signed)
 make signed-app SIGNING_IDENTITY='Developer ID Application: Name (TEAMID)'
-make release-macos SIGNING_IDENTITY='Developer ID Application: Name (TEAMID)'
+ICLOUD_PROVISIONING_PROFILE='/path/to/PlanMeter.provisionprofile' make release-macos SIGNING_IDENTITY='Developer ID Application: Name (TEAMID)'
 make run          # build and open
 make install      # copy to /Applications (quits a running copy first)
 make install-mcp  # register the bundled MCP server with Claude Code, Codex, OpenCode
@@ -331,7 +384,8 @@ unit suite does not require provider credentials or T3 Code.
 PlanMeter reads local transcript and identity files to attribute usage. It stores its scan cache,
 pricing cache, group choices, and remote-pairing state under the current user's Application Support
 directory. Do not publish those local files or pairing links. Remote access is opt-in and restricted
-to Tailscale or loopback peers; see the security model above before enabling it.
+to Tailscale or loopback peers. Optional iCloud sync uploads aggregate snapshots to your private
+CloudKit database; see the separate data scope and deletion controls above.
 
 Please report suspected vulnerabilities through GitHub's private vulnerability reporting. If it is
 not available, open an issue requesting a private contact channel without including vulnerability

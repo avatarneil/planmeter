@@ -3,6 +3,7 @@ import SwiftUI
 
 struct PairingView: View {
     @Environment(MobileModel.self) private var model
+    @State private var showDirectPairing = false
     @State private var manualLink = ""
     @State private var scanned = false
     @State private var cameraAvailable = AVCaptureDevice.default(for: .video) != nil
@@ -11,63 +12,77 @@ struct PairingView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Pair with your Mac").font(.title2.weight(.semibold))
-                        Text("On the Mac, open PlanMeter → Remote and create a pairing code. Both devices need to be on your tailnet.")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Connect with iCloud", systemImage: "icloud").font(.title2.weight(.semibold))
+                        Text("Enable iCloud sync in PlanMeter → Remote on your Mac. Use the same Apple Account on both devices. Your phone can then read the latest upload, even while your Mac is asleep.")
                             .font(.callout).foregroundStyle(.secondary)
+                        Button("Use iCloud") { model.usesCloud = true }
+                            .buttonStyle(.borderedProminent)
                     }
+                    Divider()
+                    DisclosureGroup("Connect directly with Tailscale", isExpanded: $showDirectPairing) {
+                        if showDirectPairing {
+                            VStack(alignment: .leading, spacing: 20) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("Pair with your Mac").font(.title2.weight(.semibold))
+                                    Text("On the Mac, open PlanMeter → Remote and create a pairing code. Both devices need to be on your tailnet.")
+                                        .font(.callout).foregroundStyle(.secondary)
+                                }
 
-                    if cameraAvailable {
-                        QRScannerView { code in
-                            guard !scanned else { return }
-                            scanned = true
-                            Task {
-                                await model.pair(text: code)
-                                scanned = false
+                                if cameraAvailable {
+                                    QRScannerView { code in
+                                        guard !scanned else { return }
+                                        scanned = true
+                                        Task {
+                                            await model.pair(text: code)
+                                            scanned = false
+                                        }
+                                    }
+                                    .frame(height: 300)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.secondary.opacity(0.2)))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color(.secondarySystemGroupedBackground))
+                                        .frame(height: 140)
+                                        .overlay(
+                                            VStack(spacing: 6) {
+                                                Image(systemName: "camera.fill").foregroundStyle(.secondary)
+                                                Text("No camera here. Paste the pairing link instead.").font(.footnote).foregroundStyle(.secondary)
+                                            }
+                                        )
+                                }
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Or paste the pairing link").font(.subheadline.weight(.medium))
+                                    TextField("planmeter://pair?…", text: $manualLink)
+                                        .textFieldStyle(.roundedBorder)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .keyboardType(.URL)
+                                    Button {
+                                        Task { await model.pair(text: manualLink) }
+                                    } label: {
+                                        if model.isPairing { ProgressView() } else { Text("Pair") }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(manualLink.isEmpty || model.isPairing)
+                                }
+
+                                if let error = model.error {
+                                    Label(error, systemImage: "exclamationmark.triangle")
+                                        .font(.footnote).foregroundStyle(.orange)
+                                }
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Label("Pairing codes are single use and expire in 5 minutes.", systemImage: "clock")
+                                    Label("Your key stays in this device's Secure Enclave; the Mac pins it.", systemImage: "key.fill")
+                                    Label("Every request is end-to-end encrypted on top of Tailscale.", systemImage: "lock.shield")
+                                }
+                                .font(.footnote).foregroundStyle(.secondary)
                             }
                         }
-                        .frame(height: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.secondary.opacity(0.2)))
-                    } else {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                            .frame(height: 140)
-                            .overlay(
-                                VStack(spacing: 6) {
-                                    Image(systemName: "camera.fill").foregroundStyle(.secondary)
-                                    Text("No camera here. Paste the pairing link instead.").font(.footnote).foregroundStyle(.secondary)
-                                }
-                            )
                     }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Or paste the pairing link").font(.subheadline.weight(.medium))
-                        TextField("planmeter://pair?…", text: $manualLink)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                        Button {
-                            Task { await model.pair(text: manualLink) }
-                        } label: {
-                            if model.isPairing { ProgressView() } else { Text("Pair") }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(manualLink.isEmpty || model.isPairing)
-                    }
-
-                    if let error = model.error {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .font(.footnote).foregroundStyle(.orange)
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Pairing codes are single use and expire in 5 minutes.", systemImage: "clock")
-                        Label("Your key stays in this device's Secure Enclave; the Mac pins it.", systemImage: "key.fill")
-                        Label("Every request is end-to-end encrypted on top of Tailscale.", systemImage: "lock.shield")
-                    }
-                    .font(.footnote).foregroundStyle(.secondary)
                 }
                 .padding()
             }

@@ -23,6 +23,14 @@ struct DashboardView: View {
                 }
 
                 if let summary = model.summary {
+                    if model.usesCloud {
+                        Label("iCloud snapshot · \(summary.generatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "icloud")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if Date().timeIntervalSince(summary.generatedAt) > 900 {
+                            Text("Showing the last upload. Open PlanMeter on your Mac to update usage and limits.")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
                     ForEach(summary.groups) { group in
                         GroupCardView(group: group, total: summary.total)
                     }
@@ -44,9 +52,9 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal, 4)
                 } else if model.isLoading {
-                    ProgressView("Loading from your Mac…").frame(maxWidth: .infinity, minHeight: 200)
+                    ProgressView(model.usesCloud ? "Loading from iCloud…" : "Loading from your Mac…").frame(maxWidth: .infinity, minHeight: 200)
                 } else {
-                    ContentUnavailableView("No data yet", systemImage: "wifi.exclamationmark", description: Text("Make sure the Mac is awake, PlanMeter is running with Remote access on, and this phone is connected to Tailscale."))
+                    ContentUnavailableView("No data yet", systemImage: "wifi.exclamationmark", description: Text(model.usesCloud ? "Enable iCloud sync in PlanMeter → Remote on your Mac using the same Apple Account. Choose your Mac in Settings if you have multiple Macs. Pull to refresh after the first upload." : "Make sure the Mac is awake, PlanMeter is running with Remote access on, and this phone is connected to Tailscale."))
                 }
             }
             .padding()

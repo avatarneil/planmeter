@@ -69,6 +69,9 @@ public struct WatchPayload: Codable, Equatable, Sendable {
 
     public static let appGroup = "group.com.neilgoldader.planmeter"
     public static let contextKey = "payload"
+    public static let clearContextKey = "clearPayload"
+
+    public static func clear() { sharedDefaults().removeObject(forKey: defaultsKey) }
     static let defaultsKey = "watchPayload.v1"
 
     static let encoder: JSONEncoder = {

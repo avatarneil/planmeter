@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import LocalAuthentication
 import Observation
@@ -62,7 +63,30 @@ final class MobileModel {
     private(set) var server: PairedServer?
     private var client: RemoteClient?
 
-    var range: MobileRange = .month { didSet { Task { await refresh() } } }
+    var usesCloud = UserDefaults.standard.bool(forKey: "cloudSync.enabled") {
+        didSet {
+            UserDefaults.standard.set(usesCloud, forKey: "cloudSync.enabled")
+            clearReports()
+            cloudSnapshots = []
+            Task { await refresh() }
+        }
+    }
+    var cloudSnapshots: [CloudSnapshot] = []
+    var selectedCloudMac = UserDefaults.standard.string(forKey: "cloudSync.selectedMac") ?? "" {
+        didSet {
+            UserDefaults.standard.set(selectedCloudMac, forKey: "cloudSync.selectedMac")
+            applyCloudSelection()
+        }
+    }
+    private let cloudStore = CloudSnapshotStore()
+    @ObservationIgnored nonisolated(unsafe) private var accountObserver: NSObjectProtocol?
+    private var refreshGeneration = 0
+    var range: MobileRange = .month {
+        didSet {
+            if usesCloud { applyCloudSelection() }
+            else { Task { await refresh() } }
+        }
+    }
     var summary: RemoteSummary?
     var timeline: RemoteTimeline?
     var limits: RemoteLimits?
@@ -94,7 +118,18 @@ final class MobileModel {
         server = try? store.readCodable(PairedServer.self, Self.serverKey)
         if let server { client = RemoteClient(server: server, signer: signer) }
         isLocked = requireBiometrics
+        accountObserver = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.usesCloud else { return }
+                self.clearReports()
+                self.cloudSnapshots = []
+                self.selectedCloudMac = ""
+                await self.refresh()
+            }
+        }
     }
+
+    deinit { if let accountObserver { NotificationCenter.default.removeObserver(accountObserver) } }
 
     // MARK: Lifecycle
 
@@ -107,6 +142,7 @@ final class MobileModel {
             return self.watchPayload()
         }
         WatchRelay.shared.activate()
+        if usesCloud { WatchRelay.shared.clear() }
         if isLocked { await unlock() }
         #if DEBUG
         // `--pair-url <planmeter://…>`: pair at launch without the system's
@@ -120,9 +156,9 @@ final class MobileModel {
         await refresh()
         refreshLoop = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
+                try? await Task.sleep(for: .seconds(self?.usesCloud == true ? 300 : 60))
                 guard let self, !Task.isCancelled else { return }
-                if !self.isLocked { await self.refresh() }
+                if !self.isLocked && !self.isLoading { await self.refresh() }
             }
         }
     }
@@ -181,6 +217,7 @@ final class MobileModel {
         do {
             let paired = try await RemoteClient.pair(invite: invite, deviceName: UIDevice.current.name, platform: Self.platformName, signer: signer)
             try store.writeCodable(paired, Self.serverKey)
+            usesCloud = false
             server = paired
             client = RemoteClient(server: paired, signer: signer)
             await refresh()
@@ -193,11 +230,41 @@ final class MobileModel {
         try? store.delete(Self.serverKey)
         server = nil
         client = nil
+        if !usesCloud { clearReports() }
+    }
+
+    private func clearReports() {
+        WatchRelay.shared.clear()
+        refreshGeneration += 1
+        isLoading = false
         summary = nil
         timeline = nil
         limits = nil
         models = []
         lastUpdated = nil
+        error = nil
+    }
+
+    func applyCloudSelection() {
+        guard usesCloud else { return }
+        summary = nil
+        timeline = nil
+        limits = nil
+        models = []
+        lastUpdated = nil
+        guard let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) else {
+            WatchRelay.shared.clear()
+            return
+        }
+        do {
+            let report = try snapshot.report(days: range.rawValue)
+            summary = report.summary
+            timeline = report.timeline
+            limits = report.limits
+            models = report.models ?? []
+            lastUpdated = snapshot.generatedAt
+            if let payload = watchPayload() { WatchRelay.shared.push(payload) }
+        } catch { self.error = error.localizedDescription }
     }
 
     static var platformName: String {
@@ -210,16 +277,29 @@ final class MobileModel {
     // MARK: Data
 
     func refresh() async {
-        guard let client, !isLoading else { return }
+        guard !isLocked, usesCloud || client != nil else { return }
+        refreshGeneration += 1
+        let generation = refreshGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer { if generation == refreshGeneration { isLoading = false } }
         do {
+            if usesCloud {
+                let snapshots = try await cloudStore.fetch()
+                guard generation == refreshGeneration else { return }
+                cloudSnapshots = snapshots
+                if selectedCloudMac.isEmpty, let first = snapshots.first { selectedCloudMac = first.id }
+                error = nil
+                applyCloudSelection()
+                return
+            }
+            guard let client else { return }
             let days = range.rawValue
             async let s = client.call(RemoteRequest(method: .summary, days: days))
             async let t = client.call(RemoteRequest(method: .timeline, days: days, resolution: range.resolution))
             async let l = client.call(RemoteRequest(method: .limits))
             async let m = client.call(RemoteRequest(method: .models, days: days))
             let (sr, tr, lr, mr) = try await (s, t, l, m)
+            guard generation == refreshGeneration else { return }
             summary = sr.summary
             timeline = tr.timeline
             limits = lr.limits
@@ -228,6 +308,11 @@ final class MobileModel {
             error = nil
             if let payload = watchPayload() { WatchRelay.shared.push(payload) }
         } catch {
+            guard generation == refreshGeneration else { return }
+            if usesCloud, let cloudError = error as? CloudSyncError, case .signedOut = cloudError {
+                clearReports()
+                cloudSnapshots = []
+            }
             self.error = error.localizedDescription
         }
     }
@@ -247,7 +332,7 @@ final class MobileModel {
             entry.windows.map { WatchPayload.Limit(account: entry.account.name, label: $0.label, usedPercent: $0.usedPercent, resetsAt: $0.resetsAt) }
         }
         return WatchPayload(
-            updatedAt: Date(),
+            updatedAt: summary.generatedAt,
             days: summary.days,
             serverName: summary.serverName,
             personalCostUsd: personal?.totals.costUsd ?? 0,

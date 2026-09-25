@@ -68,6 +68,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				PlanMeterMobile.entitlements,
 			);
 			target = A1000000000000000000T001 /* PlanMeterMobile */;
 		};
@@ -402,11 +403,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterMobile/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = PlanMeterMobile/PlanMeterMobile.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -429,11 +431,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterMobile/Info.plist;
+				CODE_SIGN_ENTITLEMENTS = PlanMeterMobile/PlanMeterMobile.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -457,7 +460,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatch/PlanMeterWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -484,7 +487,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatch/PlanMeterWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -512,7 +515,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatchWidget/PlanMeterWatchWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterWatchWidget/Info.plist;
@@ -538,7 +541,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatchWidget/PlanMeterWatchWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterWatchWidget/Info.plist;
