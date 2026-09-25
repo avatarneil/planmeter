@@ -267,8 +267,14 @@ from the Mac right then. The complication reads the last payload from the shared
 `group.com.neilgoldader.planmeter`, so both watch targets need that App Group capability under your
 team (Xcode's automatic signing registers it).
 
-**Installing on your phone**: open `ios/PlanMeterMobile/PlanMeterMobile.xcodeproj` in Xcode, pick
-your team under Signing & Capabilities, and run on the device. The phone needs the Tailscale app
+**Installing on your phone**: internal testers can install PlanMeter through TestFlight after
+accepting their invitation. The Personal Testing group automatically receives uploaded builds;
+each TestFlight build expires after 90 days. Manage builds and testers in
+[App Store Connect](https://appstoreconnect.apple.com/apps/6816224535/testflight).
+
+For a direct device install, open `ios/PlanMeterMobile/PlanMeterMobile.xcodeproj` in Xcode and run
+on the device. Signing defaults to Charles Goldader (`R668T822R7`); contributors should select
+their own team under Signing & Capabilities. The phone needs the Tailscale app
 connected to the same tailnet. Simulator builds work without a team. For a signed device build you
 may need to replace the `com.neilgoldader.planmeter` bundle-ID and App Group prefixes with identifiers
 owned by your Apple Developer team; keep the App Group value consistent across the watch targets and

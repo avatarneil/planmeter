@@ -10,10 +10,10 @@ public struct WatchPayload: Codable, Equatable, Sendable {
         public var group: String
         public var provider: String
         public var costUsd: Double
-        public var tokens: Int
+        public var tokens: Int64
         public var id: String { "\(provider):\(name)" }
 
-        public init(name: String, group: String, provider: String, costUsd: Double, tokens: Int) {
+        public init(name: String, group: String, provider: String, costUsd: Double, tokens: Int64) {
             self.name = name
             self.group = group
             self.provider = provider
@@ -43,13 +43,13 @@ public struct WatchPayload: Codable, Equatable, Sendable {
     public var personalCostUsd: Double
     public var workCostUsd: Double
     public var otherCostUsd: Double
-    public var personalTokens: Int
-    public var workTokens: Int
+    public var personalTokens: Int64
+    public var workTokens: Int64
     public var todayCostUsd: Double
     public var accounts: [Account]
     public var limits: [Limit]
 
-    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int, workTokens: Int, todayCostUsd: Double, accounts: [Account], limits: [Limit]) {
+    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit]) {
         self.updatedAt = updatedAt
         self.days = days
         self.serverName = serverName
@@ -119,7 +119,7 @@ public struct WatchPayload: Codable, Equatable, Sendable {
         return String(format: "$%.1f", value)
     }
 
-    public static func tokens(_ value: Int) -> String {
+    public static func tokens(_ value: Int64) -> String {
         let v = Double(value)
         if v >= 1_000_000_000 { return String(format: "%.1fB", v / 1_000_000_000) }
         if v >= 1_000_000 { return String(format: "%.0fM", v / 1_000_000) }
