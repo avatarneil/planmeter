@@ -71,7 +71,7 @@ struct SummaryPage: View {
 struct GroupRow: View {
     var name: String
     var cost: Double
-    var tokens: Int
+    var tokens: Int64
     var total: Double
     var color: Color
 

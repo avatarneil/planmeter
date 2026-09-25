@@ -240,7 +240,7 @@ final class MobileModel {
         let work = group("work")
         let other = group("other")
         let accounts = summary.groups.flatMap { g in
-            g.accounts.map { WatchPayload.Account(name: $0.account.name, group: g.group, provider: $0.account.provider, costUsd: $0.totals.costUsd, tokens: $0.totals.tokens) }
+            g.accounts.map { WatchPayload.Account(name: $0.account.name, group: g.group, provider: $0.account.provider, costUsd: $0.totals.costUsd, tokens: Int64($0.totals.tokens)) }
         }
         .sorted { $0.costUsd > $1.costUsd }
         let limitRows = (limits?.accounts ?? []).flatMap { entry in
@@ -253,8 +253,8 @@ final class MobileModel {
             personalCostUsd: personal?.totals.costUsd ?? 0,
             workCostUsd: work?.totals.costUsd ?? 0,
             otherCostUsd: other?.totals.costUsd ?? 0,
-            personalTokens: personal?.totals.tokens ?? 0,
-            workTokens: work?.totals.tokens ?? 0,
+            personalTokens: Int64(personal?.totals.tokens ?? 0),
+            workTokens: Int64(work?.totals.tokens ?? 0),
             todayCostUsd: summary.todayCostUsd,
             accounts: accounts,
             limits: limitRows

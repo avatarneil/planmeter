@@ -12,18 +12,18 @@ import tempfile
 import zlib
 
 
-def png(width, height, pixels):
+def png(width, height, pixels, *, opaque=False):
     raw = b"".join(b"\x00" + bytes(row) for row in pixels)
 
     def chunk(tag, data):
         c = struct.pack(">I", len(data)) + tag + data
         return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2 if opaque else 6, 0, 0, 0)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 
 
-def render(size):
+def render(size, *, opaque=False):
     s = size
     rows = []
     radius = s * 0.22
@@ -37,7 +37,7 @@ def render(size):
             dx = max(radius - x, x - (s - 1 - radius), 0)
             dy = max(radius - y, y - (s - 1 - radius), 0)
             inside = (dx * dx + dy * dy) <= radius * radius
-            if not inside:
+            if not inside and not opaque:
                 row.extend((0, 0, 0, 0))
                 continue
             r, g, b = bg
@@ -50,9 +50,9 @@ def render(size):
             # Baseline
             if 0.86 <= fy < 0.875 and 0.12 <= fx < 0.88:
                 r, g, b = (90, 94, 110)
-            row.extend((r, g, b, 255))
+            row.extend((r, g, b) if opaque else (r, g, b, 255))
         rows.append(row)
-    return png(s, s, rows)
+    return png(s, s, rows, opaque=opaque)
 
 
 def main():

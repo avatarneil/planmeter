@@ -63,6 +63,7 @@ let package = Package(
             path: "Sources/PlanMeterMCP",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(name: "PlanMeterWatchSharedTests", dependencies: ["PlanMeterWatchShared"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "PlanMeterDesktopSharedTests", dependencies: ["PlanMeterDesktopShared"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "PlanMeterTests",
