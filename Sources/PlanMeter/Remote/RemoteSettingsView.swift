@@ -33,6 +33,7 @@ struct RemoteSettingsView: View {
                     .disabled(model.cloudSync.isBusy)
                     Text("Use the same Apple Account on your Mac and iPhone. Uploads account names, usage totals, charts, model breakdowns, and limits to your private iCloud database. Prompts, transcripts, credentials, and source paths stay on this Mac.")
                         .font(.caption).foregroundStyle(.secondary)
+                    Text("Scans and uploads every 30 seconds while this Mac is awake and PlanMeter is running.").font(.caption).foregroundStyle(.secondary)
                     Text(model.cloudSync.status).font(.caption)
                     HStack {
                         Button("Sync now") { Task { await model.cloudSync.publish(model: model) } }

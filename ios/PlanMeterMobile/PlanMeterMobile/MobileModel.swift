@@ -69,6 +69,7 @@ final class MobileModel {
             UserDefaults.standard.set(usesCloud, forKey: "cloudSync.enabled")
             clearReports()
             cloudSnapshots = []
+            subscriptionReady = false
             Task { await refresh() }
         }
     }
@@ -80,6 +81,11 @@ final class MobileModel {
         }
     }
     private let cloudStore = CloudSnapshotStore()
+    private var subscriptionReady = false
+    private var subscriptionRetryAfter = Date.distantPast
+    var pushRegistrationStatus = "Registering for background notifications…"
+    var backgroundSyncStatus = "Background updates are managed by iOS."
+    private var isForeground = false
     @ObservationIgnored nonisolated(unsafe) private var accountObserver: NSObjectProtocol?
     private var refreshGeneration = 0
     var range: MobileRange = .month {
@@ -122,6 +128,7 @@ final class MobileModel {
         accountObserver = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.usesCloud else { return }
+                self.subscriptionReady = false
                 self.clearReports()
                 self.cloudSnapshots = []
                 self.selectedCloudMac = ""
@@ -137,39 +144,61 @@ final class MobileModel {
     func start() async {
         guard !started else { return }
         started = true
-        WatchRelay.shared.onRefreshRequest = { [weak self] in
-            guard let self else { return nil }
-            await self.refresh()
-            return self.watchPayload()
-        }
-        WatchRelay.shared.activate()
-        if usesCloud { WatchRelay.shared.clear() }
+        prepareRelay()
+        isForeground = UIApplication.shared.applicationState == .active
+        guard isForeground else { return }
         if isLocked { await unlock() }
         #if DEBUG
-        // `--pair-url <planmeter://…>`: pair at launch without the system's
-        // "Open in PlanMeter?" prompt. Debug builds only; used by simulator
-        // automation (`simctl launch … --pair-url …`).
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--pair-url"), i + 1 < args.count, let url = URL(string: args[i + 1]) {
             await handle(url: url)
         }
         #endif
         await refresh()
+        startForegroundRefresh()
+    }
+
+    private func prepareRelay() {
+        WatchRelay.shared.onRefreshRequest = { [weak self] in
+            guard let self else { return nil }
+            await self.refresh()
+            return self.isLocked ? nil : self.watchPayload()
+        }
+        WatchRelay.shared.activate()
+    }
+
+    private func startForegroundRefresh() {
+        refreshLoop?.cancel()
         refreshLoop = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(self?.usesCloud == true ? 300 : 60))
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
                 guard let self, !Task.isCancelled else { return }
-                if !self.isLocked && !self.isLoading { await self.refresh() }
+                if self.isForeground && !self.isLocked && !self.isLoading { await self.refresh() }
             }
         }
+    }
+
+    /// Background launches never prompt for authentication or bypass the app lock.
+    func refreshInBackground() async -> Bool {
+        guard !requireBiometrics, !isLoading, usesCloud || client != nil else { return false }
+        prepareRelay()
+        await refresh()
+        return !Task.isCancelled && error == nil
     }
 
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .background:
+            isForeground = false
+            refreshLoop?.cancel()
             if requireBiometrics { isLocked = true }
         case .active:
-            if isLocked { Task { await unlock() } } else { Task { await refresh() } }
+            isForeground = true
+            startForegroundRefresh()
+            Task {
+                if isLocked { await unlock() }
+                await refresh()
+            }
         default:
             break
         }
@@ -287,7 +316,7 @@ final class MobileModel {
     // MARK: Data
 
     func refresh() async {
-        guard !isLocked, usesCloud || client != nil else { return }
+        guard !isLocked, !Task.isCancelled, usesCloud || client != nil else { return }
         refreshGeneration += 1
         let generation = refreshGeneration
         isLoading = true
@@ -295,11 +324,23 @@ final class MobileModel {
         do {
             if usesCloud {
                 let snapshots = try await cloudStore.fetch()
-                guard generation == refreshGeneration else { return }
+                guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
                 cloudSnapshots = snapshots
                 if selectedCloudMac.isEmpty, let first = snapshots.first { selectedCloudMac = first.id }
                 error = nil
                 applyCloudSelection()
+                if !subscriptionReady && Date() >= subscriptionRetryAfter {
+                    do {
+                        try await cloudStore.subscribeToChanges()
+                        guard generation == refreshGeneration, usesCloud, !Task.isCancelled else { return }
+                        subscriptionReady = true
+                        backgroundSyncStatus = "iCloud change notifications enabled."
+                    } catch {
+                        guard generation == refreshGeneration, usesCloud, !Task.isCancelled else { return }
+                        subscriptionRetryAfter = Date().addingTimeInterval(300)
+                        backgroundSyncStatus = "Change notifications unavailable; refresh will retry. \(error.localizedDescription)"
+                    }
+                }
                 return
             }
             guard let client else { return }
@@ -309,7 +350,7 @@ final class MobileModel {
             async let l = client.call(RemoteRequest(method: .limits))
             async let m = client.call(RemoteRequest(method: .models, days: days))
             let (sr, tr, lr, mr) = try await (s, t, l, m)
-            guard generation == refreshGeneration else { return }
+            guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
             summary = sr.summary
             timeline = tr.timeline
             limits = lr.limits
@@ -318,7 +359,7 @@ final class MobileModel {
             error = nil
             publishSummary()
         } catch {
-            guard generation == refreshGeneration else { return }
+            guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
             if usesCloud, let cloudError = error as? CloudSyncError, case .signedOut = cloudError {
                 clearReports()
                 cloudSnapshots = []

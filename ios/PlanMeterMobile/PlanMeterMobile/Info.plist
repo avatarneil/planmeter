@@ -59,6 +59,10 @@
         <key>UIApplicationSupportsMultipleScenes</key>
         <false/>
     </dict>
+    <key>UIBackgroundModes</key>
+    <array><string>fetch</string><string>remote-notification</string></array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array><string>com.neilgoldader.planmeter.mobile.refresh</string></array>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIRequiredDeviceCapabilities</key>

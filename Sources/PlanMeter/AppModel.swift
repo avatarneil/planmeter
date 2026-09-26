@@ -116,7 +116,7 @@ final class AppModel {
     private var refreshLoop: Task<Void, Never>?
 
     /// How often the menu bar figure is refreshed while the app sits idle.
-    static let autoRefreshInterval: Duration = .seconds(5 * 60)
+    static let autoRefreshInterval: Duration = .seconds(30)
     private static let menuBarSpendGroupsKey = "menuBarSpendGroups"
 
     // MARK: Lifecycle

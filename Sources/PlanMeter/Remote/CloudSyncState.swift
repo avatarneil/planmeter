@@ -11,6 +11,7 @@ final class CloudSyncState {
     private(set) var lastUploaded: Date?
     private(set) var status = "Enable iCloud to read this Mac’s usage on your iPhone without Tailscale."
     private let store = CloudSnapshotStore()
+    private var retryAfter = Date.distantPast
     private let publisherID: String = {
         let defaults = UserDefaults.standard
         if let id = defaults.string(forKey: "cloudSync.publisherID") { return id }
@@ -39,7 +40,7 @@ final class CloudSyncState {
     }
 
     func publish(model: AppModel) async {
-        guard isEnabled, !isBusy, let scannedAt = model.lastScan else { return }
+        guard isEnabled, !isBusy, Date() >= retryAfter, let scannedAt = model.lastScan else { return }
         isBusy = true
         defer { isBusy = false }
         let now = Date()
@@ -56,9 +57,15 @@ final class CloudSyncState {
             try await store.save(snapshot)
             guard isEnabled else { return }
             let uploadedAt = Date()
+            retryAfter = .distantPast
             lastUploaded = uploadedAt
             status = "Uploaded \(uploadedAt.formatted(date: .abbreviated, time: .shortened))"
-        } catch { status = error.localizedDescription }
+        } catch {
+            // Respect CloudKit's backoff, and avoid retrying every scan while offline.
+            let delay = (error as? CKError)?.retryAfterSeconds ?? 60
+            retryAfter = Date().addingTimeInterval(max(30, delay))
+            status = "Upload failed; will retry automatically. \(error.localizedDescription)"
+        }
     }
 
     func deleteSnapshot() async {
