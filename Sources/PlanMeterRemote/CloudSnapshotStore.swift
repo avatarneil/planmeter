@@ -41,7 +41,7 @@ public struct CloudSnapshotStore {
         guard let task = SecTaskCreateFromSelf(nil),
               let containers = SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-container-identifiers" as CFString, nil) as? [String],
               containers.contains(Self.containerIdentifier) else { throw CloudSyncError.unavailable }
-        #elseif os(iOS)
+        #elseif os(iOS) || os(watchOS)
         // Xcode expands this build setting in the host's Info.plist. Unsigned
         // simulator builds have no CloudKit entitlement and CKContainer traps.
         guard Bundle.main.object(forInfoDictionaryKey: "PlanMeterCodeSigningAllowed") as? String == "YES" else {

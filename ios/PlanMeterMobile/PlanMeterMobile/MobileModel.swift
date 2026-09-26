@@ -417,7 +417,8 @@ final class MobileModel {
             accounts: accounts,
             limits: limitRows,
             todayCostByGroup: todayByGroup,
-            complicationPreferences: complicationPreferences
+            complicationPreferences: complicationPreferences,
+            cloudMacID: usesCloud ? selectedCloudMac : nil
         )
     }
 

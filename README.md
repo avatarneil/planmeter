@@ -17,7 +17,7 @@ fetched from LiteLLM and cached locally; remote access is off by default.
 | --- | --- | --- |
 | Mac app, CLI, MCP server | macOS 14 or newer on Apple silicon | This is the required host. Intel Macs, Windows, and Linux are not currently supported. |
 | iPhone/iPad companion | iOS/iPadOS 17 or newer | Optional; requires the Mac app, with iCloud or Tailscale. |
-| Apple Watch app and complication | watchOS 10 or newer | Optional; receives data through the paired iPhone. |
+| Apple Watch app and complication | watchOS 10 or newer | Optional; reads iCloud directly, with an iPhone relay fallback. |
 | Web client | A current browser with WebCrypto and IndexedDB | Optional; intended for a Tailscale HTTPS URL served by the Mac app. |
 
 ## Requirements
@@ -209,12 +209,12 @@ Enable **Sync usage through iCloud** in the Mac app’s **Remote** sheet, then c
 the same Apple Account for iCloud. No pairing code, Tailscale, or incoming connection is needed.
 If multiple Macs publish, choose one in iPhone Settings; totals are not merged across Macs.
 
-The Mac uploads aggregate reports for 24h, 7d, 30d, and 90d after scanning (normally every five
-minutes while running). The phone fetches on launch, foregrounding, pull-to-refresh, and every
-five minutes while active. Range changes use the downloaded reports. The phone relays the selected
-report to the Watch and complications. This is snapshot sync, not continuous background delivery:
-the Mac must run to collect new data and the phone must refresh to update the Watch. The last
-upload stays available when the Mac sleeps; its original scan time remains visible.
+The Mac uploads aggregate reports for 24h, 7d, 30d, and 90d every 30 seconds while awake.
+The phone fetches on launch, foregrounding, pull-to-refresh, and every 30 seconds while active.
+The watch app fetches iCloud directly on launch, foregrounding, and manual refresh; complications
+fetch during system-scheduled timeline refreshes. The iPhone also relays updates as a fallback.
+The Mac must run to collect new data, but the watch can download its last upload over its own
+Wi-Fi or cellular connection without a nearby phone. The original scan time remains visible.
 
 Uploads go to the current user’s **private CloudKit database**. They contain account display names,
 provider/plan labels, usage totals, charts, model breakdowns, and limit readings. Explicit email
@@ -232,8 +232,9 @@ access but show an actionable error when iCloud is requested.
 1. Under team **Charles Goldader (R668T822R7)**, register the shared container
    `iCloud.com.neilgoldader.planmeter`. Enable CloudKit for both `com.neilgoldader.planmeter`
    and `com.neilgoldader.planmeter.mobile`, associating that same container with each App ID.
-2. Refresh the iOS provisioning profiles in Xcode. The phone target includes the CloudKit
-   entitlements; the Watch does not need its own CloudKit capability.
+2. Enable the same CloudKit container for `com.neilgoldader.planmeter.mobile.watchkitapp`
+   and `com.neilgoldader.planmeter.mobile.watchkitapp.widget`. Refresh the phone, watch app,
+   and watch widget provisioning profiles in Xcode; all three require CloudKit.
 3. Generate a Mac provisioning profile authorizing the container for the signing identity.
    For a distributed Mac build use a **Developer ID** profile with the **Production** environment.
    Pass its absolute path as `ICLOUD_PROVISIONING_PROFILE` alongside `SIGNING_IDENTITY` to
@@ -322,20 +323,24 @@ extension; pairing credentials stay in the phone app.
 
 ### Apple Watch
 
-`ios/PlanMeterMobile/PlanMeterWatch` is a watchOS companion embedded in the iPhone app, with a
-WidgetKit complication (`PlanMeterWatchWidget`) for today's spend, Personal vs Work, or the top
-Codex window as a gauge. Apple Watch has no Tailscale and its traffic does not use the phone's VPN,
-so the watch never talks to the Mac: the iPhone app fetches from iCloud or over the encrypted direct channel and relays a
-compact summary (`PlanMeterWatchShared.WatchPayload`) over Watch Connectivity, which Apple encrypts
-between the paired devices. The watch holds no pairing keys. Pages: today and the Personal/Work
-split, Codex limits as gauges, and the per-account list; the refresh button asks the phone to fetch
-from the Mac right then. The complication reads the last payload from the shared app group
-`group.com.neilgoldader.planmeter`, so the phone, phone widget, and both watch targets need that App Group capability under your
-team (Xcode's automatic signing registers it).
+`ios/PlanMeterMobile/PlanMeterWatch` is an independent watchOS app embedded in the iPhone app.
+The app and its WidgetKit complications fetch the Mac's private iCloud snapshots directly using
+the same Apple Account. If multiple Macs publish, select one in the watch app's information page;
+an iPhone-selected iCloud Mac is also relayed to the watch. Totals are never combined across Macs.
+Network failures retain the last snapshot; missing/deleted snapshots and iCloud sign-out clear it.
+The phone relay remains a fallback for direct Mac connections. The watch holds no pairing keys.
 
-The rectangular complication labels today's total separately from the selected-range Personal/Work
-totals. Hidden or placeholder content uses a neutral status instead of redacted labels with visible
-chart bars; watchOS privacy settings remain respected. Stale complications prompt you to refresh.
+Choose plans and a daily target in **iPhone → PlanMeter → Settings → Watch complications**.
+These settings sync to the watch when the devices can communicate and persist during independent
+iCloud refreshes. The rectangular complication emphasizes today's selected-plan spend, with a
+plan breakdown or progress toward the daily target. The circular complication shows a readable
+currency amount and an optional target gauge. Settings apply to complications using the default
+**Use iPhone watch settings** option. iPhone widgets retain their own Edit Widget settings.
+
+The watch app shows today, 30-day totals after an iCloud fetch, Codex limits, accounts, and sync
+status. All targets use `group.com.neilgoldader.planmeter` for their local widget caches. Apple
+controls background and timeline refresh timing; a 15-minute refresh request is not a guarantee.
+Stale complications prompt a refresh, and watchOS privacy settings remain respected.
 
 **Installing on your phone**: internal testers can install PlanMeter through TestFlight after
 accepting their invitation. The Personal Testing group automatically receives uploaded builds;
