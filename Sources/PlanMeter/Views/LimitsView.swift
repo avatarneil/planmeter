@@ -125,14 +125,15 @@ struct SourcesCard: View {
                 if let error = model.desktopWidgetError {
                     Text(error).font(.caption).foregroundStyle(.orange)
                 }
-                if let error = model.lastError {
+                if let error = model.pricingError ?? model.lastError {
                     Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
                 }
                 Divider()
                 HStack {
                     Text(pricingText).font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Refresh pricing") { Task { await model.refreshPricing() } }
+                    Button(model.isRefreshingPricing ? "Refreshing pricing…" : "Refresh pricing") { Task { await model.refreshPricing() } }
+                        .disabled(model.isRefreshingPricing)
                         .controlSize(.small)
                 }
             }

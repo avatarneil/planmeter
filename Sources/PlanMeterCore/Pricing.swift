@@ -39,6 +39,7 @@ public struct RateTable: Sendable {
                 cacheRead: JSON.double(entry["cache_read_input_token_cost"]) ?? input,
                 cacheCreation: JSON.double(entry["cache_creation_input_token_cost"]) ?? input
             )
+            guard [rate.input, rate.output, rate.cacheRead, rate.cacheCreation].allSatisfy({ $0.isFinite && $0 >= 0 }) else { continue }
             // First writer wins on exact duplicates after normalization.
             if table[key] == nil { table[key] = rate }
         }
@@ -99,8 +100,7 @@ public struct RateTable: Sendable {
     }
 }
 
-/// Loads pricing from T3 Code's cached copy when present, then from the app's
-/// own cache, then from LiteLLM directly.
+/// Loads the freshest usable local cache, and refreshes from LiteLLM directly.
 public enum PricingLoader {
     public static let liteLLMURL = URL(string: "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json")!
 
@@ -113,12 +113,18 @@ public enum PricingLoader {
     }
 
     public static func loadCached() -> RateTable? {
-        if let table = load(fromT3Cache: t3CachePath()) { return table }
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: appCachePath())), let doc = JSON.object(data) {
-            let attrs = try? FileManager.default.attributesOfItem(atPath: appCachePath())
-            return RateTable.from(liteLLMDocument: doc, source: "PlanMeter cache", fetchedAt: attrs?[.modificationDate] as? Date)
+        loadCached(t3Path: t3CachePath(), appPath: appCachePath())
+    }
+
+    static func loadCached(t3Path: String, appPath: String) -> RateTable? {
+        var candidates = [RateTable]()
+        if let table = load(fromT3Cache: t3Path), !table.isEmpty { candidates.append(table) }
+        if let data = try? Data(contentsOf: URL(fileURLWithPath: appPath)), let doc = JSON.object(data) {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: appPath)
+            let table = RateTable.from(liteLLMDocument: doc, source: "PlanMeter cache", fetchedAt: attrs?[.modificationDate] as? Date)
+            if !table.isEmpty { candidates.append(table) }
         }
-        return nil
+        return candidates.max { ($0.fetchedAt ?? .distantPast) < ($1.fetchedAt ?? .distantPast) }
     }
 
     static func load(fromT3Cache path: String) -> RateTable? {
@@ -129,12 +135,25 @@ public enum PricingLoader {
     }
 
     public static func fetch() async throws -> RateTable {
-        let (data, _) = try await URLSession.shared.data(from: liteLLMURL)
-        guard let doc = JSON.object(data) else { throw URLError(.cannotParseResponse) }
-        try? FileManager.default.createDirectory(at: AppPaths.supportDirectory(), withIntermediateDirectories: true)
-        try? data.write(to: URL(fileURLWithPath: appCachePath()), options: .atomic)
-        return RateTable.from(liteLLMDocument: doc, source: "LiteLLM", fetchedAt: Date())
+        try await fetch(session: .shared, cacheURL: URL(fileURLWithPath: appCachePath()))
     }
+
+    static func fetch(session: URLSession, cacheURL: URL) async throws -> RateTable {
+        let request = URLRequest(url: liteLLMURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        let (data, response) = try await session.data(for: request)
+        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        guard let doc = JSON.object(data) else { throw URLError(.cannotParseResponse) }
+        let table = RateTable.from(liteLLMDocument: doc, source: "LiteLLM", fetchedAt: Date())
+        guard !table.isEmpty else { throw URLError(.cannotParseResponse) }
+        try Task.checkCancellation()
+        // Only validated pricing may replace the offline cache.
+        try? FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: cacheURL, options: .atomic)
+        return table
+    }
+
 }
 
 public enum AppPaths {
