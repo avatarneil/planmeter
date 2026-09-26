@@ -54,7 +54,7 @@ struct PlanMeterSpendView: View {
                 }
             } else {
                 Spacer(minLength: 0)
-                Text("Your AI usage, at a glance").font(.headline)
+                Text("Ready to sync").font(.headline)
                 Text("Open PlanMeter on iPhone to connect and sync.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
