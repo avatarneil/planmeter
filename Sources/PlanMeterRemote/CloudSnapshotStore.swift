@@ -10,7 +10,30 @@ public struct CloudSnapshotStore {
     public static let containerIdentifier = "iCloud.com.neilgoldader.planmeter"
     public static let recordType = "UsageSnapshot"
 
+    public static let subscriptionIdentifier = "usage-snapshots-v1"
+
     public init() {}
+
+    /// Query subscriptions also work in the default record zone used by existing installs.
+    public func subscribeToChanges() async throws {
+        let database = try await database()
+        do {
+            _ = try await database.subscription(for: Self.subscriptionIdentifier)
+            return
+        } catch let error as CKError where error.code == .unknownItem {}
+        _ = try await database.save(Self.changeSubscription())
+    }
+
+    static func changeSubscription() -> CKQuerySubscription {
+        let subscription = CKQuerySubscription(
+            recordType: Self.recordType, predicate: NSPredicate(value: true),
+            subscriptionID: Self.subscriptionIdentifier,
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate, .firesOnRecordDeletion])
+        let info = CKSubscription.NotificationInfo()
+        info.shouldSendContentAvailable = true
+        subscription.notificationInfo = info
+        return subscription
+    }
 
     private func database() async throws -> CKDatabase {
         #if os(macOS)

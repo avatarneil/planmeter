@@ -137,7 +137,7 @@ group breakdowns, detail charts, main dashboard, and desktop widgets together. C
 **30 days**, or **90 days** to explore another period. The settings menu chooses which plan groups
 count toward the menu bar total and spending limit. Its popover lists Personal and Work
 totals for the selected range, each account underneath, and the provider's Codex weekly window per account,
-with buttons to open the main window or quit. Data refreshes every five minutes while the app runs,
+with buttons to open the main window or quit. Data refreshes every 30 seconds while the Mac is awake and the app runs,
 and the app keeps running in the menu bar after the main window is closed.
 
 Choose **Set limit** in the popover to set a personal USD target for the menu bar total,
@@ -413,3 +413,9 @@ details.
 PlanMeter is available under the MIT License; see [LICENSE](LICENSE). The vendored jsQR copy is
 licensed under Apache License 2.0; see
 [Sources/PlanMeter/Web/jsqr.LICENSE](Sources/PlanMeter/Web/jsqr.LICENSE).
+
+### Automatic companion sync
+
+With iCloud sync enabled in the Mac app, PlanMeter scans and uploads every 30 seconds while the Mac is awake. The iPhone refreshes every 30 seconds while open, subscribes to silent iCloud change notifications, and schedules background refresh as a fallback. Each successful fetch updates the shared widget cache and relays the latest summary to Apple Watch; a reachable watch app also receives it immediately.
+
+Open the iPhone app once after installing to register background notifications and enable **Use iCloud**. Keep Background App Refresh enabled in iOS Settings. Apple controls background notification delivery, scheduled refresh, Watch Connectivity, and widget refresh budgets; the requested 15-minute fallback is not a guaranteed interval. Low Power Mode, force-quitting, network conditions, and a sleeping Mac can delay updates. Face ID/passcode protection pauses background fetching until you open and unlock the app. Connection settings show push registration and subscription status.

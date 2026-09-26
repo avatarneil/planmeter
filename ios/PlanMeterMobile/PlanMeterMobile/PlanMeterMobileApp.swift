@@ -2,7 +2,8 @@ import SwiftUI
 
 @main
 struct PlanMeterMobileApp: App {
-    @State private var model = MobileModel()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    private var model: MobileModel { delegate.model }
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -17,6 +18,7 @@ struct PlanMeterMobileApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             model.scenePhaseChanged(phase)
+            if phase == .background { delegate.scheduleRefresh() }
         }
     }
 }

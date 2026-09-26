@@ -23,6 +23,17 @@ struct SettingsView: View {
                     Text("iCloud reads usage uploaded by Macs using the same Apple Account. Enable sync in PlanMeter → Remote on your Mac. The Watch receives updates through this iPhone. Direct pairing is still available when iCloud is off.")
                 }
 
+                Section("Automatic sync") {
+                    LabeledContent("While open", value: "Every 30 seconds")
+                    if model.usesCloud { Text(model.pushRegistrationStatus).font(.footnote) }
+                    Text(model.backgroundSyncStatus).font(.footnote)
+                    if model.requireBiometrics {
+                        Text("Background syncing is paused while Face ID / passcode protection is enabled.")
+                    }
+                    Text("iCloud changes can refresh usage and widgets in the background. iOS controls delivery and may delay updates in Low Power Mode or when Background App Refresh is off. The Mac must be awake with PlanMeter running.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+
                 if let server = model.server {
                     Section("Direct pairing") {
                         LabeledContent("Name", value: server.serverName)

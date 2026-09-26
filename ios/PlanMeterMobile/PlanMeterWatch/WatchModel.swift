@@ -58,6 +58,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
     }
 
     private func apply(_ p: WatchPayload) {
+        if let payload, payload.serverName == p.serverName, payload.updatedAt > p.updatedAt { return }
         payload = p
         p.save()
         WidgetCenter.shared.reloadAllTimelines()
@@ -74,6 +75,11 @@ final class WatchModel: NSObject, WCSessionDelegate {
             }
             if self.payload == nil { self.refresh() }
         }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard let data = message[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) else { return }
+        Task { @MainActor in self.apply(p) }
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {

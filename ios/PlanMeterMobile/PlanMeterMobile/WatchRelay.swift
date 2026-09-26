@@ -24,6 +24,7 @@ final class WatchRelay: NSObject, WCSessionDelegate {
     func activate() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
+        guard session.activationState == .notActivated else { return }
         session.delegate = self
         session.activate()
     }
@@ -39,6 +40,9 @@ final class WatchRelay: NSObject, WCSessionDelegate {
         // app next runs, replacing anything undelivered. Exactly right here.
         do {
             try session.updateApplicationContext([WatchPayload.contextKey: data])
+            if session.isReachable {
+                session.sendMessage([WatchPayload.contextKey: data], replyHandler: nil, errorHandler: { _ in })
+            }
             pending = nil
         } catch { /* Retry when the session becomes available again. */ }
     }
