@@ -9,6 +9,23 @@ final class WatchPayloadTests: XCTestCase {
                      personalTokens: 0, workTokens: 0, todayCostUsd: 1, accounts: [], limits: [])
     }
 
+    func testFilteredDailySpendAndLegacyCache() throws {
+        var p = payload(updatedAt: Date())
+        XCTAssertNil(p.todayCost(groups: ["work"]))
+        XCTAssertEqual(p.todayCost(groups: ["personal", "work", "other"]), 1)
+        XCTAssertEqual(p.todayCost(groups: []), 0)
+        p.todayCostByGroup = ["work": 12, "personal": 3]
+        XCTAssertEqual(p.todayCost(groups: ["work"]), 12)
+        XCTAssertEqual(p.todayCost(groups: ["personal", "work"]), 15)
+        XCTAssertEqual(p.todayCost(groups: ["other"]), 0)
+        let decoded = try XCTUnwrap(WatchPayload.decode(try XCTUnwrap(p.encoded())))
+        XCTAssertEqual(decoded.todayCost(groups: ["work"]), 12)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(p.encoded())) as? [String: Any])
+        json.removeValue(forKey: "todayCostByGroup")
+        let legacy = try XCTUnwrap(WatchPayload.decode(JSONSerialization.data(withJSONObject: json)))
+        XCTAssertNil(legacy.todayCost(groups: ["work"]))
+    }
+
     func testWidgetExpiresAtFifteenMinutes() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let p = payload(updatedAt: now)

@@ -348,6 +348,9 @@ final class MobileModel {
         let limitRows = (limits?.accounts ?? []).flatMap { entry in
             entry.windows.map { WatchPayload.Limit(account: entry.account.name, label: $0.label, usedPercent: $0.usedPercent, resetsAt: $0.resetsAt) }
         }
+        // Timeline points are bucketed usage, independent of the selected report range.
+        // Use calendar today, never the rolling 24-hour group totals.
+        let todayByGroup = timeline?.costByGroup(on: summary.generatedAt)
         return WatchPayload(
             updatedAt: summary.generatedAt,
             days: summary.days,
@@ -359,7 +362,8 @@ final class MobileModel {
             workTokens: Int64(work?.totals.tokens ?? 0),
             todayCostUsd: summary.todayCostUsd,
             accounts: accounts,
-            limits: limitRows
+            limits: limitRows,
+            todayCostByGroup: todayByGroup
         )
     }
 

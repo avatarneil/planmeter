@@ -3,12 +3,12 @@ import WidgetKit
 
 struct PlanMeterComplication: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "com.neilgoldader.planmeter.complication", provider: PlanMeterProvider()) { entry in
+        AppIntentConfiguration(kind: "com.neilgoldader.planmeter.complication", intent: PlanMeterConfiguration.self, provider: PlanMeterProvider()) { entry in
             PlanMeterAccessoryView(entry: entry)
                 .containerBackground(.clear, for: .widget)
         }
         .configurationDisplayName("PlanMeter")
-        .description("Today's AI spend, personal vs work, and Codex limits.")
+        .description("Choose plans and a daily spend target for your watch face.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
     }
 }

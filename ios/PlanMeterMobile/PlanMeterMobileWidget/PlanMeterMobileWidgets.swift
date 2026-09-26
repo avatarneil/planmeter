@@ -8,7 +8,7 @@ struct PlanMeterSpendView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("PlanMeter", systemImage: "chart.bar.fill")
+            Label(entry.configuration.label, systemImage: "chart.bar.fill")
                 .font(.caption.weight(.semibold)).foregroundStyle(.teal).widgetAccentable()
             if let p = entry.payload {
                 if family == .systemSmall {
@@ -18,9 +18,9 @@ struct PlanMeterSpendView: View {
                         total(p).frame(maxWidth: .infinity, alignment: .leading)
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Last \(p.rangeLabel)").font(.caption).foregroundStyle(.secondary)
-                            amount("Personal", p.personalCostUsd)
-                            amount("Work", p.workCostUsd)
-                            if p.otherCostUsd > 0 { amount("Other", p.otherCostUsd) }
+                            if entry.configuration.personal { amount("Personal", p.personalCostUsd) }
+                            if entry.configuration.work { amount("Work", p.workCostUsd) }
+                            if entry.configuration.other && p.otherCostUsd > 0 { amount("Other", p.otherCostUsd) }
                         }
                         .frame(maxWidth: .infinity)
                         .privacySensitive()
@@ -29,10 +29,10 @@ struct PlanMeterSpendView: View {
                 if family == .systemLarge {
                     Divider()
                     Text("Top accounts · \(p.rangeLabel)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    ForEach(Array(p.accounts.prefix(3).enumerated()), id: \.offset) { _, account in
+                    ForEach(Array(entry.accounts.prefix(3).enumerated()), id: \.offset) { _, account in
                         amount(account.name, account.costUsd).privacySensitive()
                     }
-                    if let limit = p.limits.first(where: { $0.resetsAt > entry.date }) {
+                    if let limit = p.limits.first(where: { limit in limit.resetsAt > entry.date && entry.accounts.contains(where: { $0.name == limit.account }) }) {
                         Divider()
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(limit.account) · \(limit.label)").font(.caption).lineLimit(1)
@@ -68,10 +68,18 @@ struct PlanMeterSpendView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(p.isStale(at: entry.date) ? "Today at last sync" : "Today")
                 .font(.caption).foregroundStyle(.secondary)
-            Text(WatchPayload.compactUsd(p.todayCostUsd))
+            Text(entry.todayText)
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .monospacedDigit().minimumScaleFactor(0.5).lineLimit(1)
-            Text("API-equivalent spend").font(.caption2).foregroundStyle(.secondary)
+            if let target = entry.configuration.target {
+                Text("Target \(WatchPayload.compactUsd(target))/day").font(.caption2)
+                if let today = entry.today {
+                    ProgressView(value: min(1, max(0, today / target))).tint(today >= target ? .orange : .teal)
+                }
+            } else {
+                Text("API-equivalent spend").font(.caption2).foregroundStyle(.secondary)
+            }
+            if entry.today == nil { Text("Open iPhone app to sync").font(.caption2) }
         }.privacySensitive()
     }
 
@@ -86,22 +94,22 @@ struct PlanMeterSpendView: View {
 
 struct PlanMeterSpendWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "com.neilgoldader.planmeter.mobile.spend", provider: PlanMeterProvider()) { entry in
+        AppIntentConfiguration(kind: "com.neilgoldader.planmeter.mobile.spend", intent: PlanMeterConfiguration.self, provider: PlanMeterProvider()) { entry in
             PlanMeterSpendView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("AI Spend")
-        .description("Today's spend, personal and work totals, and your top accounts from the last phone sync.")
+        .description("Choose plans and a daily spend target. Sync usage by opening the iPhone app.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
 struct PlanMeterLockScreenWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "com.neilgoldader.planmeter.mobile.lockscreen", provider: PlanMeterProvider()) { entry in
+        AppIntentConfiguration(kind: "com.neilgoldader.planmeter.mobile.lockscreen", intent: PlanMeterConfiguration.self, provider: PlanMeterProvider()) { entry in
             PlanMeterAccessoryView(entry: entry).containerBackground(.clear, for: .widget)
         }
         .configurationDisplayName("AI Usage")
-        .description("Today's AI spend or your Codex limit on the Lock Screen.")
+        .description("Selected plans’ daily AI spend and optional target on the Lock Screen.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

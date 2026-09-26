@@ -31,19 +31,13 @@ struct PlanMeterAccessoryView: View {
     private func content(_ p: WatchPayload) -> some View {
         switch family {
         case .accessoryCircular:
-            if let limit = p.limits.first(where: { $0.resetsAt > entry.date }) {
-                Gauge(value: min(100, max(0, limit.usedPercent)), in: 0...100) {
-                    Image(systemName: "chart.bar.fill")
-                } currentValueLabel: {
-                    Text("\(Int(min(100, max(0, limit.usedPercent)).rounded()))")
-                }
+            if let target = entry.configuration.target, let today = entry.today {
+                Gauge(value: min(1, max(0, today / target))) {
+                    Text(entry.configuration.label)
+                } currentValueLabel: { Text(entry.todayText).minimumScaleFactor(0.5) }
                 .gaugeStyle(.accessoryCircular)
             } else {
-                VStack(spacing: 0) {
-                    Image(systemName: "chart.bar.fill").font(.caption2)
-                    Text(WatchPayload.compactUsd(p.todayCostUsd)).font(.caption2.weight(.semibold))
-                        .minimumScaleFactor(0.6).lineLimit(1)
-                }
+                Text(entry.todayText).font(.caption.weight(.semibold)).minimumScaleFactor(0.5)
             }
         case .accessoryRectangular:
             VStack(alignment: .leading, spacing: 2) {
@@ -51,18 +45,16 @@ struct PlanMeterAccessoryView: View {
                     Image(systemName: "chart.bar.fill").widgetAccentable()
                     Text("Today")
                     Spacer(minLength: 0)
-                    Text(WatchPayload.compactUsd(p.todayCostUsd)).fontWeight(.bold)
+                    Text(entry.todayText).fontWeight(.bold)
                 }
                 .font(.caption.weight(.semibold))
-                HStack(spacing: 4) {
-                    Text("Personal · \(p.rangeLabel)")
-                    Spacer(minLength: 0)
-                    Text(WatchPayload.compactUsd(p.personalCostUsd)).fontWeight(.medium)
-                }
-                HStack(spacing: 4) {
-                    Text("Work · \(p.rangeLabel)")
-                    Spacer(minLength: 0)
-                    Text(WatchPayload.compactUsd(p.workCostUsd)).fontWeight(.medium)
+                Text(entry.configuration.label)
+                if let target = entry.configuration.target {
+                    Text("Target \(WatchPayload.compactUsd(target))/day")
+                } else if entry.today == nil {
+                    Text("Open iPhone app to sync")
+                } else {
+                    Text("API-equivalent spend")
                 }
             }
             .font(.caption2)
@@ -70,15 +62,15 @@ struct PlanMeterAccessoryView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
         case .accessoryInline:
-            Text("PlanMeter \(WatchPayload.compactUsd(p.todayCostUsd)) today")
+            Text("\(entry.configuration.label) \(entry.todayText) today")
         #if os(watchOS)
         case .accessoryCorner:
-            Text(WatchPayload.compactUsd(p.todayCostUsd))
+            Text(entry.todayText)
                 .font(.headline.weight(.semibold))
                 .widgetLabel { Text("Today · PlanMeter") }
         #endif
         default:
-            Text(WatchPayload.compactUsd(p.todayCostUsd))
+            Text(entry.todayText)
         }
     }
 

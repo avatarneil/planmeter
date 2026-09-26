@@ -46,10 +46,11 @@ public struct WatchPayload: Codable, Equatable, Sendable {
     public var personalTokens: Int64
     public var workTokens: Int64
     public var todayCostUsd: Double
+    public var todayCostByGroup: [String: Double]?
     public var accounts: [Account]
     public var limits: [Limit]
 
-    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit]) {
+    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil) {
         self.updatedAt = updatedAt
         self.days = days
         self.serverName = serverName
@@ -59,8 +60,17 @@ public struct WatchPayload: Codable, Equatable, Sendable {
         self.personalTokens = personalTokens
         self.workTokens = workTokens
         self.todayCostUsd = todayCostUsd
+        self.todayCostByGroup = todayCostByGroup
         self.accounts = accounts
         self.limits = limits
+    }
+
+    /// Legacy caches cannot supply a filtered calendar-day total.
+    public func todayCost(groups: Set<String>) -> Double? {
+        if groups.isEmpty { return 0 }
+        if groups == Set(["personal", "work", "other"]) { return todayCostUsd }
+        guard let todayCostByGroup else { return nil }
+        return groups.reduce(0) { $0 + (todayCostByGroup[$1] ?? 0) }
     }
 
     public var totalCostUsd: Double { personalCostUsd + workCostUsd + otherCostUsd }
