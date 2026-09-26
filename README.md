@@ -307,6 +307,19 @@ separately, and adding the page to the Home Screen creates a new storage contain
 from there if you want it as a standalone app. The web version trusts the tailnet for code delivery
 in a way the native app does not, which is why Tailscale Serve's TLS matters.
 
+### iPhone and iPad widgets
+
+Add **PlanMeter → AI Spend** from the Home Screen widget gallery. Small widgets show today's
+API-equivalent spend; medium widgets add Personal/Work totals for the phone's selected range;
+large widgets add top accounts and the first active Codex limit. **AI Usage** offers circular,
+rectangular, and inline Lock Screen widgets. Tap a widget to open PlanMeter.
+
+Widgets use the last summary fetched by the iPhone, including when no Watch is paired. Open the
+phone app to refresh; widgets do not independently connect to your Mac or iCloud. After 15 minutes
+or midnight they show a refresh prompt. Switching connections, removing a pairing, or losing the
+selected iCloud snapshot clears the shared summary. Only aggregate usage is shared with the widget
+extension; pairing credentials stay in the phone app.
+
 ### Apple Watch
 
 `ios/PlanMeterMobile/PlanMeterWatch` is a watchOS companion embedded in the iPhone app, with a
@@ -317,8 +330,12 @@ compact summary (`PlanMeterWatchShared.WatchPayload`) over Watch Connectivity, w
 between the paired devices. The watch holds no pairing keys. Pages: today and the Personal/Work
 split, Codex limits as gauges, and the per-account list; the refresh button asks the phone to fetch
 from the Mac right then. The complication reads the last payload from the shared app group
-`group.com.neilgoldader.planmeter`, so both watch targets need that App Group capability under your
+`group.com.neilgoldader.planmeter`, so the phone, phone widget, and both watch targets need that App Group capability under your
 team (Xcode's automatic signing registers it).
+
+The rectangular complication labels today's total separately from the selected-range Personal/Work
+totals. Hidden or placeholder content uses a neutral status instead of redacted labels with visible
+chart bars; watchOS privacy settings remain respected. Stale complications prompt you to refresh.
 
 **Installing on your phone**: internal testers can install PlanMeter through TestFlight after
 accepting their invitation. The Personal Testing group automatically receives uploaded builds;

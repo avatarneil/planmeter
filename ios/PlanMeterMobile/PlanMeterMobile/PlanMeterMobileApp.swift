@@ -10,6 +10,7 @@ struct PlanMeterMobileApp: App {
             RootView()
                 .environment(model)
                 .onOpenURL { url in
+                    guard url.host != "dashboard" else { return }
                     Task { await model.handle(url: url) }
                 }
                 .task { await model.start() }

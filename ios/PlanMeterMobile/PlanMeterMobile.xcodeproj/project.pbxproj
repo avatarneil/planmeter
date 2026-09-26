@@ -13,6 +13,8 @@
 		A1000000000000000000B004 /* PlanMeterWatchShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000P004 /* PlanMeterWatchShared */; };
 		A1000000000000000000B005 /* PlanMeterWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A1000000000000000000F002 /* PlanMeterWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1000000000000000000B006 /* PlanMeterWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000F003 /* PlanMeterWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1000000000000000000B007 /* PlanMeterWatchShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000P005; };
+		A1000000000000000000B008 /* PlanMeterMobileWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000F004; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,6 +31,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A1000000000000000000T003;
 			remoteInfo = PlanMeterWatchWidgetExtension;
+		};
+		A1000000000000000000X003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000000000000000PR01 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000000000000000000T004;
+			remoteInfo = PlanMeterMobileWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -55,12 +64,24 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000CP03 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A1000000000000000000B008 /* PlanMeterMobileWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A1000000000000000000F001 /* PlanMeterMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlanMeterMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000000000000000000F002 /* PlanMeterWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlanMeterWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000000000000000000F003 /* PlanMeterWatchWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PlanMeterWatchWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000000000000000000F004 /* PlanMeterMobileWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PlanMeterMobileWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -88,6 +109,14 @@
 			);
 			target = A1000000000000000000T003 /* PlanMeterWatchWidgetExtension */;
 		};
+		A1000000000000000000E004 /* Exceptions for "PlanMeterMobileWidget" folder in "PlanMeterMobileWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				PlanMeterMobileWidget.entitlements,
+			);
+			target = A1000000000000000000T004 /* PlanMeterMobileWidgetExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -113,6 +142,19 @@
 				A1000000000000000000E003 /* Exceptions for "PlanMeterWatchWidget" folder in "PlanMeterWatchWidgetExtension" target */,
 			);
 			path = PlanMeterWatchWidget;
+			sourceTree = "<group>";
+		};
+		A1000000000000000000G004 /* PlanMeterMobileWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1000000000000000000E004 /* Exceptions for "PlanMeterMobileWidget" folder in "PlanMeterMobileWidgetExtension" target */,
+			);
+			path = PlanMeterMobileWidget;
+			sourceTree = "<group>";
+		};
+		A1000000000000000000G005 /* SharedWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -143,6 +185,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000PH11 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000000000000000000B007 /* PlanMeterWatchShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -152,6 +202,8 @@
 				A1000000000000000000G001 /* PlanMeterMobile */,
 				A1000000000000000000G002 /* PlanMeterWatch */,
 				A1000000000000000000G003 /* PlanMeterWatchWidget */,
+				A1000000000000000000G004 /* PlanMeterMobileWidget */,
+				A1000000000000000000G005 /* SharedWidgets */,
 				A1000000000000000000GP00 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -162,6 +214,7 @@
 				A1000000000000000000F001 /* PlanMeterMobile.app */,
 				A1000000000000000000F002 /* PlanMeterWatch.app */,
 				A1000000000000000000F003 /* PlanMeterWatchWidgetExtension.appex */,
+				A1000000000000000000F004 /* PlanMeterMobileWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -177,11 +230,13 @@
 				A1000000000000000000PH02 /* Frameworks */,
 				A1000000000000000000PH03 /* Resources */,
 				A1000000000000000000CP01 /* Embed Watch Content */,
+				A1000000000000000000CP03 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				A1000000000000000000D001 /* PBXTargetDependency */,
+				A1000000000000000000D003 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A1000000000000000000G001 /* PlanMeterMobile */,
@@ -234,6 +289,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A1000000000000000000G003 /* PlanMeterWatchWidget */,
+				A1000000000000000000G005 /* SharedWidgets */,
 			);
 			name = PlanMeterWatchWidgetExtension;
 			packageProductDependencies = (
@@ -241,6 +297,30 @@
 			);
 			productName = PlanMeterWatchWidgetExtension;
 			productReference = A1000000000000000000F003 /* PlanMeterWatchWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A1000000000000000000T004 /* PlanMeterMobileWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000CL05 /* Build configuration list for PBXNativeTarget "PlanMeterMobileWidgetExtension" */;
+			buildPhases = (
+				A1000000000000000000PH10 /* Sources */,
+				A1000000000000000000PH11 /* Frameworks */,
+				A1000000000000000000PH12 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1000000000000000000G004 /* PlanMeterMobileWidget */,
+				A1000000000000000000G005 /* SharedWidgets */,
+			);
+			name = PlanMeterMobileWidgetExtension;
+			packageProductDependencies = (
+				A1000000000000000000P005 /* PlanMeterWatchShared */,
+			);
+			productName = PlanMeterMobileWidgetExtension;
+			productReference = A1000000000000000000F004 /* PlanMeterMobileWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -284,6 +364,7 @@
 				A1000000000000000000T001 /* PlanMeterMobile */,
 				A1000000000000000000T002 /* PlanMeterWatch */,
 				A1000000000000000000T003 /* PlanMeterWatchWidgetExtension */,
+				A1000000000000000000T004 /* PlanMeterMobileWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -304,6 +385,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1000000000000000000PH09 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000PH12 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -334,6 +422,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000000000000000000PH10 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -346,6 +441,11 @@
 			isa = PBXTargetDependency;
 			target = A1000000000000000000T003 /* PlanMeterWatchWidgetExtension */;
 			targetProxy = A1000000000000000000X002 /* PBXContainerItemProxy */;
+		};
+		A1000000000000000000D003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000000000000000000T004 /* PlanMeterMobileWidgetExtension */;
+			targetProxy = A1000000000000000000X003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -403,7 +503,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -431,7 +531,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -460,7 +560,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatch/PlanMeterWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -487,7 +587,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatch/PlanMeterWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -515,7 +615,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatchWidget/PlanMeterWatchWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterWatchWidget/Info.plist;
@@ -541,7 +641,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatchWidget/PlanMeterWatchWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterWatchWidget/Info.plist;
@@ -560,6 +660,61 @@
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		A1000000000000000000C009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PlanMeterMobileWidget/PlanMeterMobileWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9;
+				DEVELOPMENT_TEAM = R668T822R7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PlanMeterMobileWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.3.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.neilgoldader.planmeter.mobile.widget;
+				PRODUCT_NAME = PlanMeterMobileWidgetExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+			};
+			name = Debug;
+		};
+		A1000000000000000000C010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = PlanMeterMobileWidget/PlanMeterMobileWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9;
+				DEVELOPMENT_TEAM = R668T822R7;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PlanMeterMobileWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.3.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.neilgoldader.planmeter.mobile.widget;
+				PRODUCT_NAME = PlanMeterMobileWidgetExtension;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				APPLICATION_EXTENSION_API_ONLY = YES;
 			};
 			name = Release;
 		};
@@ -602,6 +757,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A1000000000000000000CL05 /* Build configuration list for PBXNativeTarget "PlanMeterMobileWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000C009 /* Debug */,
+				A1000000000000000000C010 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -625,6 +789,10 @@
 			productName = PlanMeterWatchShared;
 		};
 		A1000000000000000000P004 /* PlanMeterWatchShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = PlanMeterWatchShared;
+		};
+		A1000000000000000000P005 /* PlanMeterWatchShared */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PlanMeterWatchShared;
 		};

@@ -186,6 +186,17 @@ public struct RemoteTimeline: Codable, Sendable, Equatable {
     }
 }
 
+extension RemoteTimeline {
+    /// Sum the calendar day's buckets, excluding earlier hours in a rolling 24h report.
+    public func costByGroup(on date: Date, calendar: Calendar = .current) -> [String: Double] {
+        let groups = Dictionary(accounts.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first })
+        return points.filter { calendar.isDate($0.period, inSameDayAs: date) }
+            .reduce(into: [String: Double]()) { result, point in
+                result[groups[point.accountId] ?? "other", default: 0] += point.costUsd
+            }
+    }
+}
+
 public struct RemoteLimitWindow: Codable, Sendable, Equatable {
     public var label: String
     public var usedPercent: Double
