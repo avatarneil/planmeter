@@ -46,11 +46,13 @@ public struct WatchPayload: Codable, Equatable, Sendable {
     public var personalTokens: Int64
     public var workTokens: Int64
     public var todayCostUsd: Double
+    public var complicationPreferences: ComplicationPreferences?
     public var todayCostByGroup: [String: Double]?
     public var accounts: [Account]
     public var limits: [Limit]
 
-    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil) {
+    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil, complicationPreferences: ComplicationPreferences? = nil) {
+        self.complicationPreferences = complicationPreferences
         self.updatedAt = updatedAt
         self.days = days
         self.serverName = serverName

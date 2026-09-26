@@ -11,6 +11,13 @@ struct WatchRootView: View {
                     SummaryPage(payload: payload).tag(0)
                     LimitsPage(payload: payload).tag(1)
                     AccountsPage(payload: payload).tag(2)
+                    VStack(spacing: 8) {
+                        Text("Watch face settings").font(.headline)
+                        Text("Choose plans and a daily target in PlanMeter on iPhone → Settings → Watch complications.")
+                            .font(.footnote).multilineTextAlignment(.center)
+                        Text("Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }.padding().tag(3)
                 }
                 .tabViewStyle(.verticalPage)
                 .navigationTitle("PlanMeter")
