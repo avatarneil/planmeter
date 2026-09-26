@@ -1,9 +1,7 @@
 import Foundation
 
-/// The compact summary the iPhone relays to the watch. The watch never talks to
-/// the Mac or holds pairing keys; it only ever sees this derived payload, sent
-/// over Apple's encrypted Watch Connectivity link, and caches it in the shared
-/// app group so the complication can read it.
+/// Compact summary received through Watch Connectivity or derived from iCloud.
+/// Cached in the shared app group for the watch app and complications.
 public struct WatchPayload: Codable, Equatable, Sendable {
     public struct Account: Codable, Equatable, Sendable, Identifiable {
         public var name: String
@@ -46,11 +44,15 @@ public struct WatchPayload: Codable, Equatable, Sendable {
     public var personalTokens: Int64
     public var workTokens: Int64
     public var todayCostUsd: Double
+    public var cloudMacID: String?
+    public var complicationPreferences: ComplicationPreferences?
     public var todayCostByGroup: [String: Double]?
     public var accounts: [Account]
     public var limits: [Limit]
 
-    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil) {
+    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil, complicationPreferences: ComplicationPreferences? = nil, cloudMacID: String? = nil) {
+        self.cloudMacID = cloudMacID
+        self.complicationPreferences = complicationPreferences
         self.updatedAt = updatedAt
         self.days = days
         self.serverName = serverName

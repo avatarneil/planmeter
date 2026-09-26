@@ -108,6 +108,18 @@ final class MobileModel {
     }
     var isLocked = false
     var showSettings = false
+    var complicationPreferences = ComplicationPreferences.load() {
+        didSet {
+            complicationPreferences.save()
+            // Settings must reach the watch even when the Mac/network is unavailable.
+            if var payload = watchPayload() ?? WatchPayload.load() {
+                payload.complicationPreferences = complicationPreferences
+                payload.save()
+                WatchRelay.shared.activate()
+                WatchRelay.shared.push(payload)
+            }
+        }
+    }
 
     private var refreshLoop: Task<Void, Never>?
     private var started = false
@@ -404,7 +416,9 @@ final class MobileModel {
             todayCostUsd: summary.todayCostUsd,
             accounts: accounts,
             limits: limitRows,
-            todayCostByGroup: todayByGroup
+            todayCostByGroup: todayByGroup,
+            complicationPreferences: complicationPreferences,
+            cloudMacID: usesCloud ? selectedCloudMac : nil
         )
     }
 

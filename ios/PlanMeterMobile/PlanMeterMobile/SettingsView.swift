@@ -1,5 +1,6 @@
 import CryptoKit
 import PlanMeterRemote
+import PlanMeterWatchShared
 import SwiftUI
 
 struct SettingsView: View {
@@ -21,6 +22,20 @@ struct SettingsView: View {
                     }
                 } header: { Text("Connection") } footer: {
                     Text("iCloud reads usage uploaded by Macs using the same Apple Account. Enable sync in PlanMeter → Remote on your Mac. The Watch receives updates through this iPhone. Direct pairing is still available when iCloud is off.")
+                }
+
+                Section {
+                    Toggle("Personal", isOn: $model.complicationPreferences.personal)
+                    Toggle("Work", isOn: $model.complicationPreferences.work)
+                    Toggle("Other", isOn: $model.complicationPreferences.other)
+                    NavigationLink("Daily spend target") {
+                        WatchTargetSettings()
+                    }
+                    if let target = model.complicationPreferences.target {
+                        LabeledContent("Daily target", value: target.formatted(.currency(code: "USD")))
+                    }
+                } header: { Text("Watch complications") } footer: {
+                    Text("Choose the plans shown on your watch face. Changes sync automatically to your paired watch; open PlanMeter on the watch if they don’t appear. iPhone widgets keep their own settings.")
                 }
 
                 Section("Automatic sync") {
@@ -83,5 +98,45 @@ struct SettingsView: View {
     private func fingerprint(_ key: Data) -> String {
         let hash = Data(SHA256.hash(data: key)).base64URLEncodedString()
         return String(hash.prefix(16))
+    }
+}
+
+private struct WatchTargetSettings: View {
+    @Environment(MobileModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var amount = ""
+    @State private var enabled = false
+
+    private var parsedAmount: Double? {
+        ComplicationPreferences.parseTarget(amount)
+    }
+
+    var body: some View {
+        Form {
+            Toggle("Show daily target", isOn: $enabled)
+            if enabled {
+                TextField("Daily target in USD", text: $amount).keyboardType(.decimalPad)
+                if parsedAmount == nil {
+                    Text("Enter an amount from $0.01 to $1,000,000,000.").font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            Text("The target applies to the combined daily spend of the plans selected for your watch complications.")
+                .font(.footnote).foregroundStyle(.secondary)
+        }
+        .navigationTitle("Daily target")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Save") {
+                    model.complicationPreferences.dailyTarget = enabled ? (parsedAmount ?? 0) : 0
+                    dismiss()
+                }.disabled(enabled && parsedAmount == nil)
+            }
+        }
+        .onAppear {
+            enabled = model.complicationPreferences.target != nil
+            if let target = model.complicationPreferences.target {
+                amount = target.formatted(.number.grouping(.never))
+            }
+        }
     }
 }

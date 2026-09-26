@@ -15,6 +15,8 @@
 		A1000000000000000000B006 /* PlanMeterWatchWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000F003 /* PlanMeterWatchWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A1000000000000000000B007 /* PlanMeterWatchShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000000000000000000P005; };
 		A1000000000000000000B008 /* PlanMeterMobileWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000F004; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+        A1000000000000000000B009 = {isa = PBXBuildFile; productRef = A1000000000000000000P006; };
+        A1000000000000000000B010 = {isa = PBXBuildFile; productRef = A1000000000000000000P007; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +176,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000000000000000000B003 /* PlanMeterWatchShared in Frameworks */,
+                A1000000000000000000B009,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -182,6 +185,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000000000000000000B004 /* PlanMeterWatchShared in Frameworks */,
+                A1000000000000000000B010,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,6 +274,7 @@
 			name = PlanMeterWatch;
 			packageProductDependencies = (
 				A1000000000000000000P003 /* PlanMeterWatchShared */,
+                A1000000000000000000P006,
 			);
 			productName = PlanMeterWatch;
 			productReference = A1000000000000000000F002 /* PlanMeterWatch.app */;
@@ -294,6 +299,7 @@
 			name = PlanMeterWatchWidgetExtension;
 			packageProductDependencies = (
 				A1000000000000000000P004 /* PlanMeterWatchShared */,
+                A1000000000000000000P007,
 			);
 			productName = PlanMeterWatchWidgetExtension;
 			productReference = A1000000000000000000F003 /* PlanMeterWatchWidgetExtension.appex */;
@@ -503,7 +509,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -531,7 +537,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -560,7 +566,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatch/PlanMeterWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -587,7 +593,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatch/PlanMeterWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -615,7 +621,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatchWidget/PlanMeterWatchWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterWatchWidget/Info.plist;
@@ -641,7 +647,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterWatchWidget/PlanMeterWatchWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterWatchWidget/Info.plist;
@@ -668,7 +674,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterMobileWidget/PlanMeterMobileWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterMobileWidget/Info.plist;
@@ -695,7 +701,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = PlanMeterMobileWidget/PlanMeterMobileWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = R668T822R7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = PlanMeterMobileWidget/Info.plist;
@@ -796,6 +802,8 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = PlanMeterWatchShared;
 		};
+        A1000000000000000000P006 = {isa = XCSwiftPackageProductDependency; productName = PlanMeterWatchCloud; };
+        A1000000000000000000P007 = {isa = XCSwiftPackageProductDependency; productName = PlanMeterWatchCloud; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A1000000000000000000PR01 /* Project object */;

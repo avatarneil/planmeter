@@ -21,7 +21,7 @@ struct PlanMeterAccessoryView: View {
                     content(payload)
                 }
             } else {
-                status("Open iPhone app to sync", symbol: "iphone")
+                status("Open app to sync", symbol: "arrow.clockwise")
             }
         }
         .widgetURL(URL(string: "planmeter://dashboard"))
@@ -34,30 +34,48 @@ struct PlanMeterAccessoryView: View {
             if let target = entry.configuration.target, let today = entry.today {
                 Gauge(value: min(1, max(0, today / target))) {
                     Text(entry.configuration.label)
-                } currentValueLabel: { Text(entry.todayText).minimumScaleFactor(0.5) }
+                } currentValueLabel: { Text(entry.todayText).font(.system(size: 22, weight: .bold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.6) }
                 .gaugeStyle(.accessoryCircular)
             } else {
-                Text(entry.todayText).font(.caption.weight(.semibold)).minimumScaleFactor(0.5)
+                Text(entry.todayText)
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         case .accessoryRectangular:
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chart.bar.fill").widgetAccentable()
-                    Text("Today")
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .center, spacing: 6) {
+                    Text(entry.todayText)
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .layoutPriority(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(entry.configuration.label).fontWeight(.semibold)
+                        if let target = entry.configuration.target {
+                            Text("of \(WatchPayload.compactUsd(target)) today")
+                        } else {
+                            Text("Today")
+                        }
+                    }.font(.system(size: 11))
                     Spacer(minLength: 0)
-                    Text(entry.todayText).fontWeight(.bold)
                 }
-                .font(.caption.weight(.semibold))
-                Text(entry.configuration.label)
-                if let target = entry.configuration.target {
-                    Text("Target \(WatchPayload.compactUsd(target))/day")
+                if let target = entry.configuration.target, let today = entry.today {
+                    ProgressView(value: min(1, max(0, today / target)))
+                        .progressViewStyle(.linear).tint(.primary).frame(height: 3)
+                    Text(today > target
+                         ? "\(WatchPayload.compactUsd(today - target)) over target"
+                         : "\(WatchPayload.compactUsd(target - today)) remaining")
+                        .font(.system(size: 11, weight: .medium))
                 } else if entry.today == nil {
-                    Text("Open iPhone app to sync")
-                } else {
-                    Text("API-equivalent spend")
+                    Text("Open app to sync").font(.system(size: 11))
+                } else if entry.configuration.groups.count > 1, let groups = p.todayCostByGroup {
+                    Text([("personal", "P"), ("work", "W"), ("other", "Other")]
+                        .filter { entry.configuration.groups.contains($0.0) }
+                        .map { "\($0.1) \(WatchPayload.compactUsd(groups[$0.0] ?? 0))" }
+                        .joined(separator: " · "))
+                        .font(.system(size: 11, weight: .medium))
                 }
             }
-            .font(.caption2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.7)

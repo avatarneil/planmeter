@@ -11,6 +11,19 @@ struct WatchRootView: View {
                     SummaryPage(payload: payload).tag(0)
                     LimitsPage(payload: payload).tag(1)
                     AccountsPage(payload: payload).tag(2)
+                    ScrollView {
+                    VStack(spacing: 8) {
+                        if let status = model.status { Text(status).font(.caption2) }
+                        ForEach(model.cloudChoices, id: \.cloudMacID) { source in
+                            Button(source.serverName) { model.selectCloudMac(source) }
+                        }
+                        Text("Watch face settings").font(.headline)
+                        Text("Choose plans and a daily target in PlanMeter on iPhone → Settings → Watch complications.")
+                            .font(.footnote).multilineTextAlignment(.center)
+                        Text("Build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }.padding()
+                    }.tag(3)
                 }
                 .tabViewStyle(.verticalPage)
                 .navigationTitle("PlanMeter")
@@ -25,13 +38,18 @@ struct WatchRootView: View {
                     }
                 }
             } else {
+                ScrollView {
                 VStack(spacing: 10) {
-                    Image(systemName: "iphone.and.arrow.forward").font(.title2).foregroundStyle(.secondary)
-                    Text("Open PlanMeter on your iPhone to sync.").font(.footnote).multilineTextAlignment(.center)
+                    Image(systemName: "icloud").font(.title2).foregroundStyle(.secondary)
+                    Text("Sync directly with iCloud. Enable iCloud sync in PlanMeter on your Mac.").font(.footnote).multilineTextAlignment(.center)
                     if let status = model.status { Text(status).font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+                    ForEach(model.cloudChoices, id: \.cloudMacID) { source in
+                        Button(source.serverName) { model.selectCloudMac(source) }
+                    }
                     Button("Try again") { model.refresh() }.font(.footnote)
                 }
                 .padding()
+                }
                 .navigationTitle("PlanMeter")
             }
         }

@@ -1,10 +1,31 @@
 import AppIntents
 import PlanMeterWatchShared
 import WidgetKit
+#if os(watchOS)
+import PlanMeterWatchCloud
+#endif
 
 struct PlanMeterConfiguration: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Plans and daily target"
     static var description = IntentDescription("Choose the plans to display and an optional daily API-equivalent spend target for this widget.")
+
+    #if os(watchOS)
+    @Parameter(title: "Use iPhone watch settings", default: true) var usePhoneSettings: Bool
+    #endif
+
+    func resolved(for payload: WatchPayload?) -> PlanMeterConfiguration {
+        #if os(watchOS)
+        if usePhoneSettings, let preferences = payload?.complicationPreferences {
+            let resolved = PlanMeterConfiguration()
+            resolved.personal = preferences.personal
+            resolved.work = preferences.work
+            resolved.other = preferences.other
+            resolved.dailyTarget = preferences.target ?? 0
+            return resolved
+        }
+        #endif
+        return self
+    }
 
     @Parameter(title: "Personal", default: true) var personal: Bool
     @Parameter(title: "Work", default: true) var work: Bool
@@ -38,14 +59,33 @@ struct PlanMeterProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: PlanMeterConfiguration, in context: Context) async -> PlanMeterEntry {
-        PlanMeterEntry(date: Date(), payload: context.isPreview ? .preview : WatchPayload.load(), configuration: configuration)
+        let payload: WatchPayload? = context.isPreview ? .preview : WatchPayload.load()
+        return PlanMeterEntry(date: Date(), payload: payload, configuration: configuration.resolved(for: payload))
     }
 
     func timeline(for configuration: PlanMeterConfiguration, in context: Context) async -> Timeline<PlanMeterEntry> {
         let now = Date()
-        let payload = WatchPayload.load()
+        var payload = WatchPayload.load()
+        #if os(watchOS)
+        do {
+            let choices = try await WatchCloudSync.fetch()
+            let latest = WatchPayload.load() ?? payload
+            payload = try WatchCloudSync.select(choices, cached: latest, selectedMacID: WatchCloudSync.selectedMacID)
+            if var current = payload {
+                current.complicationPreferences = current.complicationPreferences ?? ComplicationPreferences.load(from: WatchPayload.sharedDefaults())
+                WatchCloudSync.selectedMacID = current.cloudMacID
+                current.save()
+                payload = current
+            } else { WatchPayload.clear() }
+        } catch WatchCloudError.signedOut {
+            payload = nil
+            WatchPayload.clear()
+        } catch {
+            // Offline or waiting for Mac selection: retain the last known summary.
+        }
+        #endif
         let refresh = payload?.nextWidgetRefresh(after: now) ?? now.addingTimeInterval(15 * 60)
-        let entries = [now, refresh].map { PlanMeterEntry(date: $0, payload: payload, configuration: configuration) }
+        let entries = [now, refresh].map { PlanMeterEntry(date: $0, payload: payload, configuration: configuration.resolved(for: payload)) }
         return Timeline(entries: entries, policy: .after(refresh))
     }
 

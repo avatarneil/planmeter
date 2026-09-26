@@ -8,7 +8,7 @@ struct PlanMeterComplication: Widget {
                 .containerBackground(.clear, for: .widget)
         }
         .configurationDisplayName("PlanMeter")
-        .description("Choose plans and a daily spend target for your watch face.")
+        .description("Choose plans and a daily target in PlanMeter on iPhone → Settings → Watch complications.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
     }
 }

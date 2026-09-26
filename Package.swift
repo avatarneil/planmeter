@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "PlanMeterDesktopShared", targets: ["PlanMeterDesktopShared"]),
         .library(name: "PlanMeterCore", targets: ["PlanMeterCore"]),
         .library(name: "PlanMeterRemote", targets: ["PlanMeterRemote"]),
+        .library(name: "PlanMeterWatchCloud", targets: ["PlanMeterWatchCloud"]),
         .library(name: "PlanMeterWatchShared", targets: ["PlanMeterWatchShared"]),
     ],
     dependencies: [
@@ -32,6 +33,8 @@ let package = Package(
             name: "PlanMeterWatchShared",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .target(name: "PlanMeterWatchCloud", dependencies: ["PlanMeterRemote", "PlanMeterWatchShared"], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "PlanMeterWatchCloudTests", dependencies: ["PlanMeterWatchCloud", "PlanMeterRemote", "PlanMeterWatchShared"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(
             name: "PlanMeter",
             dependencies: [

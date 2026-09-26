@@ -1,16 +1,18 @@
 import Foundation
+import PlanMeterWatchCloud
 import Observation
 import PlanMeterWatchShared
 import WatchConnectivity
 import WidgetKit
 
-/// Receives the relayed summary from the iPhone and asks it to refresh.
+/// Reads iCloud directly; the phone relay remains available as a fallback.
 @Observable
 @MainActor
 final class WatchModel: NSObject, WCSessionDelegate {
     var payload: WatchPayload? = WatchPayload.load()
     var isRefreshing = false
     var status: String?
+    var cloudChoices: [WatchPayload] = []
     private var activated = false
 
     func activate() {
@@ -21,13 +23,54 @@ final class WatchModel: NSObject, WCSessionDelegate {
         session.activate()
     }
 
-    /// Asks the phone to fetch from the Mac now. Falls back to whatever the
-    /// phone last pushed when it is not reachable.
     func refresh() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        status = "Syncing with iCloud…"
+        Task {
+            do {
+                cloudChoices = try await WatchCloudSync.fetch()
+                if cloudChoices.isEmpty, WatchCloudSync.selectedMacID == nil, payload?.cloudMacID == nil {
+                    status = "No iCloud snapshot yet."
+                    refreshFromPhone()
+                    return
+                }
+                if let p = try WatchCloudSync.select(cloudChoices, cached: payload, selectedMacID: WatchCloudSync.selectedMacID) {
+                    apply(p)
+                    status = "Synced directly with iCloud"
+                } else {
+                    clear()
+                    status = cloudChoices.isEmpty ? "Enable iCloud sync in PlanMeter on your Mac." : "Choose a Mac below."
+                }
+                isRefreshing = false
+            } catch WatchCloudError.signedOut {
+                clear()
+                isRefreshing = false
+                status = WatchCloudError.signedOut.localizedDescription
+            } catch WatchCloudError.chooseMac {
+                isRefreshing = false
+                status = WatchCloudError.chooseMac.localizedDescription
+            } catch {
+                status = "iCloud: \(error.localizedDescription)"
+                refreshFromPhone()
+            }
+        }
+    }
+
+    func selectCloudMac(_ choice: WatchPayload) {
+        var choice = choice
+        choice.complicationPreferences = payload?.complicationPreferences
+            ?? ComplicationPreferences.load(from: WatchPayload.sharedDefaults())
+        apply(choice)
+        status = "Synced directly with iCloud"
+    }
+
+    private func refreshFromPhone() {
         let session = WCSession.default
-        guard session.activationState == .activated else { status = "Connecting…"; return }
+        guard session.activationState == .activated else { isRefreshing = false; return }
         guard session.isReachable else {
-            status = "iPhone not reachable. Showing last sync."
+            isRefreshing = false
+            status = (status ?? "iCloud unavailable.") + " Showing last sync; iPhone is also unreachable."
             return
         }
         isRefreshing = true
@@ -58,9 +101,16 @@ final class WatchModel: NSObject, WCSessionDelegate {
     }
 
     private func apply(_ p: WatchPayload) {
-        if let payload, payload.serverName == p.serverName, payload.updatedAt > p.updatedAt { return }
-        payload = p
-        p.save()
+        var incoming = p
+        if let payload, payload.cloudMacID == p.cloudMacID, payload.serverName == p.serverName, payload.updatedAt > p.updatedAt {
+            incoming = payload
+            incoming.complicationPreferences = p.complicationPreferences ?? payload.complicationPreferences
+        }
+        incoming.complicationPreferences = incoming.complicationPreferences ?? ComplicationPreferences.load(from: WatchPayload.sharedDefaults())
+        payload = incoming
+        WatchCloudSync.selectedMacID = incoming.cloudMacID
+        incoming.complicationPreferences?.save(to: WatchPayload.sharedDefaults())
+        incoming.save()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
@@ -73,7 +123,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
             if let data = context[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) {
                 self.apply(p)
             }
-            if self.payload == nil { self.refresh() }
+            self.refresh()
         }
     }
 
