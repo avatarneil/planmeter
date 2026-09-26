@@ -115,6 +115,7 @@ final class AppModel {
 
     private let cache = ScanCache()
     private var started = false
+    private var nextPricingRefresh = Date.distantPast
     private var pricingRefreshLoop: Task<Void, Never>?
     private var refreshLoop: Task<Void, Never>?
 
@@ -172,9 +173,8 @@ final class AppModel {
         // Retry failures in five minutes; keep long-running menu bar apps fresh every six hours.
         pricingRefreshLoop = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refreshPricing()
-                let delay = self?.pricingError == nil ? 6 * 3600 : 300
-                do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+                if let self, Date() >= self.nextPricingRefresh { await self.refreshPricing() }
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
             }
         }
         refreshLoop = Task { [weak self] in
@@ -213,9 +213,11 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             rates = fresh
             pricingError = nil
+            nextPricingRefresh = Date().addingTimeInterval(6 * 3600)
             recompute()
         } catch {
             guard !Task.isCancelled else { return }
+            nextPricingRefresh = Date().addingTimeInterval(300)
             pricingError = "Pricing refresh failed; keeping cached prices. \(error.localizedDescription)"
         }
     }
