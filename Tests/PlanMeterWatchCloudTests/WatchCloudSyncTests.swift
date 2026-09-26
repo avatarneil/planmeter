@@ -56,6 +56,12 @@ final class WatchCloudSyncTests: XCTestCase {
         XCTAssertEqual(chosen.complicationPreferences, cached.complicationPreferences)
     }
 
+    func testDirectPhonePayloadSurvivesWhenNoMacPublishesToCloud() throws {
+        var direct = try WatchCloudSync.payload(from: snapshot())
+        direct.cloudMacID = nil
+        XCTAssertEqual(try WatchCloudSync.select([], cached: direct), direct)
+    }
+
     func testUnsupportedCloudSchemaIsRejected() {
         var value = snapshot()
         value.version = 2

@@ -21,7 +21,7 @@ struct PlanMeterAccessoryView: View {
                     content(payload)
                 }
             } else {
-                status("Open iPhone app to sync", symbol: "iphone")
+                status("Open app to sync", symbol: "arrow.clockwise")
             }
         }
         .widgetURL(URL(string: "planmeter://dashboard"))
@@ -66,7 +66,7 @@ struct PlanMeterAccessoryView: View {
                          : "\(WatchPayload.compactUsd(target - today)) remaining")
                         .font(.system(size: 11, weight: .medium))
                 } else if entry.today == nil {
-                    Text("Open iPhone app to sync").font(.system(size: 11))
+                    Text("Open app to sync").font(.system(size: 11))
                 } else if entry.configuration.groups.count > 1, let groups = p.todayCostByGroup {
                     Text([("personal", "P"), ("work", "W"), ("other", "Other")]
                         .filter { entry.configuration.groups.contains($0.0) }

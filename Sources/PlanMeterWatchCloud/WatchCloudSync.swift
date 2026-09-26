@@ -28,7 +28,10 @@ public enum WatchCloudSync {
         let selected: WatchPayload?
         if let id = selectedMacID ?? cached?.cloudMacID {
             selected = choices.first { $0.cloudMacID == id }
-        } else if choices.count <= 1 {
+        } else if choices.isEmpty {
+            // A direct-connection phone payload can still be used without a cloud Mac.
+            return cached
+        } else if choices.count == 1 {
             selected = choices.first
         } else {
             throw WatchCloudError.chooseMac

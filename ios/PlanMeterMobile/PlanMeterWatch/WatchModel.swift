@@ -30,6 +30,11 @@ final class WatchModel: NSObject, WCSessionDelegate {
         Task {
             do {
                 cloudChoices = try await WatchCloudSync.fetch()
+                if cloudChoices.isEmpty, WatchCloudSync.selectedMacID == nil, payload?.cloudMacID == nil {
+                    status = "No iCloud snapshot yet."
+                    refreshFromPhone()
+                    return
+                }
                 if let p = try WatchCloudSync.select(cloudChoices, cached: payload, selectedMacID: WatchCloudSync.selectedMacID) {
                     apply(p)
                     status = "Synced directly with iCloud"
