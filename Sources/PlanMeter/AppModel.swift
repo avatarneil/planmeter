@@ -87,6 +87,8 @@ final class AppModel {
     var isScanning = false
     var lastScan: Date?
     var lastError: String?
+    var pricingError: String?
+    var isRefreshingPricing = false
     var desktopWidgetError: String?
     var groupOverrides: [String: PlanGroup] = GroupOverrides.load() { didSet { GroupOverrides.save(groupOverrides); publishDesktopWidget() } }
     var menuBarSpendGroups: Set<PlanGroup> = AppModel.loadMenuBarSpendGroups() {
@@ -113,6 +115,7 @@ final class AppModel {
 
     private let cache = ScanCache()
     private var started = false
+    private var pricingRefreshLoop: Task<Void, Never>?
     private var refreshLoop: Task<Void, Never>?
 
     /// How often the menu bar figure is refreshed while the app sits idle.
@@ -165,8 +168,14 @@ final class AppModel {
         await cache.load()
         rates = PricingLoader.loadCached() ?? RateTable()
         await refresh()
-        if rates.isEmpty || (rates.fetchedAt.map { Date().timeIntervalSince($0) > 7 * 86_400 } ?? true) {
-            await refreshPricing()
+        // Render cached prices immediately, then refresh on every launch (including updates).
+        // Retry failures in five minutes; keep long-running menu bar apps fresh every six hours.
+        pricingRefreshLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.refreshPricing()
+                let delay = self?.pricingError == nil ? 6 * 3600 : 300
+                do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            }
         }
         refreshLoop = Task { [weak self] in
             while !Task.isCancelled {
@@ -196,11 +205,18 @@ final class AppModel {
     }
 
     func refreshPricing() async {
+        guard !isRefreshingPricing else { return }
+        isRefreshingPricing = true
+        defer { isRefreshingPricing = false }
         do {
-            rates = try await PricingLoader.fetch()
+            let fresh = try await PricingLoader.fetch()
+            guard !Task.isCancelled else { return }
+            rates = fresh
+            pricingError = nil
             recompute()
         } catch {
-            lastError = "Pricing refresh failed: \(error.localizedDescription)"
+            guard !Task.isCancelled else { return }
+            pricingError = "Pricing refresh failed; keeping cached prices. \(error.localizedDescription)"
         }
     }
 
