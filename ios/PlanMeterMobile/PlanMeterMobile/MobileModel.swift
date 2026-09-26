@@ -6,6 +6,7 @@ import PlanMeterRemote
 import PlanMeterWatchShared
 import SwiftUI
 import UIKit
+import WidgetKit
 
 enum MobileRange: Int, CaseIterable, Identifiable {
     case day = 1
@@ -233,8 +234,14 @@ final class MobileModel {
         if !usesCloud { clearReports() }
     }
 
-    private func clearReports() {
+    private func clearPublishedSummary() {
+        WatchPayload.clear()
+        WidgetCenter.shared.reloadAllTimelines()
         WatchRelay.shared.clear()
+    }
+
+    private func clearReports() {
+        clearPublishedSummary()
         refreshGeneration += 1
         isLoading = false
         summary = nil
@@ -253,7 +260,7 @@ final class MobileModel {
         models = []
         lastUpdated = nil
         guard let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) else {
-            WatchRelay.shared.clear()
+            clearPublishedSummary()
             return
         }
         do {
@@ -263,8 +270,11 @@ final class MobileModel {
             limits = report.limits
             models = report.models ?? []
             lastUpdated = snapshot.generatedAt
-            if let payload = watchPayload() { WatchRelay.shared.push(payload) }
-        } catch { self.error = error.localizedDescription }
+            publishSummary()
+        } catch {
+            clearPublishedSummary()
+            self.error = error.localizedDescription
+        }
     }
 
     static var platformName: String {
@@ -306,7 +316,7 @@ final class MobileModel {
             models = mr.models ?? []
             lastUpdated = Date()
             error = nil
-            if let payload = watchPayload() { WatchRelay.shared.push(payload) }
+            publishSummary()
         } catch {
             guard generation == refreshGeneration else { return }
             if usesCloud, let cloudError = error as? CloudSyncError, case .signedOut = cloudError {
@@ -317,7 +327,14 @@ final class MobileModel {
         }
     }
 
-    /// Compact summary for the watch, derived from what the phone just fetched.
+    private func publishSummary() {
+        guard let payload = watchPayload() else { return }
+        payload.save()
+        WidgetCenter.shared.reloadAllTimelines()
+        WatchRelay.shared.push(payload)
+    }
+
+    /// Compact summary for widgets and the watch, derived from the latest report.
     func watchPayload() -> WatchPayload? {
         guard let summary else { return nil }
         func group(_ name: String) -> RemoteGroupUsage? { summary.groups.first { $0.group == name } }

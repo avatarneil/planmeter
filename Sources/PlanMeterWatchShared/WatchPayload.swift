@@ -65,6 +65,20 @@ public struct WatchPayload: Codable, Equatable, Sendable {
 
     public var totalCostUsd: Double { personalCostUsd + workCostUsd + otherCostUsd }
 
+    public var rangeLabel: String { days == 1 ? "24h" : "\(days)d" }
+
+    /// A cached "today" total must not silently become tomorrow's total.
+    public func isStale(at date: Date, calendar: Calendar = .current) -> Bool {
+        date.timeIntervalSince(updatedAt) >= 15 * 60 || !calendar.isDate(updatedAt, inSameDayAs: date)
+    }
+
+    public func nextWidgetRefresh(after date: Date, calendar: Calendar = .current) -> Date {
+        let fallback = date.addingTimeInterval(15 * 60)
+        let expiry = updatedAt.addingTimeInterval(15 * 60)
+        let midnight = calendar.dateInterval(of: .day, for: date)?.end ?? fallback
+        return min(fallback, midnight, expiry > date ? expiry : fallback)
+    }
+
     // MARK: Transport and shared storage
 
     public static let appGroup = "group.com.neilgoldader.planmeter"
