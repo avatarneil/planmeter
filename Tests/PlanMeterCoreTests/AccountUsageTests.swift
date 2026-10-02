@@ -152,6 +152,7 @@ final class AccountUsageTests: XCTestCase {
         #!/usr/bin/env python3
         import json,os,sys
         home=os.environ['CODEX_HOME']
+        pending=None
         for line in sys.stdin:
             r=json.loads(line)
             with open(home+'/requests.jsonl','a') as f: f.write(line)
@@ -159,11 +160,22 @@ final class AccountUsageTests: XCTestCase {
             method=r['method']
             if method=='initialize': result={}
             elif method=='account/read': result={'account':{'type':'chatgpt','email':'user@example.com','planType':'pro'},'workspaceRouting':{'chatgptAccountId':'service'}}
+            elif method=='account/usage/read' and r.get('params',{}).get('threadId'):
+                if os.path.exists(home+'/reject-detail'):
+                    print(json.dumps({'id':r['id'],'error':{'code':-1,'message':'private-body'}}),flush=True)
+                    continue
+                result={'threadUsage':{'threadId':r['params']['threadId'],'estimatedUsageCreditsMicros':0,'estimatedUsageUsdMicros':0,'groups':[{'model':'test','estimatedUsageCreditsMicros':0,'inputTokens':100,'cachedInputTokens':80,'outputTokens':10,'totalTokens':110}]}}
+                if r['id']==4:
+                    pending={'id':r['id'],'result':result}
+                    continue
             elif method=='account/usage/read': result={'summary':{},'dailyUsageBuckets':[{'startDate':'2026-10-02','tokens':250}]}
             else: sys.exit(1)
             print(json.dumps({'method':'notification','params':{}}),flush=True)
             data=(json.dumps({'id':r['id'],'result':result})+'\\n').encode()
             os.write(1,data[:8]);os.write(1,data[8:])
+            if pending is not None:
+                print(json.dumps(pending),flush=True)
+                pending=None
         """
         try Data(body.utf8).write(to: script)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
@@ -173,6 +185,22 @@ final class AccountUsageTests: XCTestCase {
         let requests = try String(contentsOf: dir.appendingPathComponent("requests.jsonl"), encoding: .utf8)
             .split(separator: "\n").compactMap { JSON.object(Data($0.utf8))?["method"] as? String }
         XCTAssertEqual(requests, ["initialize", "initialized", "account/read", "account/usage/read"])
+        let refs = [CodexThreadReference(id: "6abee66a-0f8c-8191-bd03-3fa7172510f7", origin: "cloud"),
+                    CodexThreadReference(id: "6abfc44a-09e0-8191-8bd0-42930721f0c0", origin: "cloud")]
+        let detailed = CodexAccountUsage.read(target: t, executableURL: script, timeout: 3, threadReferences: refs)
+        XCTAssertEqual(detailed.status, .ok)
+        XCTAssertEqual(detailed.days.first?.tokens, 250)
+        XCTAssertEqual(detailed.serviceThreads.first?.totalTokens, 110)
+        XCTAssertEqual(detailed.serviceThreads.first?.serviceCostUsd, 0)
+        XCTAssertEqual(detailed.serviceThreads.map(\.id), refs.map(\.id))
+        XCTAssertEqual(detailed.threadUsageAttempted, 2)
+        try Data().write(to: dir.appendingPathComponent("reject-detail"))
+        let rejected = CodexAccountUsage.read(target: t, executableURL: script, timeout: 3, threadReferences: refs)
+        XCTAssertEqual(rejected.status, .ok)
+        XCTAssertEqual(rejected.days.first?.tokens, 250)
+        XCTAssertEqual(rejected.threadUsageUnavailable, 2)
+        XCTAssertTrue(rejected.serviceThreads.isEmpty)
+        XCTAssertFalse(rejected.threadUsageMessage?.contains("private-body") == true)
         t.email = "other@example.com"
         let wrongIdentity = CodexAccountUsage.read(target: t, executableURL: script, timeout: 3)
         XCTAssertNil(wrongIdentity.fetchedAt)

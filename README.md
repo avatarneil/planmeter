@@ -125,14 +125,26 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   API date labels are compared with UTC transcript days, independently
   of the chart's local or rolling range. Missing days suppress the difference rather
   than becoming zero. Negative differences remain visible; reporting scope and delays
-  may differ. Dots coverage has not been verified.
+  may differ.
+- Detailed thread usage uses `account/usage/read` with a `threadId`. The Mac app's
+  account-scoped cloud cache provides known dots and spawned task IDs; modern local
+  thread metadata provides IDs with an exact account match. Up to 100 cached/recent
+  threads are queried within the bounded refresh, prioritizing cloud threads.
+  Available readings include model, reasoning effort, speed, input/cached/output
+  tokens, credits, and the service's optional USD estimate. These are lifetime
+  readings, independent of the selected date range; they never enter daily spend.
+  Standard token-rate estimates are separate from service estimates and exclude
+  speed premiums. The service may report zero billable usage for a dot with many
+  tokens. Unsupported plans or incomplete billing routes may return no details.
+  The desktop cache is a partial inventory, so this does not account for every
+  cloud chat or reconcile the daily account total to a complete cost.
 - Distinct configured Codex logins on the same plan retain separate account-wide
   readings, but their shared transcript attribution cannot be reconciled to one login.
   Historical switches between same-plan logins are also indistinguishable locally.
 - Known threads across Codex, Claude Code, Grok Build, and OpenCode retain their
   provider session IDs and spend. Codex titles and explicit T3 provider/session mappings
   add chat names and T3 chat IDs when available; matching titles never merge sessions.
-  Open chat links target local Codex sessions. This is not a complete dots task inventory.
+  Open chat links target the Codex app's thread IDs. This is not a complete dots task inventory.
 
 Use `planmeter-cli --days 7 --account-usage` for the separate comparison or
 `planmeter-cli --days 7 --threads --utc` for known sessions and spend in matching UTC
@@ -151,7 +163,8 @@ and [app-server protocol](https://learn.chatgpt.com/docs/app-server).
   the transcripts and are shown as one account.
 - Claude Code does not write subscription-window readings locally, so the Limits panel only covers
   Codex.
-- Costs are API-equivalent token prices, not what a subscription charges.
+- Chart costs use API-equivalent token prices. Detailed Codex thread views label
+  service billing estimates separately from standard token-rate estimates.
 
 ## Usage drill-down
 

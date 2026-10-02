@@ -51,7 +51,7 @@ public enum ThreadCatalog {
         }
     }
 
-    private static func read(path: String, sql: String, row: ([String]) -> Void) {
+    static func read(path: String, sql: String, row: ([String]) -> Void) {
         guard FileManager.default.fileExists(atPath: path) else { return }
         var db: OpaquePointer?
         guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK, let db else {

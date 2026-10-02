@@ -51,7 +51,8 @@ public actor CodexAccountUsage {
         return paths.first { FileManager.default.isExecutableFile(atPath: $0) }.map { URL(fileURLWithPath: $0) }
     }
 
-    static func read(target: CodexUsageTarget, executableURL: URL? = nil, timeout: TimeInterval = 15) -> AccountUsageSnapshot {
+    static func read(target: CodexUsageTarget, executableURL: URL? = nil, timeout: TimeInterval = 15,
+                     threadReferences: [CodexThreadReference]? = nil) -> AccountUsageSnapshot {
         var snapshot = AccountUsageSnapshot(target: target)
         guard let executableURL = executableURL ?? executable() else {
             snapshot.message = "Codex CLI not found. Install a version supporting account/usage/read."
@@ -72,11 +73,38 @@ public actor CodexAccountUsage {
                 throw UsageError.identity
             }
             let result = try rpc.request(id: 3, method: "account/usage/read", params: [:])
+            snapshot = try decode(result, target: target)
+            let references = threadReferences ?? CodexThreadUsage.references(target: target)
+            // Pipeline a small batch of independent service reads so a cloud
+            // inventory fits inside the same bounded refresh deadline.
+            for start in stride(from: 0, to: references.count, by: 8) {
+                guard Date() < rpc.deadline else { break }
+                var pending: [(Int, CodexThreadReference)] = []
+                for index in start..<min(start + 8, references.count) {
+                    let reference = references[index]
+                    snapshot.threadUsageAttempted += 1
+                    do {
+                        try rpc.send(["id": index + 4, "method": "account/usage/read", "params": ["threadId": reference.id]])
+                        pending.append((index + 4, reference))
+                    } catch { snapshot.threadUsageUnavailable += 1 }
+                }
+                for (id, reference) in pending {
+                    do {
+                        let result = try rpc.response(id: id)
+                        if let usage = try CodexThreadUsage.decode(result, reference: reference) {
+                            snapshot.serviceThreads.append(usage)
+                        } else { snapshot.threadUsageUnavailable += 1 }
+                    } catch { snapshot.threadUsageUnavailable += 1 }
+                }
+            }
+            if !references.isEmpty {
+                snapshot.threadUsageMessage = "Lifetime usage for \(snapshot.serviceThreads.count) of \(references.count) known desktop/cloud threads. The cached inventory may be incomplete; these readings cannot be assigned to individual days."
+            }
             // Re-check the local login in case a switch occurred during the fetch.
             let identity = CodexIdentity.read(homePath: target.home)
             guard identity.accountId == target.serviceAccountId, identity.email?.lowercased() == target.email.lowercased(), identity.planType == target.plan else { throw UsageError.identity }
-            snapshot = try decode(result, target: target)
         } catch {
+            snapshot = AccountUsageSnapshot(target: target)
             snapshot.status = .failed
             // Never display the server's error body: it can contain auth data.
             snapshot.message = (error as? UsageError)?.description ?? "Could not read Codex account usage. Check CLI installation and login."
@@ -117,7 +145,7 @@ public actor CodexAccountUsage {
     }
 }
 
-private enum UsageError: Error {
+enum UsageError: Error {
     case identity, unsupported, timeout, closed, protocolError
     var description: String {
         switch self {
@@ -183,6 +211,10 @@ private final class CodexUsageRPC: @unchecked Sendable {
 
     func request(id: Int, method: String, params: [String: Any]) throws -> [String: Any] {
         try send(["id": id, "method": method, "params": params])
+        return try response(id: id)
+    }
+
+    func response(id: Int) throws -> [String: Any] {
         while true {
             lock.lock()
             let reply = replies.removeValue(forKey: id), closed = failed

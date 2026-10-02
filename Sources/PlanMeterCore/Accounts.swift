@@ -219,6 +219,7 @@ public struct CodexIdentity: Sendable {
     public var email: String?
     public var planType: String?
     public var accountId: String?
+    public var userId: String?
 
     public static func read(homePath: String) -> CodexIdentity {
         let url = URL(fileURLWithPath: "\(homePath)/auth.json")
@@ -237,6 +238,7 @@ public struct CodexIdentity: Sendable {
             if let auth = JSON.object(claims["https://api.openai.com/auth"]) {
                 if identity.planType == nil { identity.planType = JSON.string(auth["chatgpt_plan_type"]) }
                 if identity.accountId == nil { identity.accountId = JSON.string(auth["chatgpt_account_id"]) }
+                if identity.userId == nil { identity.userId = JSON.string(auth["chatgpt_user_id"]) }
             }
         }
         if identity.planType == nil, authMode == "apikey" { identity.planType = "api" }

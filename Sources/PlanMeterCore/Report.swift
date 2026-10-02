@@ -142,7 +142,19 @@ public enum Report {
 
     public static func coverage(_ ctx: ReportContext, days: Int) -> [String: Any] {
         let rows = UsageCoverage.reconcile(ctx.accountUsage, entries: ctx.scan.threads, rates: ctx.rates, days: days)
-        return ["rows": jsonObjects(rows), "note": "Account-wide tokens are a separate comparison, never added to transcript totals or priced. API date labels are compared to UTC transcript days; reporting scope and delay may differ. Missing daily buckets are unavailable, not zero. Dots coverage is not verified."]
+        var encoded = jsonObjects(rows) as? [[String: Any]] ?? []
+        for index in encoded.indices {
+            var snapshot = encoded[index]["snapshot"] as? [String: Any] ?? [:]
+            var threads = snapshot["serviceThreads"] as? [[String: Any]] ?? []
+            for threadIndex in threads.indices {
+                let thread = rows[index].snapshot.serviceThreads[threadIndex]
+                if let cost = thread.serviceCostUsd { threads[threadIndex]["serviceCostUsd"] = cost }
+                if let cost = thread.tokenRateCost(rates: ctx.rates) { threads[threadIndex]["tokenRateCostUsd"] = cost }
+            }
+            snapshot["serviceThreads"] = threads
+            encoded[index]["snapshot"] = snapshot
+        }
+        return ["rows": encoded, "note": "Daily account tokens are a separate UTC comparison, never added to transcript totals or priced. Missing daily buckets are unavailable, not zero. serviceThreads contain lifetime model/token/credit breakdowns and optional service USD estimates for known cloud dots, tasks, and billed local threads. tokenRateCostUsd values standard model token rates, excluding speed premiums. Cached thread discovery is incomplete; lifetime readings are never assigned to a day or added to transcript spend."]
     }
 
     public static func threads(_ ctx: ReportContext, days: Int, accountFilter: String?, utc: Bool = false) -> [String: Any] {

@@ -22,7 +22,7 @@ let daysProperty: [String: Any] = [
 ]
 
 let tools: [Tool] = [
-    Tool(name: "account_usage", description: "Account-wide Codex daily token readings compared with known thread spend, using UTC transcript days. Separate from local totals; differences are unpriced and dots coverage unverified.",
+    Tool(name: "account_usage", description: "Daily Codex account tokens compared with UTC transcripts, plus lifetime model/token/credit/USD breakdowns for known cloud dots, tasks, and billed threads. Thread inventory is partial; lifetime usage never enters daily spend.",
          schema: ["type": "object", "properties": ["days": daysProperty], "additionalProperties": false]),
     Tool(name: "usage_threads", description: "Known threads/chats across providers with exact provider session IDs, source paths, account attribution, tokens and transcript spend. Optional account/name/provider filter.",
          schema: ["type": "object", "properties": ["days": daysProperty, "account": ["type": "string"], "utc": ["type": "boolean", "description": "Use UTC days to match account_usage comparisons."]], "additionalProperties": false]),
@@ -150,7 +150,7 @@ func handle(_ message: [String: Any]) async {
             "protocolVersion": version,
             "capabilities": ["tools": ["listChanged": false]],
             "serverInfo": ["name": "planmeter", "version": serverVersion],
-            "instructions": "Start with usage_summary for local transcript spend and separate account-wide coverage. account_usage reconciles daily Codex totals; usage_threads links known sessions to spend. Never add account-wide tokens to local tokens or price an unmatched difference. Costs are API-equivalent estimates, not subscription charges.",
+            "instructions": "Start with usage_summary for local transcript spend and separate account-wide coverage. account_usage also exposes serviceThreads: lifetime model/token breakdowns for known cloud dots, tasks, and billed local threads. serviceCostUsd is the service's billing estimate; tokenRateCostUsd values standard model rates without speed premiums. Lifetime readings never enter daily spend. usage_threads links local sessions to spend. Never add account-wide tokens to local tokens or price an unmatched difference. Main chart costs are API-equivalent estimates.",
         ])
     case "notifications/initialized", "notifications/cancelled", "notifications/roots/list_changed":
         return

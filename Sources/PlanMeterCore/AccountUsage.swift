@@ -24,6 +24,10 @@ public struct AccountUsageSnapshot: Codable, Sendable, Identifiable {
     public var fetchedAt: Date?
     public var status: SourceStatus = .missing
     public var message: String?
+    public var serviceThreads: [CodexServiceThreadUsage] = []
+    public var threadUsageAttempted: Int = 0
+    public var threadUsageUnavailable: Int = 0
+    public var threadUsageMessage: String?
 }
 
 /// Retain the actual per-session cells; assigning a multi-session cell's entire
