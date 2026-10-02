@@ -84,9 +84,9 @@ final class UsageProjectionTests: XCTestCase {
             DailyModelTokens(model: "auto-review", speed: "standard", credits: 10, uncachedInputTokens: 1, cachedInputTokens: 0, outputTokens: 0, totalTokens: 1),
             DailyModelTokens(model: "luna", speed: "standard", credits: 4, uncachedInputTokens: 1, cachedInputTokens: 0, outputTokens: 0, totalTokens: 1)]
         let byModel = Aggregation.byModel(project([snapshot]).buckets)
-        XCTAssertEqual(byModel["auto-review"]?.costUsd, 0.75)
-        XCTAssertEqual(byModel["luna"]?.costUsd, 0.3)
-        XCTAssertEqual(byModel["voice"]?.costUsd, 0.0375)
+        XCTAssertEqual(try XCTUnwrap(byModel["auto-review"]?.costUsd), 0.75, accuracy: 0.000000001)
+        XCTAssertEqual(try XCTUnwrap(byModel["luna"]?.costUsd), 0.3, accuracy: 0.000000001)
+        XCTAssertEqual(try XCTUnwrap(byModel["voice"]?.costUsd), 0.0375, accuracy: 0.000000001)
         XCTAssertEqual(Aggregation.total(project([snapshot]).buckets).costUsd, 1.0875, accuracy: 0.000000001)
     }
 
