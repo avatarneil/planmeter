@@ -37,6 +37,10 @@ struct AccountCoverageCard: View {
                                 ThreadSpendList(rows: model.coverageThreads(accountId: id))
                             }
                         }
+                        if row.knownThreads == 0 {
+                            Text("No local threads matched this account in the comparison dates; known thread cost is unavailable.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                         if let message = row.snapshot.message {
                             Text(message).font(.caption).foregroundStyle(.secondary)
                         }
@@ -46,6 +50,8 @@ struct AccountCoverageCard: View {
                     }
                     Divider()
                 }
+                Text("Account-wide cost is unavailable: the account feed reports total tokens without the model or input/output breakdown needed for pricing. Known thread cost covers matched local transcripts only.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Text("Account totals are separate from the spend chart. The difference may include other devices, cloud activity, or reporting delays; dots coverage is unverified. Missing activity has no cost estimate.")
                     .font(.caption).foregroundStyle(.secondary)
             }

@@ -38,6 +38,15 @@ final class AccountUsageTests: XCTestCase {
         XCTAssertEqual(row.differenceTokens, -50)
     }
 
+    func testAccountTokensWithoutMatchedThreadsHaveNoCostEstimate() {
+        let row = UsageCoverage.reconcile([snapshot()], entries: [], rates: RateTable(), days: 1, now: now)[0]
+        XCTAssertEqual(row.accountTokens, 250)
+        XCTAssertEqual(row.knownThreadTokens, 0)
+        XCTAssertEqual(row.knownThreads, 0)
+        XCTAssertEqual(row.differenceTokens, 250)
+        XCTAssertNil(row.knownThreadCostUsd)
+    }
+
     func testSparseAndMissingReadingsAreNotZero() {
         let sparse = UsageCoverage.reconcile([snapshot()], entries: [entry()], rates: RateTable(), days: 2, now: now)[0]
         XCTAssertEqual(sparse.accountTokens, 250)

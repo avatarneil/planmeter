@@ -121,7 +121,9 @@ public enum UsageCoverage {
             let known = snapshot.target.localAccountId.map { id in threads.filter { $0.accountId == id } }
             let tokens = known.map { $0.reduce(0) { $0 + $1.tokens } }
             return UsageReconciliation(snapshot: snapshot, fromDay: from, toDay: to, accountTokens: total,
-                knownThreadTokens: tokens, knownThreadCostUsd: known.map { $0.reduce(0) { $0 + $1.costUsd } },
+                knownThreadTokens: tokens, knownThreadCostUsd: known.flatMap { rows in
+                    rows.isEmpty ? nil : rows.reduce(0) { $0 + $1.costUsd }
+                },
                 differenceTokens: missing.isEmpty && snapshot.status == .ok ? total.flatMap { total in tokens.map { total - $0 } } : nil,
                 knownThreads: known?.count, missingDays: missing, threadIds: known?.map(\.sessionId).sorted())
         }

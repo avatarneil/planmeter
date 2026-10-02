@@ -120,7 +120,9 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   local transcript reporting available.
 - The account-wide panel shows reported daily tokens alongside known thread tokens
   and their transcript cost. Account tokens are never added to the existing spend
-  chart or priced. API date labels are compared with UTC transcript days, independently
+  chart or priced: the feed lacks the model and input/output breakdown needed for
+  pricing. When no local threads match, their cost is unavailable rather than $0.00.
+  API date labels are compared with UTC transcript days, independently
   of the chart's local or rolling range. Missing days suppress the difference rather
   than becoming zero. Negative differences remain visible; reporting scope and delays
   may differ. Dots coverage has not been verified.
