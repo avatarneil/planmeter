@@ -45,13 +45,15 @@ public struct WatchPayload: Codable, Equatable, Sendable {
     public var workTokens: Int64
     public var todayCostUsd: Double
     public var cloudMacID: String?
+    public var usesProviderDates: Bool?
     public var complicationPreferences: ComplicationPreferences?
     public var todayCostByGroup: [String: Double]?
     public var accounts: [Account]
     public var limits: [Limit]
 
-    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil, complicationPreferences: ComplicationPreferences? = nil, cloudMacID: String? = nil) {
+    public init(updatedAt: Date, days: Int, serverName: String, personalCostUsd: Double, workCostUsd: Double, otherCostUsd: Double, personalTokens: Int64, workTokens: Int64, todayCostUsd: Double, accounts: [Account], limits: [Limit], todayCostByGroup: [String: Double]? = nil, complicationPreferences: ComplicationPreferences? = nil, cloudMacID: String? = nil, usesProviderDates: Bool? = nil) {
         self.cloudMacID = cloudMacID
+        self.usesProviderDates = usesProviderDates
         self.complicationPreferences = complicationPreferences
         self.updatedAt = updatedAt
         self.days = days
@@ -77,7 +79,7 @@ public struct WatchPayload: Codable, Equatable, Sendable {
 
     public var totalCostUsd: Double { personalCostUsd + workCostUsd + otherCostUsd }
 
-    public var rangeLabel: String { days == 1 ? "24h" : "\(days)d" }
+    public var rangeLabel: String { days == 1 ? (usesProviderDates == true ? "day" : "24h") : "\(days)d" }
 
     /// A cached "today" total must not silently become tomorrow's total.
     public func isStale(at date: Date, calendar: Calendar = .current) -> Bool {

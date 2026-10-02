@@ -74,6 +74,7 @@ struct CodexDailyUsageView: View {
     @Environment(AppModel.self) private var model
     var snapshot: CodexDailyUsageSnapshot
     @State private var selectedDate: String?
+    @State private var detail: CodexDailyUsageSnapshot?
     @State private var expanded = true
 
     private var date: String? {
@@ -87,6 +88,7 @@ struct CodexDailyUsageView: View {
             Text(snapshot.message ?? "Dated workspace analytics unavailable.").font(.caption).foregroundStyle(.secondary)
         } else {
             let selected = snapshot.selected(days: model.range.dayCount)
+            let inspection = detail?.fromDay == date && detail?.target == snapshot.target ? detail! : snapshot
             DisclosureGroup("Dated workspace usage — Work, Codex, Chat", isExpanded: $expanded) {
                 HStack(spacing: 24) {
                     Stat(label: "Reported range credits", value: selected.credits.map(credits) ?? "Unavailable")
@@ -96,7 +98,7 @@ struct CodexDailyUsageView: View {
                 Text("\(selected.fromDay) through \(selected.toDay) · Provider calendar dates · \(selected.missingCreditDays.count) dates without credit readings")
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if let day = snapshot.days.first(where: { $0.date == date }) {
+                if let day = inspection.days.first(where: { $0.date == date }) {
                     HStack {
                         Picker("Inspect day", selection: Binding(get: { date ?? "" }, set: { selectedDate = $0 })) {
                             ForEach(snapshot.days.reversed()) { day in Text(day.date).tag(day.date) }
@@ -157,7 +159,7 @@ struct CodexDailyUsageView: View {
                         }
                     }
                 }
-                Text("Daily credit totals include all three products. The text-token feed covers Work and Codex; voice, image, and Chat can add credits without text-token counts. These readings are separate from local API-equivalent spend and lifetime thread totals.")
+                Text("Daily credit totals include all three products. Text tokens cover Work and Codex; voice, image, and Chat can add credits without text-token counts. Charts use these dated readings instead of overlapping local estimates. The provider may group smaller models as Other; lifetime thread totals stay separate.")
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let freshness = snapshot.dataFreshness {
@@ -165,6 +167,10 @@ struct CodexDailyUsageView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let message = snapshot.message { Text(message).font(.caption).foregroundStyle(.secondary) }
+            }
+            .task(id: "\(date ?? ""):\(snapshot.fetchedAt?.timeIntervalSince1970 ?? 0)") {
+                guard let date else { return }
+                detail = await model.inspectWorkspaceDay(target: snapshot.target, date: date)
             }
         }
     }

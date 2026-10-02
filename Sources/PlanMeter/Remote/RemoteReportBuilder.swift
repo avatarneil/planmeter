@@ -29,8 +29,9 @@ enum RemoteReportBuilder {
     static func buckets(model: AppModel, days: Int, resolution: Resolution = .day, now: Date = Date()) -> (buckets: [Bucket], from: Date, to: Date) {
         // Both remote clients label one day as "24h". Match the Mac's current
         // hour plus the preceding 23 hourly buckets, rather than calendar today.
-        let w = days == 1 ? TimeRange.day.window(now: now) : Report.window(days: days, now: now)
-        return (Aggregation.buckets(cells: model.cells, rates: model.rates, from: w.from, to: w.to, resolution: resolution), w.from, w.to)
+        let w = days == 1 && !model.hasWorkspaceUsage ? TimeRange.day.window(now: now) : Report.window(days: days, now: now)
+        let resolution = model.hasWorkspaceUsage ? Resolution.day : resolution
+        return (model.projectedUsage(from: w.from, to: w.to, resolution: resolution).buckets, w.from, w.to)
     }
 
     static func summary(model: AppModel, days: Int, now: Date = Date()) -> RemoteSummary {
@@ -60,7 +61,8 @@ enum RemoteReportBuilder {
             todayCostUsd: model.todayTotal.costUsd,
             generatedAt: model.lastScan ?? Date(),
             serverName: model.remote.serverName,
-            pricingSource: model.rates.source
+            pricingSource: model.rates.source,
+            usesProviderDates: model.hasWorkspaceUsage ? true : nil
         )
     }
 
@@ -88,6 +90,7 @@ enum RemoteReportBuilder {
     }
 
     static func timeline(model: AppModel, days: Int, resolution: Resolution, now: Date = Date()) -> RemoteTimeline {
+        let resolution = model.hasWorkspaceUsage ? Resolution.day : resolution
         let (buckets, from, to) = buckets(model: model, days: days, resolution: resolution, now: now)
         struct Key: Hashable { var period: Date; var account: String }
         var agg: [Key: (Double, Int)] = [:]

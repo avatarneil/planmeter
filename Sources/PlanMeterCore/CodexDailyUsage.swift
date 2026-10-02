@@ -80,9 +80,26 @@ public actor CodexDailyUsage {
     public func load(targets: [CodexUsageTarget], force: Bool = false, now: Date = Date()) async -> [CodexDailyUsageSnapshot] {
         let window = Report.window(days: 90, calendar: UsageCoverage.utcCalendar, now: now)
         let from = UsageCoverage.dayLabel(window.from), to = UsageCoverage.dayLabel(window.to.addingTimeInterval(-1))
+        return await loadRange(targets: targets, from: from, to: to, force: force, now: now)
+    }
+
+    /// A single-day query preserves model names that the provider may group
+    /// under "Other" across a longer reporting window.
+    public func loadDay(targets: [CodexUsageTarget], date: String, force: Bool = false) async -> [CodexDailyUsageSnapshot] {
+        guard Self.isDay(date) else {
+            return targets.map {
+                var snapshot = CodexDailyUsageSnapshot(target: $0, fromDay: date, toDay: date)
+                snapshot.status = .failed; snapshot.message = "Use a valid provider date in YYYY-MM-DD format."
+                return snapshot
+            }
+        }
+        return await loadRange(targets: targets, from: date, to: date, force: force, now: Date())
+    }
+
+    private func loadRange(targets: [CodexUsageTarget], from: String, to: String, force: Bool, now: Date) async -> [CodexDailyUsageSnapshot] {
         var result: [CodexDailyUsageSnapshot] = []
         for target in targets {
-            let key = "\(target.id):\(target.serviceAccountId):\(target.email.lowercased()):\(target.home):\(target.plan):\(to)"
+            let key = "\(target.id):\(target.serviceAccountId):\(target.email.lowercased()):\(target.home):\(target.plan):\(from):\(to)"
             if !force, let attempted = attempted[key], now.timeIntervalSince(attempted) < 300, var previous = cached[key] {
                 previous.target = target
                 result.append(previous)
@@ -261,6 +278,9 @@ public actor CodexDailyUsage {
         guard let label = value as? String, label >= from, label <= to, let date = formatter().date(from: label),
               formatter().string(from: date) == label else { throw DailyUsageError.invalid }
         return label
+    }
+    public static func isDay(_ label: String) -> Bool {
+        label.count == 10 && (try? dateLabel(label, from: label, to: label)) != nil
     }
     static func dateLabels(from: String, to: String) -> [String] {
         let formatter = formatter()

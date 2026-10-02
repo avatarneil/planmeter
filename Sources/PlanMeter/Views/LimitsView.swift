@@ -152,8 +152,8 @@ struct SourcesCard: View {
     }
 
     private var pricingText: String {
-        if model.rates.isEmpty { return "No pricing loaded; costs show $0 until LiteLLM rates are fetched." }
+        if model.rates.isEmpty { return "Local token prices unavailable; dated workspace credits use the provider's USD conversion." }
         let when = model.rates.fetchedAt.map { Format.relative($0) } ?? "unknown time"
-        return "Pricing: \(model.rates.knownModels) models from \(model.rates.source), fetched \(when). Subscription billing is separate from these API-equivalent costs."
+        return "Local token pricing: \(model.rates.knownModels) models from \(model.rates.source), fetched \(when). Workspace readings use the provider's credit conversion instead."
     }
 }

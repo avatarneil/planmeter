@@ -125,8 +125,12 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   credit conversion for that login. Voice/image/Chat credits can have no text-token
   counterpart; text-model totals are not a complete billing total. The date picker
   defaults to the latest completed day and is independent of the chart range.
-  These service amounts are never added to local token-price estimates or lifetime
-  thread readings. Missing dates or unsupported routes remain unavailable, and
+  Inspecting a day performs a focused query to preserve model names the provider
+  may group as Other in longer windows. These service amounts replace overlapping
+  local account/day estimates in summaries, charts, model drill-downs, menu-bar
+  totals, desktop widgets, and companion reports. Other accounts and missing dates
+  retain local usage. Ambiguous same-plan logins cannot replace a local account.
+  Lifetime thread readings never enter these totals. Missing routes remain unavailable, and
   stale readings are labelled. Requests use a fixed HTTPS host, refuse redirects,
   and keep credentials and raw error bodies out of reports and disk caches.
   These analytics routes are used by the installed Codex app and are not a public
@@ -161,12 +165,20 @@ from T3 Code's cached copy when present and fetched directly otherwise.
 
 Use `planmeter-cli --days 7 --account-usage` for the separate comparison and dated
 workspace credits/model I/O (`dailyUsage`), or
+`planmeter-cli --account-usage --date 2026-10-01` for an exact provider day, or
 `planmeter-cli --days 7 --threads --utc` for known sessions and spend in matching UTC
 days (both emit JSON; omit `--utc` for local calendar days).
 The MCP tools `account_usage` and `usage_threads` expose the same data, and
-`usage_summary` includes an additive `accountWide` field. Existing token and cost
-fields continue to describe local transcripts. The new views are available on
-the Mac dashboard and its drill-downs; companion views keep their existing local totals.
+`usage_summary` includes an additive `accountWide` field and a `localTotal`
+comparison. Summary, model, and timeline totals prefer dated workspace readings;
+`usage_threads` retains local per-session spend. `account_usage` accepts an optional
+`date` for exact daily readings. Workspace costs include Work/Codex/Chat; text tokens
+cover Work/Codex. Provider model credit groups may differ from text-model groups.
+Charts use daily bars when workspace readings are present. The Mac's rolling 24h
+range remains local because the provider feed has no hourly breakdown; choose Today
+or a longer range for workspace usage. Companion one-day reports use Today when
+workspace data is present. Provider dates are displayed as calendar date labels;
+provider readings may lag live local activity.
 
 See the [Codex CLI usage commands](https://learn.chatgpt.com/docs/developer-commands)
 and [app-server protocol](https://learn.chatgpt.com/docs/app-server).

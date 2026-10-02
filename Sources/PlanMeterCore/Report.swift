@@ -31,7 +31,7 @@ public struct ReportContext: Sendable {
 }
 
 public enum Report {
-    public static func load(days: Int, cache: ScanCache? = nil) async -> ReportContext {
+    public static func load(days: Int, cache: ScanCache? = nil, dailyDate: String? = nil) async -> ReportContext {
         let settings = T3Settings.load()
         let discovery = AccountDiscovery.discover(settings: settings)
         let rates = PricingLoader.loadCached() ?? RateTable()
@@ -46,11 +46,16 @@ public enum Report {
             accounts.append(Account.placeholder(id: id))
         }
         var context = ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
-        async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets)
+        async let daily = loadDaily(targets: discovery.codexUsageTargets, date: dailyDate)
         context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
         context.dailyUsage = await daily
         context.threadCatalog = ThreadCatalog.load(discovery: discovery)
         return context
+    }
+
+    private static func loadDaily(targets: [CodexUsageTarget], date: String?) async -> [CodexDailyUsageSnapshot] {
+        if let date { return await CodexDailyUsage.shared.loadDay(targets: targets, date: date) }
+        return await CodexDailyUsage.shared.load(targets: targets)
     }
 
     /// `[from, to)` covering the last `days` local calendar days including today.
@@ -63,7 +68,12 @@ public enum Report {
 
     public static func buckets(_ ctx: ReportContext, days: Int, resolution: Resolution = .day) -> [Bucket] {
         let w = window(days: days)
-        return Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: resolution)
+        let local = Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: effectiveResolution(ctx, requested: resolution))
+        return UsageProjection.buckets(local: local, snapshots: ctx.dailyUsage, accounts: ctx.accounts, from: w.from, to: w.to).buckets
+    }
+
+    static func effectiveResolution(_ ctx: ReportContext, requested: Resolution) -> Resolution {
+        UsageProjection.available(ctx.dailyUsage, accounts: ctx.accounts) ? .day : requested
     }
 
     // MARK: JSON-friendly reports
@@ -120,6 +130,7 @@ public enum Report {
                 let a = byAccount[m.id] ?? Aggregate()
                 for b in buckets where b.accountId == m.id { agg.add(b) }
                 var row = accountJSON(m, group: group)
+                row["usageSource"] = buckets.contains { $0.accountId == m.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with local fallback" : "Local transcripts"
                 row.merge(aggregateJSON(a)) { _, new in new }
                 rows.append(row)
             }
@@ -136,14 +147,15 @@ public enum Report {
             "timeZone": TimeZone.current.identifier,
             "groups": groups,
             "pricing": ["source": ctx.rates.source, "knownModels": ctx.rates.knownModels],
-            "note": "Costs are API-equivalent token prices from LiteLLM rates, not subscription charges.",
+            "note": "Dated workspace credits replace overlapping local estimates for unambiguous accounts/dates. Workspace costs use the provider's conversion and include Work/Codex/Chat; workspace text tokens cover Work/Codex. Other accounts and missing dates use local token prices. Provider data may lag. Sessions and cache savings cover local usage; lifetime readings never enter totals.",
         ]
         out["total"] = aggregateJSON(total)
+        out["localTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))
         out["accountWide"] = coverage(ctx, days: days)
         return out
     }
 
-    public static func coverage(_ ctx: ReportContext, days: Int) -> [String: Any] {
+    public static func coverage(_ ctx: ReportContext, days: Int, date: String? = nil) -> [String: Any] {
         let rows = UsageCoverage.reconcile(ctx.accountUsage, entries: ctx.scan.threads, rates: ctx.rates, days: days)
         var encoded = jsonObjects(rows) as? [[String: Any]] ?? []
         for index in encoded.indices {
@@ -157,7 +169,13 @@ public enum Report {
             snapshot["serviceThreads"] = threads
             encoded[index]["snapshot"] = snapshot
         }
-        let selectedDaily = ctx.dailyUsage.map { $0.selected(days: days) }
+        let selectedDaily = ctx.dailyUsage.map { snapshot -> CodexDailyUsageSnapshot in
+            guard let date else { return snapshot.selected(days: days) }
+            var selected = snapshot
+            selected.fromDay = date; selected.toDay = date
+            selected.days = snapshot.days.filter { $0.date == date }
+            return selected
+        }
         var daily = jsonObjects(selectedDaily) as? [[String: Any]] ?? []
         for index in daily.indices {
             let snapshot = selectedDaily[index]
@@ -172,7 +190,7 @@ public enum Report {
             }
             daily[index]["days"] = readings
         }
-        return ["rows": encoded, "dailyUsage": daily, "note": "dailyUsage contains dated workspace-user credits for Work, Codex, and Chat, product/model credit breakdowns, and Work/Codex text-model tokens split by speed and uncached input/cached input/output. USD estimates use the provider's credit conversion, not API token rates. Provider date labels are selected using UTC calendar dates; only the last 90 days are fetched. Missing readings remain unavailable. Daily account token comparisons, dated workspace credits, local transcript estimates, and lifetime serviceThreads have different coverage and are never added together. Thread inventory is partial; lifetime readings are never assigned to a day. tokenRateCostUsd values standard model rates, excluding speed premiums."]
+        return ["rows": encoded, "dailyUsage": daily, "note": "dailyUsage contains dated workspace-user credits for Work, Codex, and Chat, product/model credit groups, and Work/Codex text-model tokens split by speed and uncached input/cached input/output. USD estimates use the provider's conversion, not API token rates. Default history covers 90 provider date labels selected using UTC calendar dates; date queries one exact day without changing the token comparison's days window. Missing readings remain unavailable. Workspace estimates replace overlapping local account/day usage in preferred chart/report totals; local session spend remains separate. Lifetime serviceThreads and generic account tokens never enter chart totals. Thread discovery is incomplete; lifetime readings cannot be assigned to a day. tokenRateCostUsd excludes speed premiums."]
     }
 
     public static func threads(_ ctx: ReportContext, days: Int, accountFilter: String?, utc: Bool = false) -> [String: Any] {
@@ -230,6 +248,7 @@ public enum Report {
     }
 
     public static func timeline(_ ctx: ReportContext, days: Int, resolution: Resolution) -> [String: Any] {
+        let resolution = effectiveResolution(ctx, requested: resolution)
         let w = window(days: days)
         let buckets = self.buckets(ctx, days: days, resolution: resolution)
         var periods: [Date: [String: Aggregate]] = [:]

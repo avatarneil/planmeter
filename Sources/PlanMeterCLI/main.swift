@@ -8,6 +8,7 @@ var days = 30
 var json = false
 var report = "summary"
 var utc = false
+var dailyDate: String?
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let arg = args.next() {
     switch arg {
@@ -16,13 +17,23 @@ while let arg = args.next() {
     case "--account-usage": report = "coverage"
     case "--threads": report = "threads"
     case "--utc": utc = true
+    case "--date":
+        guard let date = args.next() else {
+            FileHandle.standardError.write(Data("--date requires a YYYY-MM-DD provider date\n".utf8)); exit(2)
+        }
+        dailyDate = date
     case "-h", "--help":
-        print("usage: planmeter-cli [--days N] [--json] [--account-usage | --threads [--utc]]")
+        print("usage: planmeter-cli [--days N] [--json] [--account-usage [--date YYYY-MM-DD] | --threads [--utc]]")
         exit(0)
     default:
         FileHandle.standardError.write("unknown argument \(arg)\n".data(using: .utf8)!)
         exit(2)
     }
+}
+
+if let date = dailyDate, report != "coverage" || !CodexDailyUsage.isDay(date) {
+    FileHandle.standardError.write(Data("--date requires --account-usage and a valid YYYY-MM-DD provider date\n".utf8))
+    exit(2)
 }
 
 func usd(_ v: Double) -> String { String(format: "$%.2f", v) }
@@ -36,8 +47,8 @@ func tokens(_ v: Int) -> String {
 let semaphore = DispatchSemaphore(value: 0)
 Task {
     if report != "summary" {
-        let ctx = await Report.load(days: days)
-        let payload = report == "coverage" ? Report.coverage(ctx, days: days) : Report.threads(ctx, days: days, accountFilter: nil, utc: utc)
+        let ctx = await Report.load(days: days, dailyDate: dailyDate)
+        let payload = report == "coverage" ? Report.coverage(ctx, days: days, date: dailyDate) : Report.threads(ctx, days: days, accountFilter: nil, utc: utc)
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
         print(String(decoding: data, as: UTF8.self))
         semaphore.signal()
@@ -62,7 +73,8 @@ Task {
     var ctx = ReportContext(discovery: discovery, accounts: discovery.accounts, rates: rates, scan: output, overrides: GroupOverrides.load())
     ctx.accountUsage = accountUsage
     ctx.dailyUsage = await dailyUsage
-    let buckets = Aggregation.buckets(cells: output.cells, rates: rates, from: from, to: to, resolution: .day, calendar: calendar)
+    ctx.accounts = discovery.accounts
+    let buckets = Report.buckets(ctx, days: days)
     let elapsed = Date().timeIntervalSince(started)
 
     var accounts = discovery.accounts
@@ -74,12 +86,14 @@ Task {
         var out: [String: Any] = [:]
         out["days"] = days
         out["accountWide"] = Report.coverage(ctx, days: days)
+        out["note"] = "Workspace credit readings replace overlapping local estimates; other accounts/dates use local transcripts. --threads retains local per-session spend."
         out["accounts"] = accounts.map { a -> [String: Any] in
             let agg = byAccount[a.id] ?? Aggregate()
             return [
                 "id": a.id, "name": a.displayName, "provider": a.provider.rawValue, "email": a.email ?? "",
                 "plan": a.planLabel ?? "", "group": a.suggestedGroup.rawValue, "accent": a.accentColorHex ?? "",
                 "costUsd": agg.costUsd, "tokens": agg.totals.total, "sessions": agg.sessions, "cacheSavingsUsd": agg.cacheSavingsUsd,
+                "usageSource": buckets.contains { $0.accountId == a.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with local fallback" : "Local transcripts",
             ]
         }
         out["sources"] = output.sources.map { ["provider": $0.provider.rawValue, "path": $0.path, "status": $0.status.rawValue, "parsed": $0.scannedFiles, "cached": $0.reusedFiles, "message": $0.message ?? ""] }
@@ -87,6 +101,7 @@ Task {
         print(String(decoding: data, as: UTF8.self))
     } else {
         print("PlanMeter · last \(days) days · pricing: \(rates.knownModels) models from \(rates.source)")
+        print("Dated workspace credits replace overlapping local estimates; other accounts/dates use local token prices.")
         print("scan: \(String(format: "%.1fs", elapsed)), \(output.cells.count) cells")
         print("")
         for group in PlanGroup.allCases {

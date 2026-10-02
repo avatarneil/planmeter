@@ -422,6 +422,7 @@
   // ---------- rendering ----------
   function render() {
     const s = state.summary;
+    document.querySelector('[data-days="1"]').textContent = s.usesProviderDates ? "Today" : "24h";
     const groups = $("groups");
     groups.replaceChildren();
     for (const g of s.groups) {

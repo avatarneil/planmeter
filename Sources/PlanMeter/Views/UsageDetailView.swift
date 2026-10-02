@@ -46,6 +46,7 @@ struct UsageDetailView: View {
             Text(model.title(for: scope)).font(compact ? .headline : .title2.bold())
             Text("\(model.range.rawValue) · \(accountCount) \(accountCount == 1 ? "account" : "accounts") · Estimated usage cost")
                 .font(.caption).foregroundStyle(.secondary)
+            Text(model.usageNote).font(.caption2).foregroundStyle(.secondary)
             HStack(spacing: 20) {
                 Stat(label: "Cost", value: Format.usd(total.costUsd))
                 Stat(label: "Tokens", value: Format.tokens(total.totals.total))
@@ -61,7 +62,7 @@ struct UsageDetailView: View {
                 }.sorted { $0.date < $1.date }
                 Chart(points, id: \.date) { point in
                     BarMark(
-                        x: .value("Period", point.date, unit: model.range.resolution == .hour ? .hour : .day),
+                        x: .value("Period", point.date, unit: model.chartResolution == .hour ? .hour : .day),
                         y: .value(metric.rawValue, point.value)
                     )
                     .foregroundStyle(Color.accentColor)

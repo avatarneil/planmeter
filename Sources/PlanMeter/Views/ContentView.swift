@@ -10,7 +10,7 @@ struct ContentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Local transcript usage").font(.caption).foregroundStyle(.secondary)
+                    Text(model.usageNote).font(.caption).foregroundStyle(.secondary)
                     SummaryRow()
                 }
                 UsageChartCard()

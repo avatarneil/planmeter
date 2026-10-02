@@ -10,7 +10,7 @@ struct DashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Picker("Range", selection: $model.range) {
-                    ForEach(MobileRange.allCases) { Text($0.label).tag($0) }
+                    ForEach(MobileRange.allCases) { Text($0.rawValue == 1 && model.summary?.usesProviderDates == true ? "Today" : $0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
@@ -48,7 +48,7 @@ struct DashboardView: View {
                         if let updated = model.lastUpdated {
                             Text("Updated \(Fmt.relative(updated)) · data as of \(Fmt.relative(summary.generatedAt))").font(.caption2).foregroundStyle(.tertiary)
                         }
-                        Text("API-equivalent token prices, not subscription charges.").font(.caption2).foregroundStyle(.tertiary)
+                        Text(summary.usesProviderDates == true ? "Workspace daily credits replace overlapping local estimates; other accounts use local token prices. Workspace tokens cover Work and Codex text usage." : "API-equivalent token prices, not subscription charges.").font(.caption2).foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 4)
                 } else if model.isLoading {

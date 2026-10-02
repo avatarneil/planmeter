@@ -167,6 +167,30 @@ final class CodexDailyUsageTests: XCTestCase {
         XCTAssertNil(next.fetchedAt)
     }
 
+    func testFocusedDayHasItsOwnCacheAndInvalidDatesNeverReachTheReader() async {
+        actor Reads {
+            var ranges: [String] = []
+            func read(_ target: CodexUsageTarget, from: String, to: String) -> CodexDailyUsageSnapshot {
+                ranges.append("\(from):\(to)")
+                var result = CodexDailyUsageSnapshot(target: target, fromDay: from, toDay: to)
+                result.fetchedAt = Date(); result.status = .ok
+                return result
+            }
+        }
+        let reads = Reads()
+        let loader = CodexDailyUsage { await reads.read($0, from: $1, to: $2) }
+        _ = await loader.load(targets: [target], now: now)
+        let focused = await loader.loadDay(targets: [target], date: "2026-10-01")[0]
+        XCTAssertEqual(focused.fromDay, "2026-10-01")
+        XCTAssertEqual(focused.toDay, "2026-10-01")
+        _ = await loader.loadDay(targets: [target], date: "2026-10-01")
+        let invalid = await loader.loadDay(targets: [target], date: "2026-02-31")[0]
+        XCTAssertEqual(invalid.status, .failed)
+        let ranges = await reads.ranges
+        XCTAssertEqual(ranges.count, 2)
+        XCTAssertEqual(ranges.last, "2026-10-01:2026-10-01")
+    }
+
     func testCredentialRequiresExactDiscoveredLoginAndIsNeverEncoded() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

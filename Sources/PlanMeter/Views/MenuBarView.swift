@@ -53,6 +53,7 @@ struct MenuBarView: View {
             }
 
             SpendThresholdCard()
+            Text(model.usageNote).font(.caption2).foregroundStyle(.secondary)
 
             if let detail {
                 Button { self.detail = nil } label: {

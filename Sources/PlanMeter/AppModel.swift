@@ -88,6 +88,7 @@ final class AppModel {
     var sources: [SourceReport] = []
     var rates = RateTable()
     var buckets: [Bucket] = []
+    var workspaceAccountIds: Set<String> = []
     var isScanning = false
     var lastScan: Date?
     var lastError: String?
@@ -227,6 +228,7 @@ final class AppModel {
         async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         dailyUsage = await daily
+        recompute()
     }
 
     var coverage: [UsageReconciliation] {
@@ -267,10 +269,35 @@ final class AppModel {
 
     func recompute(now: Date = Date()) {
         let window = range.window(now: now)
-        buckets = Aggregation.buckets(cells: cells, rates: rates, from: window.from, to: window.to,
-                                      resolution: range.resolution)
+        let result = projectedUsage(from: window.from, to: window.to, resolution: chartResolution, includeWorkspace: range != .day)
+        buckets = result.buckets
+        workspaceAccountIds = result.workspaceAccountIds
         publishDesktopWidget(now: now)
         Task { await cloudSync.publish(model: self) }
+    }
+
+    var hasWorkspaceUsage: Bool { UsageProjection.available(dailyUsage, accounts: accounts) }
+    var chartResolution: Resolution { range != .day && hasWorkspaceUsage ? .day : range.resolution }
+    var usageNote: String {
+        if range == .day && hasWorkspaceUsage { return "Last 24 hours uses local transcripts; workspace analytics provide calendar days. Choose Today or a longer range for workspace usage." }
+        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates. Daily readings replace overlapping local spend; provider data may lag. Sessions and cache savings cover known local usage." }
+        return "Local transcript usage · API-equivalent estimates"
+    }
+
+    func projectedUsage(from: Date, to: Date, resolution: Resolution, includeWorkspace: Bool = true) -> UsageProjection.Result {
+        let local = Aggregation.buckets(cells: cells, rates: rates, from: from, to: to, resolution: resolution)
+        return UsageProjection.buckets(local: local, snapshots: includeWorkspace ? dailyUsage : [], accounts: accounts, from: from, to: to)
+    }
+
+    func inspectWorkspaceDay(target: CodexUsageTarget, date: String) async -> CodexDailyUsageSnapshot? {
+        let snapshot = await CodexDailyUsage.shared.loadDay(targets: [target], date: date).first
+        guard !Task.isCancelled, let snapshot, snapshot.fetchedAt != nil,
+              let index = dailyUsage.firstIndex(where: { $0.target == target }), let day = snapshot.days.first else { return nil }
+        if let dayIndex = dailyUsage[index].days.firstIndex(where: { $0.date == date }) {
+            dailyUsage[index].days[dayIndex] = day
+        }
+        recompute()
+        return snapshot
     }
 
     // MARK: Accounts and groups
@@ -330,7 +357,7 @@ final class AppModel {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
-        return Aggregation.total(Aggregation.buckets(cells: cells, rates: rates, from: start, to: end, resolution: .day))
+        return Aggregation.total(projectedUsage(from: start, to: end, resolution: .day).buckets)
     }
 
     /// The selected groups' spend from the same buckets as the visible usage.
@@ -366,7 +393,7 @@ final class AppModel {
     func title(for scope: UsageScope) -> String {
         switch scope {
         case .account(let id): return account(for: id).displayName
-        case .provider(let provider): return provider.displayName
+        case .provider(let provider): return provider == .codex && !workspaceAccountIds.isEmpty ? "Codex / ChatGPT" : provider.displayName
         case .group(let group): return group.displayName
         }
     }
