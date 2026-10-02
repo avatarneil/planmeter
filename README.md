@@ -118,6 +118,19 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   configured login's own home, checks its identity, and polls every five minutes;
   Refresh also forces a new reading. An unavailable CLI or failed request leaves
   local transcript reporting available.
+- Workspace logins also read the dated workspace-user credit and token analytics
+  through the existing CLI access token. The last 90 provider dates include credits
+  by product (Work, Codex, Chat) and model, plus Work/Codex text-model usage split by
+  speed and uncached input, cached input, and output. USD estimates use the provider's
+  credit conversion for that login. Voice/image/Chat credits can have no text-token
+  counterpart; text-model totals are not a complete billing total. The date picker
+  defaults to the latest completed day and is independent of the chart range.
+  These service amounts are never added to local token-price estimates or lifetime
+  thread readings. Missing dates or unsupported routes remain unavailable, and
+  stale readings are labelled. Requests use a fixed HTTPS host, refuse redirects,
+  and keep credentials and raw error bodies out of reports and disk caches.
+  These analytics routes are used by the installed Codex app and are not a public
+  API contract; changed routes or access requirements may make readings unavailable.
 - The account-wide panel shows reported daily tokens alongside known thread tokens
   and their transcript cost. Account tokens are never added to the existing spend
   chart or priced: the feed lacks the model and input/output breakdown needed for
@@ -137,7 +150,7 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   speed premiums. The service may report zero billable usage for a dot with many
   tokens. Unsupported plans or incomplete billing routes may return no details.
   The desktop cache is a partial inventory, so this does not account for every
-  cloud chat or reconcile the daily account total to a complete cost.
+  cloud chat or attribute the dated workspace bill to individual threads.
 - Distinct configured Codex logins on the same plan retain separate account-wide
   readings, but their shared transcript attribution cannot be reconciled to one login.
   Historical switches between same-plan logins are also indistinguishable locally.
@@ -146,7 +159,8 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   add chat names and T3 chat IDs when available; matching titles never merge sessions.
   Open chat links target the Codex app's thread IDs. This is not a complete dots task inventory.
 
-Use `planmeter-cli --days 7 --account-usage` for the separate comparison or
+Use `planmeter-cli --days 7 --account-usage` for the separate comparison and dated
+workspace credits/model I/O (`dailyUsage`), or
 `planmeter-cli --days 7 --threads --utc` for known sessions and spend in matching UTC
 days (both emit JSON; omit `--utc` for local calendar days).
 The MCP tools `account_usage` and `usage_threads` expose the same data, and

@@ -9,7 +9,7 @@ struct AccountCoverageCard: View {
         let ids = scope.map { Set(model.accounts(in: $0).map(\.id)) }
         let rows = model.coverage.filter { ids == nil || $0.snapshot.target.localAccountId.map { ids!.contains($0) } == true }
         if !rows.isEmpty {
-            Card(title: "Account-wide Codex usage") {
+            Card(title: "Codex and workspace usage") {
                 Text("Latest \(model.range.dayCount) calendar \(model.range.dayCount == 1 ? "day" : "days") · API dates compared with UTC transcript days")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(rows, id: \.snapshot.id) { row in
@@ -22,6 +22,11 @@ struct AccountCoverageCard: View {
                                 Text("Fetched \(Format.relative(fetched))").font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        if let daily = model.dailyUsage.first(where: { $0.id == row.snapshot.id }) {
+                            CodexDailyUsageView(snapshot: daily)
+                            Divider()
+                        }
+                        Text("Codex token comparison").font(.caption.bold())
                         Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
                             GridRow {
                                 Stat(label: row.missingDays.isEmpty ? "Account tokens" : "Reported account tokens", value: row.accountTokens.map(Format.tokens) ?? "Unavailable")
@@ -56,13 +61,115 @@ struct AccountCoverageCard: View {
                     }
                     Divider()
                 }
-                Text("Daily account cost is unavailable because daily totals lack a model breakdown. Detailed cloud and billed thread readings show lifetime usage and cost separately. Known thread cost covers matched local transcripts in the comparison dates.")
+                Text("Workspace USD estimates use the provider's credit conversion. The Codex token comparison uses a separate account feed; those tokens cannot be priced without model details. Known thread cost covers matched local transcripts in the comparison dates.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Account totals are separate from the spend chart. The difference may include other devices, cloud activity, or reporting delays. Thread readings are never added to daily transcript spend.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
     }
+}
+
+struct CodexDailyUsageView: View {
+    @Environment(AppModel.self) private var model
+    var snapshot: CodexDailyUsageSnapshot
+    @State private var selectedDate: String?
+    @State private var expanded = true
+
+    private var date: String? {
+        if let selectedDate, snapshot.days.contains(where: { $0.date == selectedDate }) { return selectedDate }
+        let today = snapshot.selected(days: 1).fromDay
+        return snapshot.days.last(where: { $0.date < today && $0.products != nil })?.date ?? snapshot.days.last?.date
+    }
+
+    var body: some View {
+        if snapshot.fetchedAt == nil {
+            Text(snapshot.message ?? "Dated workspace analytics unavailable.").font(.caption).foregroundStyle(.secondary)
+        } else {
+            let selected = snapshot.selected(days: model.range.dayCount)
+            DisclosureGroup("Dated workspace usage — Work, Codex, Chat", isExpanded: $expanded) {
+                HStack(spacing: 24) {
+                    Stat(label: "Reported range credits", value: selected.credits.map(credits) ?? "Unavailable")
+                    Stat(label: "Range service estimate", value: selected.estimatedCostUsd.map(Format.usd) ?? "Unavailable")
+                    Spacer()
+                }
+                Text("\(selected.fromDay) through \(selected.toDay) · Provider calendar dates · \(selected.missingCreditDays.count) dates without credit readings")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let day = snapshot.days.first(where: { $0.date == date }) {
+                    HStack {
+                        Picker("Inspect day", selection: Binding(get: { date ?? "" }, set: { selectedDate = $0 })) {
+                            ForEach(snapshot.days.reversed()) { day in Text(day.date).tag(day.date) }
+                        }
+                        .frame(maxWidth: 280)
+                        Spacer()
+                        Text(day.credits.map { "\(credits($0)) credits" } ?? "Credits unavailable").monospacedDigit()
+                        Text(day.credits.flatMap { snapshot.estimatedCost(credits: $0) }.map { "Est. \(Format.usd($0))" } ?? "USD unavailable")
+                            .font(.headline).monospacedDigit()
+                    }
+                    if let products = day.products {
+                        HStack(spacing: 24) {
+                            ForEach(products) { product in
+                                Stat(label: product.label, value: "\(credits(product.credits)) cr · \(snapshot.estimatedCost(credits: product.credits).map(Format.usd) ?? "USD unavailable")")
+                            }
+                            Spacer()
+                        }
+                    }
+                    if let tokens = day.textModels {
+                        let active = tokens.filter { $0.totalTokens > 0 || $0.credits > 0 }.sorted { $0.credits > $1.credits }
+                        Text("Work and Codex text tokens — \(day.date)").font(.caption.bold())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ScrollView(.horizontal) {
+                            Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 6) {
+                                GridRow {
+                                    Text("Model / speed")
+                                    Text("Uncached input")
+                                    Text("Cached input")
+                                    Text("Output")
+                                    Text("Credits")
+                                }.font(.caption.bold())
+                                ForEach(active) { item in
+                                    GridRow {
+                                        Text("\(item.model) · \(item.speed)")
+                                        Text(item.uncachedInputTokens.formatted())
+                                        Text(item.cachedInputTokens.formatted())
+                                        Text(item.outputTokens.formatted())
+                                        Text(credits(item.credits))
+                                    }.font(.caption).monospacedDigit()
+                                }
+                            }.textSelection(.enabled)
+                        }
+                        if active.isEmpty { Text("No text-model usage reported.").font(.caption).foregroundStyle(.secondary) }
+                    } else {
+                        Text("Text-model I/O unavailable for this day.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let models = day.modelCredits {
+                        let active = models.filter { $0.credits > 0 }.sorted { $0.credits > $1.credits }
+                        DisclosureGroup("All model credits, including voice and image (\(active.count))") {
+                            ForEach(active) { item in
+                                HStack {
+                                    Text(item.label)
+                                    Spacer()
+                                    Text("\(credits(item.credits)) credits")
+                                    Text(snapshot.estimatedCost(credits: item.credits).map(Format.usd) ?? "USD unavailable")
+                                }.font(.caption).monospacedDigit()
+                            }
+                        }
+                    }
+                }
+                Text("Daily credit totals include all three products. The text-token feed covers Work and Codex; voice, image, and Chat can add credits without text-token counts. These readings are separate from local API-equivalent spend and lifetime thread totals.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let freshness = snapshot.dataFreshness {
+                    Text("Provider data through \(freshness)").font(.caption2).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let message = snapshot.message { Text(message).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+    }
+
+    private func credits(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...3))) }
 }
 
 struct CodexServiceThreadsView: View {

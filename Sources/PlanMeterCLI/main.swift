@@ -57,9 +57,11 @@ Task {
 
     let started = Date()
     let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
+    async let dailyUsage = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets)
     let accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
     var ctx = ReportContext(discovery: discovery, accounts: discovery.accounts, rates: rates, scan: output, overrides: GroupOverrides.load())
     ctx.accountUsage = accountUsage
+    ctx.dailyUsage = await dailyUsage
     let buckets = Aggregation.buckets(cells: output.cells, rates: rates, from: from, to: to, resolution: .day, calendar: calendar)
     let elapsed = Date().timeIntervalSince(started)
 
@@ -111,7 +113,11 @@ Task {
             print("  \(row.snapshot.target.name): \(row.accountTokens.map(tokens) ?? "unavailable") reported tokens; \(row.knownThreadTokens.map(tokens) ?? "ambiguous") known thread tokens; difference \(row.differenceTokens.map(String.init) ?? "unavailable"); \(row.snapshot.status.rawValue)")
             if let message = row.snapshot.message { print("    \(message)") }
         }
-        print("  Account totals are never added to local totals or priced. Dots coverage is unverified.")
+        print("  Daily account tokens are never added to local totals or priced.")
+        for snapshot in ctx.dailyUsage.map({ $0.selected(days: days) }) {
+            print("  \(snapshot.target.name) workspace-user credits: \(snapshot.credits.map { String(format: "%.3f", $0) } ?? "unavailable"); service estimate \(snapshot.estimatedCostUsd.map(usd) ?? "unavailable"); \(snapshot.status.rawValue)")
+            print("    Work, Codex, and Chat credits; \(snapshot.missingCreditDays.count) dates unavailable. Dated model I/O: --account-usage.")
+        }
         print("")
         print("SOURCES")
         for s in output.sources {

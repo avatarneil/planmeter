@@ -9,7 +9,10 @@ struct ContentView: View {
         @Bindable var model = model
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                SummaryRow()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Local transcript usage").font(.caption).foregroundStyle(.secondary)
+                    SummaryRow()
+                }
                 UsageChartCard()
                 AccountCoverageCard()
                 Card(title: "Known threads and chats") { ThreadSpendList(rows: model.threads()) }

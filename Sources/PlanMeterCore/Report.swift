@@ -10,6 +10,7 @@ public struct ReportContext: Sendable {
     public var scan: ScanOutput
     public var overrides: [String: PlanGroup]
     public var accountUsage: [AccountUsageSnapshot] = []
+    public var dailyUsage: [CodexDailyUsageSnapshot] = []
     public var threadCatalog: [String: ThreadLink] = [:]
 
     public init(discovery: Discovery, accounts: [Account], rates: RateTable, scan: ScanOutput, overrides: [String: PlanGroup]) {
@@ -45,7 +46,9 @@ public enum Report {
             accounts.append(Account.placeholder(id: id))
         }
         var context = ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
+        async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets)
         context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
+        context.dailyUsage = await daily
         context.threadCatalog = ThreadCatalog.load(discovery: discovery)
         return context
     }
@@ -154,7 +157,22 @@ public enum Report {
             snapshot["serviceThreads"] = threads
             encoded[index]["snapshot"] = snapshot
         }
-        return ["rows": encoded, "note": "Daily account tokens are a separate UTC comparison, never added to transcript totals or priced. Missing daily buckets are unavailable, not zero. serviceThreads contain lifetime model/token/credit breakdowns and optional service USD estimates for known cloud dots, tasks, and billed local threads. tokenRateCostUsd values standard model token rates, excluding speed premiums. Cached thread discovery is incomplete; lifetime readings are never assigned to a day or added to transcript spend."]
+        let selectedDaily = ctx.dailyUsage.map { $0.selected(days: days) }
+        var daily = jsonObjects(selectedDaily) as? [[String: Any]] ?? []
+        for index in daily.indices {
+            let snapshot = selectedDaily[index]
+            daily[index]["credits"] = snapshot.credits
+            daily[index]["estimatedCostUsd"] = snapshot.estimatedCostUsd
+            daily[index]["missingCreditDays"] = snapshot.missingCreditDays
+            var readings = daily[index]["days"] as? [[String: Any]] ?? []
+            for dayIndex in readings.indices {
+                let day = snapshot.days[dayIndex]
+                readings[dayIndex]["credits"] = day.credits
+                readings[dayIndex]["estimatedCostUsd"] = day.credits.flatMap { snapshot.estimatedCost(credits: $0) }
+            }
+            daily[index]["days"] = readings
+        }
+        return ["rows": encoded, "dailyUsage": daily, "note": "dailyUsage contains dated workspace-user credits for Work, Codex, and Chat, product/model credit breakdowns, and Work/Codex text-model tokens split by speed and uncached input/cached input/output. USD estimates use the provider's credit conversion, not API token rates. Provider date labels are selected using UTC calendar dates; only the last 90 days are fetched. Missing readings remain unavailable. Daily account token comparisons, dated workspace credits, local transcript estimates, and lifetime serviceThreads have different coverage and are never added together. Thread inventory is partial; lifetime readings are never assigned to a day. tokenRateCostUsd values standard model rates, excluding speed premiums."]
     }
 
     public static func threads(_ ctx: ReportContext, days: Int, accountFilter: String?, utc: Bool = false) -> [String: Any] {

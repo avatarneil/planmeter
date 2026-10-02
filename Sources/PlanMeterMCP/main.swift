@@ -22,7 +22,7 @@ let daysProperty: [String: Any] = [
 ]
 
 let tools: [Tool] = [
-    Tool(name: "account_usage", description: "Daily Codex account tokens compared with UTC transcripts, plus lifetime model/token/credit/USD breakdowns for known cloud dots, tasks, and billed threads. Thread inventory is partial; lifetime usage never enters daily spend.",
+    Tool(name: "account_usage", description: "Dated workspace-user credits and service USD estimates by product/model, with Work/Codex model/speed/input/cached/output tokens (last 90 dates). Also Codex account token comparisons and lifetime cloud dot/task usage. These scopes are separate; never add their spend together.",
          schema: ["type": "object", "properties": ["days": daysProperty], "additionalProperties": false]),
     Tool(name: "usage_threads", description: "Known threads/chats across providers with exact provider session IDs, source paths, account attribution, tokens and transcript spend. Optional account/name/provider filter.",
          schema: ["type": "object", "properties": ["days": daysProperty, "account": ["type": "string"], "utc": ["type": "boolean", "description": "Use UTC days to match account_usage comparisons."]], "additionalProperties": false]),
@@ -150,7 +150,7 @@ func handle(_ message: [String: Any]) async {
             "protocolVersion": version,
             "capabilities": ["tools": ["listChanged": false]],
             "serverInfo": ["name": "planmeter", "version": serverVersion],
-            "instructions": "Start with usage_summary for local transcript spend and separate account-wide coverage. account_usage also exposes serviceThreads: lifetime model/token breakdowns for known cloud dots, tasks, and billed local threads. serviceCostUsd is the service's billing estimate; tokenRateCostUsd values standard model rates without speed premiums. Lifetime readings never enter daily spend. usage_threads links local sessions to spend. Never add account-wide tokens to local tokens or price an unmatched difference. Main chart costs are API-equivalent estimates.",
+            "instructions": "Start with usage_summary for local transcript spend and separate account-wide coverage. account_usage.dailyUsage reports workspace-user daily credits and USD estimates using the provider's conversion, product/model credits, and Work/Codex model/speed/uncached-input/cached-input/output tokens. Voice/image/Chat credits can lack text tokens. Only the last 90 provider dates are fetched; missing readings are unavailable, not zero. serviceThreads contains lifetime cloud dot/task/local thread usage. serviceCostUsd is a billing estimate; tokenRateCostUsd values standard model rates without speed premiums. Never add daily workspace amounts, local estimates, account-token comparisons, or lifetime readings together. usage_threads links local sessions to spend. Never price an unmatched token difference. Main chart costs are API-equivalent estimates.",
         ])
     case "notifications/initialized", "notifications/cancelled", "notifications/roots/list_changed":
         return

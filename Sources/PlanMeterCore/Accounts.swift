@@ -224,6 +224,10 @@ public struct CodexIdentity: Sendable {
     public static func read(homePath: String) -> CodexIdentity {
         let url = URL(fileURLWithPath: "\(homePath)/auth.json")
         guard let data = try? Data(contentsOf: url), let root = JSON.object(data) else { return CodexIdentity() }
+        return decode(root)
+    }
+
+    static func decode(_ root: [String: Any]) -> CodexIdentity {
         let authMode = JSON.string(root["auth_mode"])
         guard let tokens = JSON.object(root["tokens"]) else {
             if authMode == "apikey" || JSON.string(root["OPENAI_API_KEY"]) != nil {

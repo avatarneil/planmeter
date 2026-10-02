@@ -82,6 +82,7 @@ final class AppModel {
     var cells: [CellKey: Cell] = [:]
     var threadCells: [ThreadCellEntry] = []
     var accountUsage: [AccountUsageSnapshot] = []
+    var dailyUsage: [CodexDailyUsageSnapshot] = []
     var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
     var sources: [SourceReport] = []
@@ -204,6 +205,14 @@ final class AppModel {
             snapshot.target = target
             return snapshot
         }
+        dailyUsage = dailyUsage.compactMap { snapshot in
+            guard let target = discovery.codexUsageTargets.first(where: {
+                $0.id == snapshot.target.id && $0.home == snapshot.target.home && $0.plan == snapshot.target.plan
+            }) else { return nil }
+            var snapshot = snapshot
+            snapshot.target = target
+            return snapshot
+        }
         // Scan far enough back for the widest range, plus a day of slack for
         // time zones and files that were touched after their sessions ended.
         let sinceMs = Int64((Date().timeIntervalSince1970 - TimeInterval(TimeRange.quarter.dayCount + 1) * 86_400) * 1000)
@@ -215,7 +224,9 @@ final class AppModel {
         sources = output.sources
         lastScan = output.scannedAt
         recompute()
+        async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+        dailyUsage = await daily
     }
 
     var coverage: [UsageReconciliation] {
