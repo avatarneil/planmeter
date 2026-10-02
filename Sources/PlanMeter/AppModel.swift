@@ -308,14 +308,12 @@ final class AppModel {
         return UsageProjection.buckets(local: local, snapshots: includeWorkspace ? dailyUsage : [], accounts: accounts, from: from, to: to)
     }
 
-    func inspectWorkspaceDay(target: CodexUsageTarget, date: String) async -> CodexDailyUsageSnapshot? {
-        let snapshot = await CodexDailyUsage.shared.loadDay(targets: [target], date: date).first
+    func inspectWorkspaceDay(target: CodexUsageTarget, date: String, usage: CodexDailyUsage = .shared) async -> CodexDailyUsageSnapshot? {
+        let snapshot = await usage.loadDay(targets: [target], date: date).first
         guard !Task.isCancelled, let snapshot, snapshot.fetchedAt != nil,
-              let index = dailyUsage.firstIndex(where: { $0.target == target }), let day = snapshot.days.first else { return nil }
-        if let dayIndex = dailyUsage[index].days.firstIndex(where: { $0.date == date }) {
-            dailyUsage[index].days[dayIndex] = day
-        }
-        recompute()
+              dailyUsage.contains(where: { $0.target == target }), snapshot.days.contains(where: { $0.date == date }) else { return nil }
+        // Focused readings keep their own conversion, freshness, and partial
+        // status. Only a range refresh replaces shared dashboard analytics.
         return snapshot
     }
 
