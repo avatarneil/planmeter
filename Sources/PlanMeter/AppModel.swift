@@ -80,6 +80,9 @@ final class AppModel {
     var metric: Metric = .cost
     var discovery = Discovery()
     var cells: [CellKey: Cell] = [:]
+    var threadCells: [ThreadCellEntry] = []
+    var accountUsage: [AccountUsageSnapshot] = []
+    var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
     var sources: [SourceReport] = []
     var rates = RateTable()
@@ -186,22 +189,51 @@ final class AppModel {
         }
     }
 
-    func refresh() async {
+    func refresh(forceAccountUsage: Bool = false) async {
         if isScanning { return }
         isScanning = true
+        defer { isScanning = false }
         lastError = nil
         let settings = T3Settings.load()
         discovery = AccountDiscovery.discover(settings: settings)
+        accountUsage = accountUsage.compactMap { snapshot in
+            guard let target = discovery.codexUsageTargets.first(where: {
+                $0.id == snapshot.target.id && $0.home == snapshot.target.home && $0.plan == snapshot.target.plan
+            }) else { return nil }
+            var snapshot = snapshot
+            snapshot.target = target
+            return snapshot
+        }
         // Scan far enough back for the widest range, plus a day of slack for
         // time zones and files that were touched after their sessions ended.
         let sinceMs = Int64((Date().timeIntervalSince1970 - TimeInterval(TimeRange.quarter.dayCount + 1) * 86_400) * 1000)
         let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
         cells = output.cells
+        threadCells = output.threads
+        threadCatalog = ThreadCatalog.load(discovery: discovery)
         rateLimits = output.rateLimits
         sources = output.sources
         lastScan = output.scannedAt
-        isScanning = false
         recompute()
+        accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+    }
+
+    var coverage: [UsageReconciliation] {
+        UsageCoverage.reconcile(accountUsage, entries: threadCells, rates: rates, days: range.dayCount)
+    }
+
+    func coverageThreads(accountId: String) -> [ThreadSpend] {
+        let window = Report.window(days: range.dayCount, calendar: UsageCoverage.utcCalendar)
+        return ThreadCatalog.link(UsageCoverage.threads(threadCells, rates: rates, from: window.from, to: window.to), catalog: threadCatalog)
+            .filter { $0.accountId == accountId }
+    }
+
+    func threads(in scope: UsageScope? = nil) -> [ThreadSpend] {
+        let window = range.window()
+        let ids = scope.map { Set(accounts(in: $0).map(\.id)) }
+        return ThreadCatalog.link(UsageCoverage.threads(threadCells, rates: rates, from: window.from, to: window.to), catalog: threadCatalog).filter {
+            ids == nil || ids!.contains($0.accountId)
+        }
     }
 
     func refreshPricing() async {

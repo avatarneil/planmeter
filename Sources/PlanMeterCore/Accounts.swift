@@ -32,6 +32,7 @@ public struct Discovery: Sendable {
     public var openCodeDatabase: String?
     public var unsupported: [UnsupportedInstance]
     public var notes: [String]
+    public var codexUsageTargets: [CodexUsageTarget] = []
 
     public init(accounts: [Account] = [], sources: [ScanSource] = [], openCodeDatabase: String? = nil, unsupported: [UnsupportedInstance] = [], notes: [String] = []) {
         self.accounts = accounts
@@ -72,13 +73,21 @@ public enum AccountDiscovery {
             // instance look like the account that launched PlanMeter.
             let environmentHome = !usesT3Configuration ? environment["CODEX_HOME"].flatMap(nonEmptyPath) : nil
             let shared = instance.homePath.map(PathUtil.expand) ?? environmentHome ?? "\(home)/.codex"
-            let effective = instance.shadowHomePath.map(PathUtil.expand) ?? shared
-            if !codexSharedHomes.contains(shared) { codexSharedHomes.append(shared) }
+            let effective = URL(fileURLWithPath: instance.shadowHomePath.map(PathUtil.expand) ?? shared).standardizedFileURL.path
+            let transcriptHome = URL(fileURLWithPath: shared).resolvingSymlinksInPath().path
+            if !codexSharedHomes.contains(transcriptHome) { codexSharedHomes.append(transcriptHome) }
 
             let identity = CodexIdentity.read(homePath: effective)
             let plan = identity.planType ?? "unknown"
             let id = Account.codexId(planType: plan)
             let name = instance.displayName ?? (instance.isDefaultForDriver ? "Codex" : instance.id)
+            if let email = identity.email, let serviceId = identity.accountId, plan != "api", plan != "unknown" {
+                let targetId = "\(serviceId):\(email.lowercased())"
+                if !result.codexUsageTargets.contains(where: { $0.id == targetId }) {
+                    result.codexUsageTargets.append(CodexUsageTarget(id: targetId, name: name, home: effective,
+                        email: email, plan: plan, serviceAccountId: serviceId, localAccountId: id))
+                }
+            }
             if var existing = codexAccountsByPlan[id] {
                 // Two logins on the same plan type cannot be told apart in the
                 // transcripts, so they share one account.
@@ -101,6 +110,10 @@ public enum AccountDiscovery {
             }
         }
         result.accounts.append(contentsOf: codexAccountsByPlan.values.sorted { $0.displayName < $1.displayName })
+        let ambiguousPlans = Dictionary(grouping: result.codexUsageTargets, by: \.plan).filter { $0.value.count > 1 }.keys
+        for index in result.codexUsageTargets.indices where ambiguousPlans.contains(result.codexUsageTargets[index].plan) {
+            result.codexUsageTargets[index].localAccountId = nil
+        }
         for shared in codexSharedHomes {
             result.sources.append(ScanSource(provider: .codex, rootDir: "\(shared)/sessions"))
             result.sources.append(ScanSource(provider: .codex, rootDir: "\(shared)/archived_sessions"))

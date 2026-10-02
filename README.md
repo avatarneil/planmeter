@@ -110,6 +110,39 @@ suppression, per-content-block dedup for Claude, Grok cost pro-rating), so total
 page where the inputs overlap. Pricing uses LiteLLM's `model_prices_and_context_window.json`, read
 from T3 Code's cached copy when present and fetched directly otherwise.
 
+## Account-wide usage
+
+- Account-wide Codex usage requires a signed-in ChatGPT account and a Codex CLI that
+  supports `account/usage/read` (verified with 0.160.0). PlanMeter finds the CLI on
+  PATH, common installation paths, or inside the ChatGPT/Codex Mac app. It uses each
+  configured login's own home, checks its identity, and polls every five minutes;
+  Refresh also forces a new reading. An unavailable CLI or failed request leaves
+  local transcript reporting available.
+- The account-wide panel shows reported daily tokens alongside known thread tokens
+  and their transcript cost. Account tokens are never added to the existing spend
+  chart or priced. API date labels are compared with UTC transcript days, independently
+  of the chart's local or rolling range. Missing days suppress the difference rather
+  than becoming zero. Negative differences remain visible; reporting scope and delays
+  may differ. Dots coverage has not been verified.
+- Distinct configured Codex logins on the same plan retain separate account-wide
+  readings, but their shared transcript attribution cannot be reconciled to one login.
+  Historical switches between same-plan logins are also indistinguishable locally.
+- Known threads across Codex, Claude Code, Grok Build, and OpenCode retain their
+  provider session IDs and spend. Codex titles and explicit T3 provider/session mappings
+  add chat names and T3 chat IDs when available; matching titles never merge sessions.
+  Open chat links target local Codex sessions. This is not a complete dots task inventory.
+
+Use `planmeter-cli --days 7 --account-usage` for the separate comparison or
+`planmeter-cli --days 7 --threads --utc` for known sessions and spend in matching UTC
+days (both emit JSON; omit `--utc` for local calendar days).
+The MCP tools `account_usage` and `usage_threads` expose the same data, and
+`usage_summary` includes an additive `accountWide` field. Existing token and cost
+fields continue to describe local transcripts. The new views are available on
+the Mac dashboard and its drill-downs; companion views keep their existing local totals.
+
+See the [Codex CLI usage commands](https://learn.chatgpt.com/docs/developer-commands)
+and [app-server protocol](https://learn.chatgpt.com/docs/app-server).
+
 ## Limitations
 
 - Two Codex logins on the same plan type (for example two Business seats) cannot be told apart in

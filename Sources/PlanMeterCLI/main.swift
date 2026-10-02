@@ -6,13 +6,18 @@ import PlanMeterCore
 
 var days = 30
 var json = false
+var report = "summary"
+var utc = false
 var args = CommandLine.arguments.dropFirst().makeIterator()
 while let arg = args.next() {
     switch arg {
     case "--days": days = Int(args.next() ?? "") ?? days
     case "--json": json = true
+    case "--account-usage": report = "coverage"
+    case "--threads": report = "threads"
+    case "--utc": utc = true
     case "-h", "--help":
-        print("usage: planmeter-cli [--days N] [--json]")
+        print("usage: planmeter-cli [--days N] [--json] [--account-usage | --threads [--utc]]")
         exit(0)
     default:
         FileHandle.standardError.write("unknown argument \(arg)\n".data(using: .utf8)!)
@@ -30,6 +35,14 @@ func tokens(_ v: Int) -> String {
 
 let semaphore = DispatchSemaphore(value: 0)
 Task {
+    if report != "summary" {
+        let ctx = await Report.load(days: days)
+        let payload = report == "coverage" ? Report.coverage(ctx, days: days) : Report.threads(ctx, days: days, accountFilter: nil, utc: utc)
+        let data = try! JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+        print(String(decoding: data, as: UTF8.self))
+        semaphore.signal()
+        return
+    }
     let settings = T3Settings.load()
     let discovery = AccountDiscovery.discover(settings: settings)
     let rates = PricingLoader.loadCached() ?? RateTable()
@@ -44,6 +57,9 @@ Task {
 
     let started = Date()
     let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
+    let accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
+    var ctx = ReportContext(discovery: discovery, accounts: discovery.accounts, rates: rates, scan: output, overrides: GroupOverrides.load())
+    ctx.accountUsage = accountUsage
     let buckets = Aggregation.buckets(cells: output.cells, rates: rates, from: from, to: to, resolution: .day, calendar: calendar)
     let elapsed = Date().timeIntervalSince(started)
 
@@ -55,6 +71,7 @@ Task {
     if json {
         var out: [String: Any] = [:]
         out["days"] = days
+        out["accountWide"] = Report.coverage(ctx, days: days)
         out["accounts"] = accounts.map { a -> [String: Any] in
             let agg = byAccount[a.id] ?? Aggregate()
             return [
@@ -88,6 +105,13 @@ Task {
             let priced = rates.lookup(model) == nil ? "  (unpriced)" : ""
             print(String(format: "  %-40@ %10@  %8@ tok%@", model as NSString, usd(agg.costUsd) as NSString, tokens(agg.totals.total) as NSString, priced as NSString))
         }
+        print("")
+        print("ACCOUNT-WIDE CODEX (separate from transcript spend; UTC days)")
+        for row in UsageCoverage.reconcile(accountUsage, entries: output.threads, rates: rates, days: days) {
+            print("  \(row.snapshot.target.name): \(row.accountTokens.map(tokens) ?? "unavailable") reported tokens; \(row.knownThreadTokens.map(tokens) ?? "ambiguous") known thread tokens; difference \(row.differenceTokens.map(String.init) ?? "unavailable"); \(row.snapshot.status.rawValue)")
+            if let message = row.snapshot.message { print("    \(message)") }
+        }
+        print("  Account totals are never added to local totals or priced. Dots coverage is unverified.")
         print("")
         print("SOURCES")
         for s in output.sources {

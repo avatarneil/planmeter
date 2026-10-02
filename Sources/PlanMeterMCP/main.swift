@@ -22,6 +22,10 @@ let daysProperty: [String: Any] = [
 ]
 
 let tools: [Tool] = [
+    Tool(name: "account_usage", description: "Account-wide Codex daily token readings compared with known thread spend, using UTC transcript days. Separate from local totals; differences are unpriced and dots coverage unverified.",
+         schema: ["type": "object", "properties": ["days": daysProperty], "additionalProperties": false]),
+    Tool(name: "usage_threads", description: "Known threads/chats across providers with exact provider session IDs, source paths, account attribution, tokens and transcript spend. Optional account/name/provider filter.",
+         schema: ["type": "object", "properties": ["days": daysProperty, "account": ["type": "string"], "utc": ["type": "boolean", "description": "Use UTC days to match account_usage comparisons."]], "additionalProperties": false]),
     Tool(
         name: "usage_summary",
         description: "Usage and API-equivalent cost split by plan group (personal, work, other) and by account, across Codex, Claude Code, Grok Build and OpenCode. Use this first for any 'how much have I spent / used' question.",
@@ -97,6 +101,10 @@ func intArg(_ args: [String: Any], _ key: String, default def: Int, range: Close
 func callTool(name: String, arguments: [String: Any]) async -> [String: Any] {
     if !cacheLoaded { await cache.load(); cacheLoaded = true }
     switch name {
+    case "account_usage", "usage_threads":
+        let days = intArg(arguments, "days", default: 30, range: 1...365)
+        let ctx = await Report.load(days: days, cache: cache)
+        return textResult(name == "account_usage" ? Report.coverage(ctx, days: days) : Report.threads(ctx, days: days, accountFilter: arguments["account"] as? String, utc: arguments["utc"] as? Bool ?? false))
     case "usage_summary":
         let days = intArg(arguments, "days", default: 30, range: 1...365)
         let ctx = await Report.load(days: days, cache: cache)
@@ -142,7 +150,7 @@ func handle(_ message: [String: Any]) async {
             "protocolVersion": version,
             "capabilities": ["tools": ["listChanged": false]],
             "serverInfo": ["name": "planmeter", "version": serverVersion],
-            "instructions": "PlanMeter reports local AI coding-agent usage split by personal vs work subscription. Start with usage_summary; drill into usage_by_model or usage_timeline; codex_limits shows remaining Codex quota. Costs are API-equivalent estimates, not subscription charges.",
+            "instructions": "Start with usage_summary for local transcript spend and separate account-wide coverage. account_usage reconciles daily Codex totals; usage_threads links known sessions to spend. Never add account-wide tokens to local tokens or price an unmatched difference. Costs are API-equivalent estimates, not subscription charges.",
         ])
     case "notifications/initialized", "notifications/cancelled", "notifications/roots/list_changed":
         return

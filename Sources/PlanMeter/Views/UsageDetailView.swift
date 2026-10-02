@@ -97,5 +97,10 @@ struct UsageDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        if !compact {
+            AccountCoverageCard(scope: scope)
+            Text("Known threads and chats").font(.headline)
+            ThreadSpendList(rows: model.threads(in: scope))
+        }
     }
 }

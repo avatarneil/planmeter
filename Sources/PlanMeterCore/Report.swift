@@ -9,6 +9,16 @@ public struct ReportContext: Sendable {
     public var rates: RateTable
     public var scan: ScanOutput
     public var overrides: [String: PlanGroup]
+    public var accountUsage: [AccountUsageSnapshot] = []
+    public var threadCatalog: [String: ThreadLink] = [:]
+
+    public init(discovery: Discovery, accounts: [Account], rates: RateTable, scan: ScanOutput, overrides: [String: PlanGroup]) {
+        self.discovery = discovery
+        self.accounts = accounts
+        self.rates = rates
+        self.scan = scan
+        self.overrides = overrides
+    }
 
     public func group(for account: Account) -> PlanGroup {
         GroupOverrides.group(for: account, overrides: overrides)
@@ -34,7 +44,10 @@ public enum Report {
         for id in Set(scan.cells.keys.map(\.accountId)).subtracting(known).sorted() {
             accounts.append(Account.placeholder(id: id))
         }
-        return ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
+        var context = ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
+        context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
+        context.threadCatalog = ThreadCatalog.load(discovery: discovery)
+        return context
     }
 
     /// `[from, to)` covering the last `days` local calendar days including today.
@@ -123,7 +136,31 @@ public enum Report {
             "note": "Costs are API-equivalent token prices from LiteLLM rates, not subscription charges.",
         ]
         out["total"] = aggregateJSON(total)
+        out["accountWide"] = coverage(ctx, days: days)
         return out
+    }
+
+    public static func coverage(_ ctx: ReportContext, days: Int) -> [String: Any] {
+        let rows = UsageCoverage.reconcile(ctx.accountUsage, entries: ctx.scan.threads, rates: ctx.rates, days: days)
+        return ["rows": jsonObjects(rows), "note": "Account-wide tokens are a separate comparison, never added to transcript totals or priced. API date labels are compared to UTC transcript days; reporting scope and delay may differ. Missing daily buckets are unavailable, not zero. Dots coverage is not verified."]
+    }
+
+    public static func threads(_ ctx: ReportContext, days: Int, accountFilter: String?, utc: Bool = false) -> [String: Any] {
+        let calendar = utc ? UsageCoverage.utcCalendar : Calendar.current
+        let window = window(days: days, calendar: calendar)
+        let filter = accountFilter?.lowercased()
+        let rows = ThreadCatalog.link(UsageCoverage.threads(ctx.scan.threads, rates: ctx.rates, from: window.from, to: window.to), catalog: ctx.threadCatalog).filter {
+            let account = ctx.account(for: $0.accountId)
+            return filter == nil || account.id.lowercased().contains(filter!) || account.displayName.lowercased().contains(filter!) || account.provider.rawValue == filter
+        }
+        return ["rows": jsonObjects(rows), "days": days, "timeZone": calendar.timeZone.identifier, "note": "Known provider session IDs and their transcript spend. Costs are API-equivalent estimates unless provider-reported. No match is inferred from a chat title."]
+    }
+
+    static func jsonObjects<T: Encodable>(_ value: T) -> Any {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(value), let json = try? JSONSerialization.jsonObject(with: data) else { return [] }
+        return json
     }
 
     public static func models(_ ctx: ReportContext, days: Int, accountFilter: String?) -> [String: Any] {

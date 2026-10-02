@@ -25,7 +25,7 @@ struct PlanMeterApp: App {
                     .disabled(!updates.canCheckForUpdates)
             }
             CommandGroup(after: .toolbar) {
-                Button("Refresh") { Task { await model.refresh() } }
+                Button("Refresh") { Task { await model.refresh(forceAccountUsage: true) } }
                     .keyboardShortcut("r", modifiers: .command)
                 Button("Refresh Pricing") { Task { await model.refreshPricing() } }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
