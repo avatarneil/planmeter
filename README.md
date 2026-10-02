@@ -38,8 +38,9 @@ required only for remote access:
 - The web client additionally needs MagicDNS and HTTPS certificates enabled for the tailnet so
   `tailscale serve` can provide a secure origin.
 
-T3 Code is not a build or runtime dependency. The Claude Code, Codex, and OpenCode CLIs are only
-consulted by the optional `make install-mcp` registration step.
+T3 Code is not a build or runtime dependency. Local transcript reporting does not require a
+provider CLI. Codex account-wide readings use its CLI when available; the optional
+`make install-mcp` step also consults provider CLIs to register PlanMeter.
 
 ## Quick start
 
@@ -136,9 +137,9 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   These analytics routes are used by the installed Codex app and are not a public
   API contract; changed routes or access requirements may make readings unavailable.
 - The account-wide panel shows reported daily tokens alongside known thread tokens
-  and their transcript cost. Account tokens are never added to the existing spend
+  and their dated local/cloud cost. Account tokens are never added to the existing spend
   chart or priced: the feed lacks the model and input/output breakdown needed for
-  pricing. When no local threads match, their cost is unavailable rather than $0.00.
+  pricing. When no measured threads match, their cost is unavailable rather than $0.00.
   API date labels are compared with UTC transcript days, independently
   of the chart's local or rolling range. Missing days suppress the difference rather
   than becoming zero. Negative differences remain visible; reporting scope and delays
@@ -155,6 +156,25 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   tokens. Unsupported plans or incomplete billing routes may return no details.
   The desktop cache is a partial inventory, so this does not account for every
   cloud chat or attribute the dated workspace bill to individual threads.
+- Dated cloud turns use the desktop app's read-only WebSocket transport with the
+  existing CLI login, then join exact thread/turn IDs to per-turn usage estimates.
+  Available model/input/cache/output tokens and service USD estimates enter charts,
+  thread comparisons, CLI/MCP reports, widgets, and companion reports. Each turn is
+  placed at its completion time (start time if incomplete); this is a turn aggregate,
+  not a response-by-response hourly ledger. A matching local rollout takes precedence
+  for the entire thread, and workspace daily totals replace overlapping account/day
+  estimates. Cloud discovery and pagination are bounded, so coverage may be incomplete.
+  This path requires no admin API key or browser session. Personal Pro login can read
+  cloud thread/turn history, but the tested per-turn dollar/token endpoint returned
+  forbidden: those fields remain unavailable, while local per-response I/O and daily
+  account totals continue to work. Consumer thread allowance percentages and purchased
+  credit usage are shown separately when available; neither is a token count or dollar
+  charge. The transport and estimate routes are internal desktop contracts
+  and can change; unavailable or stale readings remain explicit.
+- Modern Codex rollouts contain exact per-response `token_usage_record` events.
+  PlanMeter reads their noncumulative usage and suppresses duplicate legacy counters,
+  inherited fork responses, and repeated response IDs. Legacy-only history remains
+  supported. Separate login homes sharing transcript symlinks are scanned once.
 - Distinct configured Codex logins on the same plan retain separate account-wide
   readings, but their shared transcript attribution cannot be reconciled to one login.
   Historical switches between same-plan logins are also indistinguishable locally.

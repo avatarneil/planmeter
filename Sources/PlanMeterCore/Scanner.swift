@@ -34,7 +34,7 @@ public actor ScanCache {
     /// Bump whenever parser output changes shape or semantics; cached entries
     /// are keyed only on file size and mtime, so stale logic would otherwise
     /// survive a rebuild.
-    static let version = 4
+    static let version = 5
     let url: URL
     var files: [String: FileScanEntry] = [:]
     var dirty = false
@@ -222,7 +222,7 @@ public enum Scanner {
         struct ThreadKey: Hashable { var session: String; var cell: CellKey }
         var threadCells: [ThreadKey: Cell] = [:]
         var seenKeys: Set<String> = []
-        var codexState = CodexScanState()
+        var codexState = source.provider == .codex ? CodexParser.preparedState(data: data) : CodexScanState()
         // Parsers drop unreadable lines silently; the count is kept in the
         // entry so a future parser can start reporting it without a cache bump.
         let malformed = 0

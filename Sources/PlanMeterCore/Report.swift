@@ -8,9 +8,11 @@ public struct ReportContext: Sendable {
     public var accounts: [Account]
     public var rates: RateTable
     public var scan: ScanOutput
+    public var localCells: [CellKey: Cell]
     public var overrides: [String: PlanGroup]
     public var accountUsage: [AccountUsageSnapshot] = []
     public var dailyUsage: [CodexDailyUsageSnapshot] = []
+    public var cloudUsage: [CodexCloudUsageSnapshot] = []
     public var threadCatalog: [String: ThreadLink] = [:]
 
     public init(discovery: Discovery, accounts: [Account], rates: RateTable, scan: ScanOutput, overrides: [String: PlanGroup]) {
@@ -18,6 +20,7 @@ public struct ReportContext: Sendable {
         self.accounts = accounts
         self.rates = rates
         self.scan = scan
+        self.localCells = scan.cells
         self.overrides = overrides
     }
 
@@ -47,9 +50,12 @@ public enum Report {
         }
         var context = ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
         async let daily = loadDaily(targets: discovery.codexUsageTargets, date: dailyDate)
+        async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets)
         context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
         context.dailyUsage = await daily
-        context.threadCatalog = ThreadCatalog.load(discovery: discovery)
+        context.cloudUsage = await cloud
+        context.scan = CodexCloudProjection.merging(context.cloudUsage, into: scan)
+        context.threadCatalog = CodexCloudProjection.catalog(context.cloudUsage, local: ThreadCatalog.load(discovery: discovery))
         return context
     }
 
@@ -130,7 +136,7 @@ public enum Report {
                 let a = byAccount[m.id] ?? Aggregate()
                 for b in buckets where b.accountId == m.id { agg.add(b) }
                 var row = accountJSON(m, group: group)
-                row["usageSource"] = buckets.contains { $0.accountId == m.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with local fallback" : "Local transcripts"
+                row["usageSource"] = buckets.contains { $0.accountId == m.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with known-thread fallback" : "Local transcripts and dated cloud turns"
                 row.merge(aggregateJSON(a)) { _, new in new }
                 rows.append(row)
             }
@@ -147,10 +153,11 @@ public enum Report {
             "timeZone": TimeZone.current.identifier,
             "groups": groups,
             "pricing": ["source": ctx.rates.source, "knownModels": ctx.rates.knownModels],
-            "note": "Dated workspace credits replace overlapping local estimates for unambiguous accounts/dates. Workspace costs use the provider's conversion and include Work/Codex/Chat; workspace text tokens cover Work/Codex. Other accounts and missing dates use local token prices. Provider data may lag. Sessions and cache savings cover local usage; lifetime readings never enter totals.",
+            "note": "Dated workspace credits replace overlapping known-thread estimates for unambiguous accounts/dates. Workspace costs use the provider's conversion and include Work/Codex/Chat; workspace text tokens cover Work/Codex. Other accounts and missing dates use local token prices and available cloud turn estimates. Cloud aggregates use turn completion time (start time if incomplete). Provider data may lag. Sessions cover known local/cloud threads; cache savings use standard model rates. Lifetime readings never enter totals.",
         ]
         out["total"] = aggregateJSON(total)
-        out["localTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))
+        out["localTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.localCells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))
+        out["knownThreadTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))
         out["accountWide"] = coverage(ctx, days: days)
         return out
     }
@@ -190,7 +197,7 @@ public enum Report {
             }
             daily[index]["days"] = readings
         }
-        return ["rows": encoded, "dailyUsage": daily, "note": "dailyUsage contains dated workspace-user credits for Work, Codex, and Chat, product/model credit groups, and Work/Codex text-model tokens split by product, model, reasoning effort, speed, surface, and uncached input/cached input/output where available. Unavailable dimensional detail falls back to combined model/speed readings. USD estimates use the provider's conversion, not API token rates. Default history covers 90 provider date labels selected using UTC calendar dates; date queries one exact day without changing the token comparison's days window. Missing readings remain unavailable. Workspace estimates replace overlapping local account/day usage in preferred chart/report totals; local session spend remains separate. Lifetime serviceThreads and generic account tokens never enter chart totals. Thread discovery is incomplete; lifetime readings cannot be assigned to a day. tokenRateCostUsd excludes speed premiums."]
+        return ["rows": encoded, "dailyUsage": daily, "cloudUsage": jsonObjects(ctx.cloudUsage), "note": "dailyUsage contains dated workspace-user credits for Work, Codex, and Chat, product/model credit groups, and Work/Codex text-model tokens split by product, model, reasoning effort, speed, surface, and uncached input/cached input/output where available. Unavailable dimensional detail falls back to combined model/speed readings. USD estimates use the provider's conversion, not API token rates. Default history covers 90 provider date labels selected using UTC calendar dates; date queries one exact day without changing the token comparison's days window. Cloud turn estimates use ordinary CLI login; availability depends on the plan. Dated cloud turns enter known-thread/chart totals at turn completion (or start if incomplete), excluding exact thread IDs already represented by local rollouts. Workspace estimates replace overlapping account/day usage. Lifetime serviceThreads and generic account tokens never enter chart totals. Cloud discovery/pagination is bounded and may be incomplete. tokenRateCostUsd excludes speed premiums."]
     }
 
     public static func threads(_ ctx: ReportContext, days: Int, accountFilter: String?, utc: Bool = false) -> [String: Any] {
@@ -201,7 +208,7 @@ public enum Report {
             let account = ctx.account(for: $0.accountId)
             return filter == nil || account.id.lowercased().contains(filter!) || account.displayName.lowercased().contains(filter!) || account.provider.rawValue == filter
         }
-        return ["rows": jsonObjects(rows), "days": days, "timeZone": calendar.timeZone.identifier, "note": "Known provider session IDs and their transcript spend. Costs are API-equivalent estimates unless provider-reported. No match is inferred from a chat title."]
+        return ["rows": jsonObjects(rows), "days": days, "timeZone": calendar.timeZone.identifier, "note": "Known provider thread IDs with local transcript spend or dated cloud turn estimates. Cloud turn aggregates use completion time (start time if incomplete); they do not expose individual response timestamps. Costs are API-equivalent estimates unless provider-reported. No match is inferred from a chat title."]
     }
 
     static func jsonObjects<T: Encodable>(_ value: T) -> Any {

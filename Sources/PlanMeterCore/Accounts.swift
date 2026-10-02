@@ -114,9 +114,14 @@ public enum AccountDiscovery {
         for index in result.codexUsageTargets.indices where ambiguousPlans.contains(result.codexUsageTargets[index].plan) {
             result.codexUsageTargets[index].localAccountId = nil
         }
+        var transcriptRoots: Set<String> = []
         for shared in codexSharedHomes {
-            result.sources.append(ScanSource(provider: .codex, rootDir: "\(shared)/sessions"))
-            result.sources.append(ScanSource(provider: .codex, rootDir: "\(shared)/archived_sessions"))
+            for directory in ["sessions", "archived_sessions"] {
+                let root = URL(fileURLWithPath: "\(shared)/\(directory)").resolvingSymlinksInPath().path
+                if transcriptRoots.insert(root).inserted {
+                    result.sources.append(ScanSource(provider: .codex, rootDir: root))
+                }
+            }
         }
 
         // Claude Code ---------------------------------------------------

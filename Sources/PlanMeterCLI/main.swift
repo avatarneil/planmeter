@@ -69,10 +69,14 @@ Task {
     let started = Date()
     let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
     async let dailyUsage = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets)
+    async let cloudUsage = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets)
     let accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
     var ctx = ReportContext(discovery: discovery, accounts: discovery.accounts, rates: rates, scan: output, overrides: GroupOverrides.load())
     ctx.accountUsage = accountUsage
     ctx.dailyUsage = await dailyUsage
+    ctx.cloudUsage = await cloudUsage
+    ctx.scan = CodexCloudProjection.merging(ctx.cloudUsage, into: output)
+    ctx.threadCatalog = CodexCloudProjection.catalog(ctx.cloudUsage, local: ThreadCatalog.load(discovery: discovery))
     ctx.accounts = discovery.accounts
     let buckets = Report.buckets(ctx, days: days)
     let elapsed = Date().timeIntervalSince(started)
@@ -86,7 +90,7 @@ Task {
         var out: [String: Any] = [:]
         out["days"] = days
         out["accountWide"] = Report.coverage(ctx, days: days)
-        out["note"] = "Workspace credit readings replace overlapping local estimates; other accounts/dates use local transcripts. --threads retains local per-session spend."
+        out["note"] = "Workspace credit readings replace overlapping known-thread estimates; other accounts/dates use local transcripts and available dated cloud turns. --threads retains per-thread spend."
         out["accounts"] = accounts.map { a -> [String: Any] in
             let agg = byAccount[a.id] ?? Aggregate()
             return [

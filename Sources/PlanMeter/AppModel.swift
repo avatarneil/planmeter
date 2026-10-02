@@ -83,6 +83,7 @@ final class AppModel {
     var threadCells: [ThreadCellEntry] = []
     var accountUsage: [AccountUsageSnapshot] = []
     var dailyUsage: [CodexDailyUsageSnapshot] = []
+    var cloudUsage: [CodexCloudUsageSnapshot] = []
     var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
     var sources: [SourceReport] = []
@@ -214,6 +215,14 @@ final class AppModel {
             snapshot.target = target
             return snapshot
         }
+        cloudUsage = cloudUsage.compactMap { snapshot in
+            guard let target = discovery.codexUsageTargets.first(where: {
+                $0.id == snapshot.target.id && $0.home == snapshot.target.home && $0.plan == snapshot.target.plan
+            }) else { return nil }
+            var snapshot = snapshot
+            snapshot.target = target
+            return snapshot
+        }
         // Scan far enough back for the widest range, plus a day of slack for
         // time zones and files that were touched after their sessions ended.
         let sinceMs = Int64((Date().timeIntervalSince1970 - TimeInterval(TimeRange.quarter.dayCount + 1) * 86_400) * 1000)
@@ -226,8 +235,15 @@ final class AppModel {
         lastScan = output.scannedAt
         recompute()
         async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+        async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         dailyUsage = await daily
+        cloudUsage = await cloud
+        let combined = CodexCloudProjection.merging(cloudUsage, into: output)
+        cells = combined.cells
+        threadCells = combined.threads
+        sources = combined.sources
+        threadCatalog = CodexCloudProjection.catalog(cloudUsage, local: threadCatalog)
         recompute()
     }
 
@@ -279,8 +295,11 @@ final class AppModel {
     var hasWorkspaceUsage: Bool { UsageProjection.available(dailyUsage, accounts: accounts) }
     var chartResolution: Resolution { range != .day && hasWorkspaceUsage ? .day : range.resolution }
     var usageNote: String {
-        if range == .day && hasWorkspaceUsage { return "Last 24 hours uses local transcripts; workspace analytics provide calendar days. Choose Today or a longer range for workspace usage." }
-        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates. Daily readings replace overlapping local spend; provider data may lag. Sessions and cache savings cover known local usage." }
+        if range == .day && hasWorkspaceUsage { return "Last 24 hours uses local transcripts and available cloud turn estimates; workspace analytics provide calendar days. Choose Today or a longer range for workspace usage." }
+        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates and available cloud turns. Daily readings replace overlapping known-thread spend; provider data may lag. Sessions cover known threads; cache savings use standard model rates." }
+        if cloudUsage.contains(where: { $0.turns.contains(where: { $0.totals != nil }) }) {
+            return "Local usage and dated cloud turns · Costs use service estimates where available, otherwise API-equivalent token prices; cloud aggregates use turn completion time"
+        }
         return "Local transcript usage · API-equivalent estimates"
     }
 

@@ -26,6 +26,10 @@ struct AccountCoverageCard: View {
                             CodexDailyUsageView(snapshot: daily)
                             Divider()
                         }
+                        if let cloud = model.cloudUsage.first(where: { $0.target.id == row.snapshot.id }) {
+                            CodexCloudUsageView(snapshot: cloud)
+                            Divider()
+                        }
                         Text("Codex token comparison").font(.caption.bold())
                         Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 8) {
                             GridRow {
@@ -43,7 +47,7 @@ struct AccountCoverageCard: View {
                             }
                         }
                         if row.knownThreads == 0 {
-                            Text("No local threads matched this account in the comparison dates; known thread cost is unavailable.")
+                            Text("No threads with dated usage matched this account in the comparison dates; known thread cost is unavailable.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         if !row.snapshot.serviceThreads.isEmpty {
@@ -61,9 +65,9 @@ struct AccountCoverageCard: View {
                     }
                     Divider()
                 }
-                Text("Workspace USD estimates use the provider's credit conversion. The Codex token comparison uses a separate account feed; those tokens cannot be priced without model details. Known thread cost covers matched local transcripts in the comparison dates.")
+                Text("Workspace USD estimates use the provider's credit conversion. The Codex token comparison uses a separate account feed; those tokens cannot be priced without model details. Known thread cost covers local transcripts and available dated cloud estimates in the comparison dates.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Account totals are separate from the spend chart. The difference may include other devices, cloud activity, or reporting delays. Thread readings are never added to daily transcript spend.")
+                Text("Generic account tokens and lifetime thread totals remain separate from the spend chart. Dated cloud turns supplement local usage; workspace daily readings replace overlapping spend. The difference may include undiscovered threads or reporting delays.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -284,7 +288,11 @@ struct ThreadSpendList: View {
                             Link("Open chat", destination: url)
                         }
                         ForEach(row.sourcePaths, id: \.self) { path in
-                            Link("Source", destination: URL(fileURLWithPath: path)).help(path)
+                            if path.hasPrefix("codex://"), let url = URL(string: path) {
+                                Link("Source", destination: url).help(path)
+                            } else {
+                                Link("Source", destination: URL(fileURLWithPath: path)).help(path)
+                            }
                         }
                     }
                     .font(.caption).foregroundStyle(.secondary)
