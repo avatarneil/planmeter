@@ -173,12 +173,22 @@ The MCP tools `account_usage` and `usage_threads` expose the same data, and
 comparison. Summary, model, and timeline totals prefer dated workspace readings;
 `usage_threads` retains local per-session spend. `account_usage` accepts an optional
 `date` for exact daily readings. Workspace costs include Work/Codex/Chat; text tokens
-cover Work/Codex. Provider model credit groups may differ from text-model groups.
+cover Work/Codex, with product, model, reasoning effort, speed, and surface where
+the provider supplies matching detail. Provider model credit groups may differ
+from text-model groups.
 Charts use daily bars when workspace readings are present. The Mac's rolling 24h
-range remains local because the provider feed has no hourly breakdown; choose Today
+range remains local because the connected CLI analytics routes return daily rows; choose Today
 or a longer range for workspace usage. Companion one-day reports use Today when
 workspace data is present. Provider dates are displayed as calendar date labels;
 provider readings may lag live local activity.
+
+OpenAI also documents [hourly Costs logs](https://chatgpt.com/public/admin/api-reference#tag/Costs)
+and [individual Codex turn logs](https://chatgpt.com/public/admin/api-reference#tag/Codex%20Turns)
+with model I/O and billing detail. These require an Admin API key and are not
+connected by the current CLI-login integration. Costs logs need only Costs Read
+permission and report through the API Platform organization route, with a 3–5 hour
+delay. Codex turn logs use the workspace route and appear approximately two hours
+after their source hour.
 
 See the [Codex CLI usage commands](https://learn.chatgpt.com/docs/developer-commands)
 and [app-server protocol](https://learn.chatgpt.com/docs/app-server).
@@ -189,8 +199,9 @@ and [app-server protocol](https://learn.chatgpt.com/docs/app-server).
   the transcripts and are shown as one account.
 - Claude Code does not write subscription-window readings locally, so the Limits panel only covers
   Codex.
-- Chart costs use API-equivalent token prices. Detailed Codex thread views label
-  service billing estimates separately from standard token-rate estimates.
+- Dated workspace chart costs use the provider's credit conversion; local transcript
+  costs use API-equivalent token prices. Detailed Codex thread views label service
+  billing estimates separately from standard token-rate estimates.
 
 ## Usage drill-down
 

@@ -99,4 +99,21 @@ final class UsageProjectionTests: XCTestCase {
         XCTAssertTrue(result.buckets.allSatisfy { $0.periodStart == from })
         XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875)
     }
+
+    func testProductAndReasoningDetailKeepsSharedChartTotalsUnchanged() throws {
+        var snapshot = try fixture.snapshot()
+        let baseline = Aggregation.total(project([snapshot]).buckets)
+        let standard = try XCTUnwrap(snapshot.days[0].textModels?.first { $0.speed == "standard" })
+        var work = standard
+        work.product = "work"; work.reasoningEffort = "low"; work.surface = "work"
+        work.credits /= 2; work.uncachedInputTokens /= 2; work.cachedInputTokens /= 2
+        work.outputTokens /= 2; work.totalTokens /= 2
+        var codex = work
+        codex.product = "codex"; codex.reasoningEffort = "medium"; codex.surface = "unknown"
+        snapshot.days[0].textModels = [work, codex] + (snapshot.days[0].textModels ?? []).filter { $0.speed != "standard" }
+        XCTAssertNotEqual(work.id, codex.id)
+        let total = Aggregation.total(project([snapshot]).buckets)
+        XCTAssertEqual(total.costUsd, baseline.costUsd, accuracy: 0.000000001)
+        XCTAssertEqual(total.totals, baseline.totals)
+    }
 }

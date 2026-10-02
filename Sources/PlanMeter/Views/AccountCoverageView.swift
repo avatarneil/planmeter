@@ -124,7 +124,10 @@ struct CodexDailyUsageView: View {
                         ScrollView(.horizontal) {
                             Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 6) {
                                 GridRow {
+                                    Text("Product")
                                     Text("Model / speed")
+                                    Text("Reasoning")
+                                    Text("Surface")
                                     Text("Uncached input")
                                     Text("Cached input")
                                     Text("Output")
@@ -132,7 +135,10 @@ struct CodexDailyUsageView: View {
                                 }.font(.caption.bold())
                                 ForEach(active) { item in
                                     GridRow {
+                                        Text(item.product.map { $0 == "work" ? "Work" : ($0 == "codex" ? "Codex" : $0) } ?? "Work / Codex")
                                         Text("\(item.model) · \(item.speed)")
+                                        Text(item.reasoningEffort ?? "Unavailable")
+                                        Text(item.surface ?? "Unavailable")
                                         Text(item.uncachedInputTokens.formatted())
                                         Text(item.cachedInputTokens.formatted())
                                         Text(item.outputTokens.formatted())
@@ -159,7 +165,7 @@ struct CodexDailyUsageView: View {
                         }
                     }
                 }
-                Text("Daily credit totals include all three products. Text tokens cover Work and Codex; voice, image, and Chat can add credits without text-token counts. Charts use these dated readings instead of overlapping local estimates. The provider may group smaller models as Other; lifetime thread totals stay separate.")
+                Text("Daily credit totals include all three products. Text tokens cover Work and Codex, with product, reasoning, speed, and surface where available. Voice, image, and Chat can add credits without text-token counts. Charts use these dated readings instead of overlapping local estimates. The provider may group smaller models as Other; lifetime thread totals stay separate.")
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let freshness = snapshot.dataFreshness {

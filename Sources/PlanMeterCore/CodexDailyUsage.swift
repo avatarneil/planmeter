@@ -15,7 +15,15 @@ public struct DailyModelTokens: Codable, Sendable, Identifiable {
     public var cachedInputTokens: Int
     public var outputTokens: Int
     public var totalTokens: Int
-    public var id: String { "\(model):\(speed)" }
+    /// Product is the server query's mode; an unknown surface does not erase it.
+    public var product: String? = nil
+    public var reasoningEffort: String? = nil
+    public var surface: String? = nil
+    public var id: String {
+        [model, speed, product, reasoningEffort, surface].map { value in
+            value.map { "\($0.utf8.count):\($0)" } ?? "-"
+        }.joined(separator: "|")
+    }
 }
 
 public struct CodexDailyUsageDay: Codable, Sendable, Identifiable {
@@ -143,12 +151,21 @@ public actor CodexDailyUsage {
                 path: "daily-workspace-user-credit-usage", query: query.merging(["breakdown": "model"]) { _, new in new })
             async let tokens = optionalFetch(session: session, target: target, credential: credential,
                 path: "daily-workspace-user-token-usage-breakdown", query: query.merging(["group_by": "day"]) { _, new in new })
+            // Separate product queries keep small groups visible below the
+            // provider's combined-query top-group cap. Never add them to totals.
+            async let codexTokens = optionalFetch(session: session, target: target, credential: credential,
+                path: "daily-workspace-user-token-usage-breakdown", query: query.merging(["group_by": "day"]) { _, new in new },
+                extraQueryItems: productQueryItems("codex"))
+            async let workTokens = optionalFetch(session: session, target: target, credential: credential,
+                path: "daily-workspace-user-token-usage-breakdown", query: query.merging(["group_by": "day"]) { _, new in new },
+                extraQueryItems: productQueryItems("work"))
             // Ask the provider for this login's conversion; no hardcoded USD
             // rate and no token pricing of credit balances or fast tiers.
             async let estimate = optionalFetch(session: session, target: target, credential: credential,
                 path: "credits/estimate", query: [:], body: ["credits": 1])
             snapshot = try await decode(products: products, modelCredits: models, tokens: tokens, estimate: estimate,
-                                        target: target, from: from, to: to)
+                                        target: target, from: from, to: to,
+                                        productTokens: ["codex": codexTokens ?? [:], "work": workTokens ?? [:]])
             _ = try Self.credential(target: target) // reject a switched login
         } catch {
             snapshot = CodexDailyUsageSnapshot(target: target, fromDay: from, toDay: to)
@@ -170,9 +187,9 @@ public actor CodexDailyUsage {
     }
 
     private static func fetch(session: URLSession, target: CodexUsageTarget, credential: String, path: String,
-                              query: [String: String], body: [String: Any]? = nil) async throws -> [String: Any] {
+                              query: [String: String], extraQueryItems: [URLQueryItem] = [], body: [String: Any]? = nil) async throws -> [String: Any] {
         var url = URLComponents(string: "https://chatgpt.com/backend-api/wham/usage/\(path)")!
-        url.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        url.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } + extraQueryItems
         var request = URLRequest(url: url.url!, timeoutInterval: 12)
         request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         request.setValue(target.serviceAccountId, forHTTPHeaderField: "ChatGPT-Account-ID")
@@ -196,29 +213,64 @@ public actor CodexDailyUsage {
     }
 
     private static func optionalFetch(session: URLSession, target: CodexUsageTarget, credential: String, path: String,
-                                     query: [String: String], body: [String: Any]? = nil) async -> [String: Any]? {
-        try? await fetch(session: session, target: target, credential: credential, path: path, query: query, body: body)
+                                     query: [String: String], extraQueryItems: [URLQueryItem] = [], body: [String: Any]? = nil) async -> [String: Any]? {
+        try? await fetch(session: session, target: target, credential: credential, path: path, query: query,
+                         extraQueryItems: extraQueryItems, body: body)
     }
 
     static func decode(products: [String: Any], modelCredits: [String: Any]?, tokens: [String: Any]?, estimate: [String: Any]?,
-                       target: CodexUsageTarget, from: String, to: String, now: Date = Date()) throws -> CodexDailyUsageSnapshot {
+                       target: CodexUsageTarget, from: String, to: String,
+                       productTokens: [String: [String: Any]]? = nil, now: Date = Date()) throws -> CodexDailyUsageSnapshot {
         let productDays = try creditRows(products, breakdown: "product", from: from, to: to)
         let modelDays = modelCredits.flatMap { try? creditRows($0, breakdown: "model", from: from, to: to) }
         let tokenDays = tokens.flatMap { try? tokenRows($0, from: from, to: to) }
         let labels = Set(productDays.keys).union(modelDays?.keys.map { $0 } ?? []).union(tokenDays?.keys.map { $0 } ?? [])
         var snapshot = CodexDailyUsageSnapshot(target: target, fromDay: from, toDay: to)
         snapshot.days = labels.sorted().map { CodexDailyUsageDay(date: $0, products: productDays[$0], modelCredits: modelDays?[$0], textModels: tokenDays?[$0]) }
+        var detailPartial = false
+        if let productTokens {
+            let codexDays = productTokens["codex"].flatMap { try? groupedTokenRows($0, product: "codex", from: from, to: to) }
+            let workDays = productTokens["work"].flatMap { try? groupedTokenRows($0, product: "work", from: from, to: to) }
+            detailPartial = codexDays == nil || workDays == nil
+            for index in snapshot.days.indices {
+                let day = snapshot.days[index]
+                guard let baseline = day.textModels, let credits = day.products,
+                      let codex = codexDays?[day.date], let work = workDays?[day.date],
+                      reconciles(codex: codex, work: work, baseline: baseline, products: credits) else {
+                    detailPartial = true
+                    continue
+                }
+                let grouped = (codex + work).sorted { $0.id < $1.id }
+                snapshot.days[index].textModels = grouped
+                // Retain a provider's Other amount explicitly, without assigning
+                // its tokens to any model, reasoning effort, or surface.
+                if grouped.contains(where: {
+                    ($0.totalTokens > 0 || $0.credits > 0) && ($0.model == "other" || $0.reasoningEffort == nil || $0.surface == nil)
+                }) { detailPartial = true }
+            }
+        }
         if let value = estimate?["estimated_usage_usd_micros"], let micros = try? count(value) {
             snapshot.estimatedUsdPerCredit = Double(micros) / 1_000_000
         }
         snapshot.fetchedAt = now
         // Conservatively report the oldest component freshness.
-        snapshot.dataFreshness = [products, modelCredits, tokens].compactMap { $0?["data_freshness_ts"] as? String }.min()
-        let partial = !snapshot.missingCreditDays.isEmpty || modelDays == nil || tokenDays == nil || snapshot.estimatedUsdPerCredit == nil
+        snapshot.dataFreshness = ([products, modelCredits, tokens] + (productTokens?.values.map { Optional($0) } ?? []))
+            .compactMap { $0?["data_freshness_ts"] as? String }.min()
+        let readingsPartial = !snapshot.missingCreditDays.isEmpty || modelDays == nil || tokenDays == nil || snapshot.estimatedUsdPerCredit == nil
             || productDays.keys.contains { modelDays?[$0] == nil || tokenDays?[$0] == nil }
-        snapshot.status = partial ? .partial : .ok
-        if partial { snapshot.message = "Some daily credit, model, token, or USD readings are unavailable. Reported amounts cover available dates only." }
+        snapshot.status = readingsPartial || detailPartial ? .partial : .ok
+        if readingsPartial { snapshot.message = "Some daily credit, model, token, or USD readings are unavailable. Reported amounts cover available dates only." }
+        if detailPartial {
+            let detail = "Some product, reasoning, speed, or surface detail is unavailable. Available daily totals and model I/O are retained."
+            snapshot.message = [snapshot.message, detail].compactMap { $0 }.joined(separator: " ")
+        }
         return snapshot
+    }
+
+    static let tokenDimensions = ["model", "reasoning_effort", "speed", "surface"]
+
+    static func productQueryItems(_ product: String) -> [URLQueryItem] {
+        tokenDimensions.map { URLQueryItem(name: "breakdown_by", value: $0) } + [URLQueryItem(name: "modes", value: product)]
     }
 
     static func creditRows(_ root: [String: Any], breakdown: String, from: String, to: String) throws -> [String: [DailyCreditValue]] {
@@ -250,18 +302,97 @@ public actor CodexDailyUsage {
             guard result[date] == nil, let models = row["models"] as? [[String: Any]] else { throw DailyUsageError.invalid }
             var ids: Set<String> = []
             result[date] = try models.map { item in
-                guard let model = item["model"] as? String, !model.isEmpty, let speed = item["speed"] as? String,
-                      ids.insert("\(model):\(speed)").inserted else { throw DailyUsageError.invalid }
-                let input = try count(item["uncached_text_input_tokens"]), cache = try count(item["cached_text_input_tokens"])
-                let output = try count(item["text_output_tokens"]), total = try count(item["text_total_tokens"])
-                let sum = input.addingReportingOverflow(cache)
-                let all = sum.partialValue.addingReportingOverflow(output)
-                guard !sum.overflow, !all.overflow, all.partialValue == total else { throw DailyUsageError.invalid }
-                return DailyModelTokens(model: model, speed: speed, credits: try number(item["credits"]),
-                    uncachedInputTokens: input, cachedInputTokens: cache, outputTokens: output, totalTokens: total)
+                guard let model = item["model"] as? String, !model.isEmpty, let speed = item["speed"] as? String else {
+                    throw DailyUsageError.invalid
+                }
+                let value = try modelTokens(item, model: model, speed: speed)
+                guard ids.insert(value.id).inserted else { throw DailyUsageError.invalid }
+                return value
             }.sorted { $0.id < $1.id }
         }
         return result
+    }
+
+    static func groupedTokenRows(_ root: [String: Any], product: String, from: String, to: String) throws -> [String: [DailyModelTokens]] {
+        guard ["codex", "work"].contains(product), root["units"] as? String == "credits", root["group_by"] as? String == "day",
+              let dimensions = root["breakdown_by"] as? [String], dimensions.count == tokenDimensions.count,
+              Set(dimensions) == Set(tokenDimensions), let rows = root["data"] as? [[String: Any]] else {
+            throw DailyUsageError.invalid
+        }
+        var result: [String: [DailyModelTokens]] = [:]
+        for row in rows {
+            let date = try dateLabel(row["date"], from: from, to: to)
+            guard result[date] == nil, let groups = row["groups"] as? [[String: Any]] else { throw DailyUsageError.invalid }
+            var ids: Set<String> = []
+            result[date] = try groups.map { item in
+                guard let dimensions = item["dimensions"] as? [String: Any],
+                      let flag = item["is_other"] as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID() else {
+                    throw DailyUsageError.invalid
+                }
+                var value: DailyModelTokens
+                if flag.boolValue {
+                    guard dimensions.isEmpty else { throw DailyUsageError.invalid }
+                    value = try modelTokens(item, model: "other", speed: "unknown")
+                } else {
+                    guard let model = dimensions["model"] as? String, !model.isEmpty,
+                          let speed = dimensions["speed"] as? String, !speed.isEmpty else { throw DailyUsageError.invalid }
+                    value = try modelTokens(item, model: model, speed: speed)
+                    value.reasoningEffort = try optionalDimension(dimensions["reasoning_effort"])
+                    value.surface = try optionalDimension(dimensions["surface"])
+                }
+                value.product = product
+                guard ids.insert(value.id).inserted else { throw DailyUsageError.invalid }
+                return value
+            }.sorted { $0.id < $1.id }
+        }
+        return result
+    }
+
+    private static func optionalDimension(_ value: Any?) throws -> String? {
+        guard let value, !(value is NSNull) else { return nil }
+        guard let value = value as? String, !value.isEmpty else { throw DailyUsageError.invalid }
+        return value
+    }
+
+    private static func modelTokens(_ item: [String: Any], model: String, speed: String) throws -> DailyModelTokens {
+        let input = try count(item["uncached_text_input_tokens"]), cache = try count(item["cached_text_input_tokens"])
+        let output = try count(item["text_output_tokens"]), total = try count(item["text_total_tokens"])
+        let sum = input.addingReportingOverflow(cache), all = sum.partialValue.addingReportingOverflow(output)
+        guard !sum.overflow, !all.overflow, all.partialValue == total else { throw DailyUsageError.invalid }
+        return DailyModelTokens(model: model, speed: speed, credits: try number(item["credits"]),
+            uncachedInputTokens: input, cachedInputTokens: cache, outputTokens: output, totalTokens: total)
+    }
+
+    private static func reconciles(codex: [DailyModelTokens], work: [DailyModelTokens], baseline: [DailyModelTokens],
+                                   products: [DailyCreditValue]) -> Bool {
+        func totals(_ values: [DailyModelTokens]) -> (credits: Double, tokens: [Int])? {
+            var credits = 0.0, tokens = [0, 0, 0, 0]
+            for value in values {
+                credits += value.credits
+                for (index, count) in [value.uncachedInputTokens, value.cachedInputTokens, value.outputTokens, value.totalTokens].enumerated() {
+                    let sum = tokens[index].addingReportingOverflow(count)
+                    guard !sum.overflow else { return nil }
+                    tokens[index] = sum.partialValue
+                }
+            }
+            return credits.isFinite ? (credits, tokens) : nil
+        }
+        func equalCredits(_ first: Double, _ second: Double) -> Bool {
+            abs(first - second) <= max(0.000001, max(first, second) * 1e-12)
+        }
+        guard let all = totals(codex + work), let original = totals(baseline), let codexTotal = totals(codex), let workTotal = totals(work),
+              all.tokens == original.tokens, equalCredits(all.credits, original.credits),
+              equalCredits(codexTotal.credits, products.filter { $0.key == "codex" }.reduce(0) { $0 + $1.credits }),
+              equalCredits(workTotal.credits, products.filter { $0.key == "work" }.reduce(0) { $0 + $1.credits }) else { return false }
+        // A capped Other group must not replace model attribution that the
+        // baseline already knows, even when the whole day's totals reconcile.
+        let groups = codex + work
+        for key in Set((groups + baseline).map { [$0.model, $0.speed] }) {
+            guard let detailed = totals(groups.filter { $0.model == key[0] && $0.speed == key[1] }),
+                  let original = totals(baseline.filter { $0.model == key[0] && $0.speed == key[1] }),
+                  detailed.tokens == original.tokens, equalCredits(detailed.credits, original.credits) else { return false }
+        }
+        return true
     }
 
     private static func number(_ value: Any?) throws -> Double {
