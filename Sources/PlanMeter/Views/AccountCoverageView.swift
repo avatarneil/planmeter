@@ -106,13 +106,13 @@ struct CodexDailyUsageView: View {
                         .frame(maxWidth: 280)
                         Spacer()
                         Text(day.credits.map { "\(credits($0)) credits" } ?? "Credits unavailable").monospacedDigit()
-                        Text(day.credits.flatMap { snapshot.estimatedCost(credits: $0) }.map { "Est. \(Format.usd($0))" } ?? "USD unavailable")
+                        Text(day.credits.flatMap { inspection.estimatedCost(credits: $0) }.map { "Est. \(Format.usd($0))" } ?? "USD unavailable")
                             .font(.headline).monospacedDigit()
                     }
                     if let products = day.products {
                         HStack(spacing: 24) {
                             ForEach(products) { product in
-                                Stat(label: product.label, value: "\(credits(product.credits)) cr · \(snapshot.estimatedCost(credits: product.credits).map(Format.usd) ?? "USD unavailable")")
+                                Stat(label: product.label, value: "\(credits(product.credits)) cr · \(inspection.estimatedCost(credits: product.credits).map(Format.usd) ?? "USD unavailable")")
                             }
                             Spacer()
                         }
@@ -159,7 +159,7 @@ struct CodexDailyUsageView: View {
                                     Text(item.label)
                                     Spacer()
                                     Text("\(credits(item.credits)) credits")
-                                    Text(snapshot.estimatedCost(credits: item.credits).map(Format.usd) ?? "USD unavailable")
+                                    Text(inspection.estimatedCost(credits: item.credits).map(Format.usd) ?? "USD unavailable")
                                 }.font(.caption).monospacedDigit()
                             }
                         }
@@ -168,11 +168,11 @@ struct CodexDailyUsageView: View {
                 Text("Daily credit totals include all three products. Text tokens cover Work and Codex, with product, reasoning, speed, and surface where available. Voice, image, and Chat can add credits without text-token counts. Charts use these dated readings instead of overlapping local estimates. The provider may group smaller models as Other; lifetime thread totals stay separate.")
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if let freshness = snapshot.dataFreshness {
+                if let freshness = inspection.dataFreshness {
                     Text("Provider data through \(freshness)").font(.caption2).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if let message = snapshot.message { Text(message).font(.caption).foregroundStyle(.secondary) }
+                if let message = inspection.message { Text(message).font(.caption).foregroundStyle(.secondary) }
             }
             .task(id: "\(date ?? ""):\(snapshot.fetchedAt?.timeIntervalSince1970 ?? 0)") {
                 guard let date else { return }
