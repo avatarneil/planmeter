@@ -49,7 +49,7 @@ struct UsageChartCard: View {
             } else {
                 Chart(points) { point in
                     BarMark(
-                        x: .value("Period", point.period, unit: model.range.resolution == .hour ? .hour : .day),
+                        x: .value("Period", point.period, unit: model.chartResolution == .hour ? .hour : .day),
                         yStart: .value(model.metric.rawValue, point.lowerBound),
                         yEnd: .value(model.metric.rawValue, point.upperBound)
                     )
@@ -59,11 +59,11 @@ struct UsageChartCard: View {
                 }
                 .chartForegroundStyleScale(domain: scopes.map(\.id), range: colors)
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: model.range.resolution == .hour ? 8 : 7)) { value in
+                    AxisMarks(values: model.chartResolution == .hour ? .automatic(desiredCount: 8) : .stride(by: .day, count: max(1, model.range.dayCount / 7))) { value in
                         AxisGridLine().foregroundStyle(Color.primary.opacity(0.06))
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
-                                Text(model.range.resolution == .hour
+                                Text(model.chartResolution == .hour
                                      ? date.formatted(.dateTime.hour())
                                      : date.formatted(.dateTime.month(.abbreviated).day()))
                             }
@@ -90,7 +90,7 @@ struct UsageChartCard: View {
                                 guard frame.contains(location),
                                       let date = proxy.value(atX: location.x - frame.minX, as: Date.self),
                                       let value = proxy.value(atY: location.y - frame.minY, as: Double.self) else { return }
-                                if let scope = ChartPoint.selected(in: points, date: date, value: value, resolution: model.range.resolution) {
+                                if let scope = ChartPoint.selected(in: points, date: date, value: value, resolution: model.chartResolution) {
                                     model.usageDetail = scope
                                 }
                             }

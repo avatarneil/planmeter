@@ -120,8 +120,9 @@ public struct RemoteSummary: Codable, Sendable, Equatable {
     public var generatedAt: Date
     public var serverName: String
     public var pricingSource: String
+    public var usesProviderDates: Bool?
 
-    public init(days: Int, from: Date, to: Date, groups: [RemoteGroupUsage], total: RemoteTotals, todayCostUsd: Double, generatedAt: Date, serverName: String, pricingSource: String) {
+    public init(days: Int, from: Date, to: Date, groups: [RemoteGroupUsage], total: RemoteTotals, todayCostUsd: Double, generatedAt: Date, serverName: String, pricingSource: String, usesProviderDates: Bool? = nil) {
         self.days = days
         self.from = from
         self.to = to
@@ -131,6 +132,7 @@ public struct RemoteSummary: Codable, Sendable, Equatable {
         self.generatedAt = generatedAt
         self.serverName = serverName
         self.pricingSource = pricingSource
+        self.usesProviderDates = usesProviderDates
     }
 }
 

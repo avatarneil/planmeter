@@ -63,6 +63,7 @@ public enum WatchCloudSync {
                 WatchPayload.Limit(account: row.account.name, label: $0.label, usedPercent: $0.usedPercent, resetsAt: $0.resetsAt)
             }},
             todayCostByGroup: report.timeline?.costByGroup(on: snapshot.generatedAt),
-            cloudMacID: snapshot.id)
+            cloudMacID: snapshot.id,
+            usesProviderDates: summary.usesProviderDates)
     }
 }

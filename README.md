@@ -38,8 +38,9 @@ required only for remote access:
 - The web client additionally needs MagicDNS and HTTPS certificates enabled for the tailnet so
   `tailscale serve` can provide a secure origin.
 
-T3 Code is not a build or runtime dependency. The Claude Code, Codex, and OpenCode CLIs are only
-consulted by the optional `make install-mcp` registration step.
+T3 Code is not a build or runtime dependency. Local transcript reporting does not require a
+provider CLI. Codex account-wide readings use its CLI when available; the optional
+`make install-mcp` step also consults provider CLIs to register PlanMeter.
 
 ## Quick start
 
@@ -110,13 +111,117 @@ suppression, per-content-block dedup for Claude, Grok cost pro-rating), so total
 page where the inputs overlap. Pricing uses LiteLLM's `model_prices_and_context_window.json`, read
 from T3 Code's cached copy when present and fetched directly otherwise.
 
+## Account-wide usage
+
+- Account-wide Codex usage requires a signed-in ChatGPT account and a Codex CLI that
+  supports `account/usage/read` (verified with 0.160.0). PlanMeter finds the CLI on
+  PATH, common installation paths, or inside the ChatGPT/Codex Mac app. It uses each
+  configured login's own home, checks its identity, and polls every five minutes;
+  Refresh also forces a new reading. An unavailable CLI or failed request leaves
+  local transcript reporting available.
+- Workspace logins also read the dated workspace-user credit and token analytics
+  through the existing CLI access token. The last 90 provider dates include credits
+  by product (Work, Codex, Chat) and model, plus Work/Codex text-model usage split by
+  speed and uncached input, cached input, and output. USD estimates use the provider's
+  credit conversion for that login. Voice/image/Chat credits can have no text-token
+  counterpart; text-model totals are not a complete billing total. The date picker
+  defaults to the latest completed day and is independent of the chart range.
+  Inspecting a day performs a focused query to preserve model names the provider
+  may group as Other in longer windows. These service amounts replace overlapping
+  local account/day estimates in summaries, charts, model drill-downs, menu-bar
+  totals, desktop widgets, and companion reports. Other accounts and missing dates
+  retain local usage. Ambiguous same-plan logins cannot replace a local account.
+  Lifetime thread readings never enter these totals. Missing routes remain unavailable, and
+  stale readings are labelled. Requests use a fixed HTTPS host, refuse redirects,
+  and keep credentials and raw error bodies out of reports and disk caches.
+  These analytics routes are used by the installed Codex app and are not a public
+  API contract; changed routes or access requirements may make readings unavailable.
+- The account-wide panel shows reported daily tokens alongside known thread tokens
+  and their dated local/cloud cost. Account tokens are never added to the existing spend
+  chart or priced: the feed lacks the model and input/output breakdown needed for
+  pricing. When no measured threads match, their cost is unavailable rather than $0.00.
+  API date labels are compared with UTC transcript days, independently
+  of the chart's local or rolling range. Missing days suppress the difference rather
+  than becoming zero. Negative differences remain visible; reporting scope and delays
+  may differ.
+- Detailed thread usage uses `account/usage/read` with a `threadId`. The Mac app's
+  account-scoped cloud cache provides known dots and spawned task IDs; modern local
+  thread metadata provides IDs with an exact account match. Up to 100 cached/recent
+  threads are queried within the bounded refresh, prioritizing cloud threads.
+  Available readings include model, reasoning effort, speed, input/cached/output
+  tokens, credits, and the service's optional USD estimate. These are lifetime
+  readings, independent of the selected date range; they never enter daily spend.
+  Standard token-rate estimates are separate from service estimates and exclude
+  speed premiums. The service may report zero billable usage for a dot with many
+  tokens. Unsupported plans or incomplete billing routes may return no details.
+  The desktop cache is a partial inventory, so this does not account for every
+  cloud chat or attribute the dated workspace bill to individual threads.
+- Dated cloud turns use the desktop app's read-only WebSocket transport with the
+  existing CLI login, then join exact thread/turn IDs to per-turn usage estimates.
+  Available model/input/cache/output tokens and service USD estimates enter charts,
+  thread comparisons, CLI/MCP reports, widgets, and companion reports. Each turn is
+  placed at its completion time (start time if incomplete); this is a turn aggregate,
+  not a response-by-response hourly ledger. A matching local rollout takes precedence
+  for the entire thread, and workspace daily totals replace overlapping account/day
+  estimates. Cloud discovery and pagination are bounded, so coverage may be incomplete.
+  This path requires no admin API key or browser session. Personal Pro login can read
+  cloud thread/turn history, but the tested per-turn dollar/token endpoint returned
+  forbidden: those fields remain unavailable, while local per-response I/O and daily
+  account totals continue to work. Consumer thread allowance percentages and purchased
+  credit usage are shown separately when available; neither is a token count or dollar
+  charge. The transport and estimate routes are internal desktop contracts
+  and can change; unavailable or stale readings remain explicit.
+- Modern Codex rollouts contain exact per-response `token_usage_record` events.
+  PlanMeter reads their noncumulative usage and suppresses duplicate legacy counters,
+  inherited fork responses, and repeated response IDs. Legacy-only history remains
+  supported. Separate login homes sharing transcript symlinks are scanned once.
+- Distinct configured Codex logins on the same plan retain separate account-wide
+  readings, but their shared transcript attribution cannot be reconciled to one login.
+  Historical switches between same-plan logins are also indistinguishable locally.
+- Known threads across Codex, Claude Code, Grok Build, and OpenCode retain their
+  provider session IDs and spend. Codex titles and explicit T3 provider/session mappings
+  add chat names and T3 chat IDs when available; matching titles never merge sessions.
+  Open chat links target the Codex app's thread IDs. This is not a complete dots task inventory.
+
+Use `planmeter-cli --days 7 --account-usage` for the separate comparison and dated
+workspace credits/model I/O (`dailyUsage`), or
+`planmeter-cli --account-usage --date 2026-10-01` for an exact provider day, or
+`planmeter-cli --days 7 --threads --utc` for known sessions and spend in matching UTC
+days (both emit JSON; omit `--utc` for local calendar days).
+The MCP tools `account_usage` and `usage_threads` expose the same data, and
+`usage_summary` includes an additive `accountWide` field and a `localTotal`
+comparison. Summary, model, and timeline totals prefer dated workspace readings;
+`usage_threads` retains local per-session spend. `account_usage` accepts an optional
+`date` for exact daily readings. Workspace costs include Work/Codex/Chat; text tokens
+cover Work/Codex, with product, model, reasoning effort, speed, and surface where
+the provider supplies matching detail. Provider model credit groups may differ
+from text-model groups.
+Charts use daily bars when workspace readings are present. The Mac's rolling 24h
+range remains local because the connected CLI analytics routes return daily rows; choose Today
+or a longer range for workspace usage. Companion one-day reports use Today when
+workspace data is present. Provider dates are displayed as calendar date labels;
+provider readings may lag live local activity.
+
+OpenAI also documents [hourly Costs logs](https://chatgpt.com/public/admin/api-reference#tag/Costs)
+and [individual Codex turn logs](https://chatgpt.com/public/admin/api-reference#tag/Codex%20Turns)
+with model I/O and billing detail. These require an Admin API key and are not
+connected by the current CLI-login integration. Costs logs need only Costs Read
+permission and report through the API Platform organization route, with a 3–5 hour
+delay. Codex turn logs use the workspace route and appear approximately two hours
+after their source hour.
+
+See the [Codex CLI usage commands](https://learn.chatgpt.com/docs/developer-commands)
+and [app-server protocol](https://learn.chatgpt.com/docs/app-server).
+
 ## Limitations
 
 - Two Codex logins on the same plan type (for example two Business seats) cannot be told apart in
   the transcripts and are shown as one account.
 - Claude Code does not write subscription-window readings locally, so the Limits panel only covers
   Codex.
-- Costs are API-equivalent token prices, not what a subscription charges.
+- Dated workspace chart costs use the provider's credit conversion; local transcript
+  costs use API-equivalent token prices. Detailed Codex thread views label service
+  billing estimates separately from standard token-rate estimates.
 
 ## Usage drill-down
 

@@ -8,6 +8,7 @@ public struct FileScanEntry: Codable, Sendable {
     public var cells: [CellEntry]
     public var rateLimits: RateLimitSnapshot?
     public var malformed: Int
+    public var threads: [ThreadCellEntry] = []
 
     public init(size: Int64, mtimeMs: Int64, cells: [CellEntry], rateLimits: RateLimitSnapshot?, malformed: Int) {
         self.size = size
@@ -33,7 +34,7 @@ public actor ScanCache {
     /// Bump whenever parser output changes shape or semantics; cached entries
     /// are keyed only on file size and mtime, so stale logic would otherwise
     /// survive a rebuild.
-    static let version = 3
+    static let version = 5
     let url: URL
     var files: [String: FileScanEntry] = [:]
     var dirty = false
@@ -76,6 +77,7 @@ public actor ScanCache {
 
 public struct ScanOutput: Sendable {
     public var cells: [CellKey: Cell]
+    public var threads: [ThreadCellEntry] = []
     /// Latest Codex subscription-window reading per plan type.
     public var rateLimits: [String: RateLimitSnapshot]
     public var sources: [SourceReport]
@@ -142,6 +144,7 @@ public enum Scanner {
                 live.insert(path)
                 if wasCached { reused += 1 } else { scanned += 1 }
                 malformed += entry.malformed
+                output.threads.append(contentsOf: entry.threads)
                 for ce in entry.cells {
                     if var existing = output.cells[ce.key] {
                         existing.merge(ce.cell)
@@ -174,6 +177,11 @@ public enum Scanner {
                 var cell = output.cells[key] ?? Cell()
                 cell.add(record)
                 output.cells[key] = cell
+                if !record.sessionId.isEmpty {
+                    var threadCell = Cell()
+                    threadCell.add(record)
+                    output.threads.append(ThreadCellEntry(sessionId: record.sessionId, key: key, cell: threadCell, sourcePath: db))
+                }
             }
             output.sources.append(SourceReport(provider: .opencode, path: db, status: result.status, scannedFiles: result.status == .ok || result.status == .partial ? 1 : 0, reusedFiles: 0, skippedFiles: 0, message: result.message))
         }
@@ -211,8 +219,10 @@ public enum Scanner {
     static func parseFile(_ file: TranscriptFile, source: ScanSource) -> FileScanEntry? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: file.path), options: [.mappedIfSafe]) else { return nil }
         var cells: [CellKey: Cell] = [:]
+        struct ThreadKey: Hashable { var session: String; var cell: CellKey }
+        var threadCells: [ThreadKey: Cell] = [:]
         var seenKeys: Set<String> = []
-        var codexState = CodexScanState()
+        var codexState = source.provider == .codex ? CodexParser.preparedState(data: data) : CodexScanState()
         // Parsers drop unreadable lines silently; the count is kept in the
         // entry so a future parser can start reporting it without a cache bump.
         let malformed = 0
@@ -233,6 +243,12 @@ public enum Scanner {
             var cell = cells[key] ?? Cell()
             cell.add(record)
             cells[key] = cell
+            if !record.sessionId.isEmpty {
+                let threadKey = ThreadKey(session: record.sessionId, cell: key)
+                var threadCell = threadCells[threadKey] ?? Cell()
+                threadCell.add(record)
+                threadCells[threadKey] = threadCell
+            }
         }
 
         data.forEachLine { line in
@@ -248,12 +264,14 @@ public enum Scanner {
             }
         }
 
-        return FileScanEntry(
+        var entry = FileScanEntry(
             size: file.size,
             mtimeMs: file.mtimeMs,
             cells: cells.map { CellEntry(key: $0.key, cell: $0.value) },
             rateLimits: codexState.latestRateLimits,
             malformed: malformed
         )
+        entry.threads = threadCells.map { ThreadCellEntry(sessionId: $0.key.session, key: $0.key.cell, cell: $0.value, sourcePath: file.path) }
+        return entry
     }
 }

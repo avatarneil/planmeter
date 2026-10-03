@@ -8,7 +8,21 @@ public struct ReportContext: Sendable {
     public var accounts: [Account]
     public var rates: RateTable
     public var scan: ScanOutput
+    public var localCells: [CellKey: Cell]
     public var overrides: [String: PlanGroup]
+    public var accountUsage: [AccountUsageSnapshot] = []
+    public var dailyUsage: [CodexDailyUsageSnapshot] = []
+    public var cloudUsage: [CodexCloudUsageSnapshot] = []
+    public var threadCatalog: [String: ThreadLink] = [:]
+
+    public init(discovery: Discovery, accounts: [Account], rates: RateTable, scan: ScanOutput, overrides: [String: PlanGroup]) {
+        self.discovery = discovery
+        self.accounts = accounts
+        self.rates = rates
+        self.scan = scan
+        self.localCells = scan.cells
+        self.overrides = overrides
+    }
 
     public func group(for account: Account) -> PlanGroup {
         GroupOverrides.group(for: account, overrides: overrides)
@@ -20,7 +34,7 @@ public struct ReportContext: Sendable {
 }
 
 public enum Report {
-    public static func load(days: Int, cache: ScanCache? = nil) async -> ReportContext {
+    public static func load(days: Int, cache: ScanCache? = nil, dailyDate: String? = nil) async -> ReportContext {
         let settings = T3Settings.load()
         let discovery = AccountDiscovery.discover(settings: settings)
         let rates = PricingLoader.loadCached() ?? RateTable()
@@ -34,7 +48,20 @@ public enum Report {
         for id in Set(scan.cells.keys.map(\.accountId)).subtracting(known).sorted() {
             accounts.append(Account.placeholder(id: id))
         }
-        return ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
+        var context = ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
+        async let daily = loadDaily(targets: discovery.codexUsageTargets, date: dailyDate)
+        async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets)
+        context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
+        context.dailyUsage = await daily
+        context.cloudUsage = await cloud
+        context.scan = CodexCloudProjection.merging(context.cloudUsage, into: scan)
+        context.threadCatalog = CodexCloudProjection.catalog(context.cloudUsage, local: ThreadCatalog.load(discovery: discovery))
+        return context
+    }
+
+    private static func loadDaily(targets: [CodexUsageTarget], date: String?) async -> [CodexDailyUsageSnapshot] {
+        if let date { return await CodexDailyUsage.shared.loadDay(targets: targets, date: date) }
+        return await CodexDailyUsage.shared.load(targets: targets)
     }
 
     /// `[from, to)` covering the last `days` local calendar days including today.
@@ -47,7 +74,12 @@ public enum Report {
 
     public static func buckets(_ ctx: ReportContext, days: Int, resolution: Resolution = .day) -> [Bucket] {
         let w = window(days: days)
-        return Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: resolution)
+        let local = Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: effectiveResolution(ctx, requested: resolution))
+        return UsageProjection.buckets(local: local, snapshots: ctx.dailyUsage, accounts: ctx.accounts, from: w.from, to: w.to).buckets
+    }
+
+    static func effectiveResolution(_ ctx: ReportContext, requested: Resolution) -> Resolution {
+        UsageProjection.available(ctx.dailyUsage, accounts: ctx.accounts) ? .day : requested
     }
 
     // MARK: JSON-friendly reports
@@ -104,6 +136,7 @@ public enum Report {
                 let a = byAccount[m.id] ?? Aggregate()
                 for b in buckets where b.accountId == m.id { agg.add(b) }
                 var row = accountJSON(m, group: group)
+                row["usageSource"] = buckets.contains { $0.accountId == m.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with known-thread fallback" : "Local transcripts and dated cloud turns"
                 row.merge(aggregateJSON(a)) { _, new in new }
                 rows.append(row)
             }
@@ -120,10 +153,69 @@ public enum Report {
             "timeZone": TimeZone.current.identifier,
             "groups": groups,
             "pricing": ["source": ctx.rates.source, "knownModels": ctx.rates.knownModels],
-            "note": "Costs are API-equivalent token prices from LiteLLM rates, not subscription charges.",
+            "note": "Dated workspace credits replace overlapping known-thread estimates for unambiguous accounts/dates. Workspace costs use the provider's conversion and include Work/Codex/Chat; workspace text tokens cover Work/Codex. Other accounts and missing dates use local token prices and available cloud turn estimates. Cloud aggregates use turn completion time (start time if incomplete). Provider data may lag. Sessions cover known local/cloud threads; cache savings use standard model rates. Lifetime readings never enter totals.",
         ]
         out["total"] = aggregateJSON(total)
+        out["localTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.localCells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))
+        out["knownThreadTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))
+        out["accountWide"] = coverage(ctx, days: days)
         return out
+    }
+
+    public static func coverage(_ ctx: ReportContext, days: Int, date: String? = nil) -> [String: Any] {
+        let rows = UsageCoverage.reconcile(ctx.accountUsage, entries: ctx.scan.threads, rates: ctx.rates, days: days)
+        var encoded = jsonObjects(rows) as? [[String: Any]] ?? []
+        for index in encoded.indices {
+            var snapshot = encoded[index]["snapshot"] as? [String: Any] ?? [:]
+            var threads = snapshot["serviceThreads"] as? [[String: Any]] ?? []
+            for threadIndex in threads.indices {
+                let thread = rows[index].snapshot.serviceThreads[threadIndex]
+                if let cost = thread.serviceCostUsd { threads[threadIndex]["serviceCostUsd"] = cost }
+                if let cost = thread.tokenRateCost(rates: ctx.rates) { threads[threadIndex]["tokenRateCostUsd"] = cost }
+            }
+            snapshot["serviceThreads"] = threads
+            encoded[index]["snapshot"] = snapshot
+        }
+        let selectedDaily = ctx.dailyUsage.map { snapshot -> CodexDailyUsageSnapshot in
+            guard let date else { return snapshot.selected(days: days) }
+            var selected = snapshot
+            selected.fromDay = date; selected.toDay = date
+            selected.days = snapshot.days.filter { $0.date == date }
+            return selected
+        }
+        var daily = jsonObjects(selectedDaily) as? [[String: Any]] ?? []
+        for index in daily.indices {
+            let snapshot = selectedDaily[index]
+            daily[index]["credits"] = snapshot.credits
+            daily[index]["estimatedCostUsd"] = snapshot.estimatedCostUsd
+            daily[index]["missingCreditDays"] = snapshot.missingCreditDays
+            var readings = daily[index]["days"] as? [[String: Any]] ?? []
+            for dayIndex in readings.indices {
+                let day = snapshot.days[dayIndex]
+                readings[dayIndex]["credits"] = day.credits
+                readings[dayIndex]["estimatedCostUsd"] = day.credits.flatMap { snapshot.estimatedCost(credits: $0) }
+            }
+            daily[index]["days"] = readings
+        }
+        return ["rows": encoded, "dailyUsage": daily, "cloudUsage": jsonObjects(ctx.cloudUsage), "note": "dailyUsage contains dated workspace-user credits for Work, Codex, and Chat, product/model credit groups, and Work/Codex text-model tokens split by product, model, reasoning effort, speed, surface, and uncached input/cached input/output where available. Unavailable dimensional detail falls back to combined model/speed readings. USD estimates use the provider's conversion, not API token rates. Default history covers 90 provider date labels selected using UTC calendar dates; date queries one exact day without changing the token comparison's days window. Cloud turn estimates use ordinary CLI login; availability depends on the plan. Dated cloud turns enter known-thread/chart totals at turn completion (or start if incomplete), excluding exact thread IDs already represented by local rollouts. Workspace estimates replace overlapping account/day usage. Lifetime serviceThreads and generic account tokens never enter chart totals. Cloud discovery/pagination is bounded and may be incomplete. tokenRateCostUsd excludes speed premiums."]
+    }
+
+    public static func threads(_ ctx: ReportContext, days: Int, accountFilter: String?, utc: Bool = false) -> [String: Any] {
+        let calendar = utc ? UsageCoverage.utcCalendar : Calendar.current
+        let window = window(days: days, calendar: calendar)
+        let filter = accountFilter?.lowercased()
+        let rows = ThreadCatalog.link(UsageCoverage.threads(ctx.scan.threads, rates: ctx.rates, from: window.from, to: window.to), catalog: ctx.threadCatalog).filter {
+            let account = ctx.account(for: $0.accountId)
+            return filter == nil || account.id.lowercased().contains(filter!) || account.displayName.lowercased().contains(filter!) || account.provider.rawValue == filter
+        }
+        return ["rows": jsonObjects(rows), "days": days, "timeZone": calendar.timeZone.identifier, "note": "Known provider thread IDs with local transcript spend or dated cloud turn estimates. Cloud turn aggregates use completion time (start time if incomplete); they do not expose individual response timestamps. Costs are API-equivalent estimates unless provider-reported. No match is inferred from a chat title."]
+    }
+
+    static func jsonObjects<T: Encodable>(_ value: T) -> Any {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(value), let json = try? JSONSerialization.jsonObject(with: data) else { return [] }
+        return json
     }
 
     public static func models(_ ctx: ReportContext, days: Int, accountFilter: String?) -> [String: Any] {
@@ -163,6 +255,7 @@ public enum Report {
     }
 
     public static func timeline(_ ctx: ReportContext, days: Int, resolution: Resolution) -> [String: Any] {
+        let resolution = effectiveResolution(ctx, requested: resolution)
         let w = window(days: days)
         let buckets = self.buckets(ctx, days: days, resolution: resolution)
         var periods: [Date: [String: Aggregate]] = [:]

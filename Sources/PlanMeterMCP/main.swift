@@ -22,9 +22,13 @@ let daysProperty: [String: Any] = [
 ]
 
 let tools: [Tool] = [
+    Tool(name: "account_usage", description: "Dated workspace-user credits and service USD estimates by product/model, with Work/Codex product/model/reasoning/speed/surface/input/cached/output detail where available (last 90 dates). Also Codex account token comparisons, dated cloudUsage turns, and lifetime serviceThreads. These scopes overlap; never add their spend together.",
+         schema: ["type": "object", "properties": ["days": daysProperty, "date": ["type": "string", "description": "Exact provider date YYYY-MM-DD for dailyUsage, preserving model names otherwise grouped under Other. Token comparisons still use days."]], "additionalProperties": false]),
+    Tool(name: "usage_threads", description: "Known threads/chats across providers with exact provider session IDs, source paths, account attribution, tokens, local transcript spend and available dated cloud turn estimates. Optional account/name/provider filter.",
+         schema: ["type": "object", "properties": ["days": daysProperty, "account": ["type": "string"], "utc": ["type": "boolean", "description": "Use UTC days to match account_usage comparisons."]], "additionalProperties": false]),
     Tool(
         name: "usage_summary",
-        description: "Usage and API-equivalent cost split by plan group (personal, work, other) and by account, across Codex, Claude Code, Grok Build and OpenCode. Use this first for any 'how much have I spent / used' question.",
+        description: "Usage cost by group/account. Dated workspace credit estimates replace overlapping known-thread usage where available; other accounts/dates use local token prices and available cloud turn estimates. Includes transcript-only localTotal and knownThreadTotal for comparison. Use this first for spend questions.",
         schema: ["type": "object", "properties": ["days": daysProperty], "additionalProperties": false]
     ),
     Tool(
@@ -97,6 +101,12 @@ func intArg(_ args: [String: Any], _ key: String, default def: Int, range: Close
 func callTool(name: String, arguments: [String: Any]) async -> [String: Any] {
     if !cacheLoaded { await cache.load(); cacheLoaded = true }
     switch name {
+    case "account_usage", "usage_threads":
+        let days = intArg(arguments, "days", default: 30, range: 1...365)
+        let date = name == "account_usage" ? arguments["date"] as? String : nil
+        if let date, !CodexDailyUsage.isDay(date) { return ["isError": true, "content": [["type": "text", "text": "Use a valid YYYY-MM-DD provider date."]]] }
+        let ctx = await Report.load(days: days, cache: cache, dailyDate: date)
+        return textResult(name == "account_usage" ? Report.coverage(ctx, days: days, date: date) : Report.threads(ctx, days: days, accountFilter: arguments["account"] as? String, utc: arguments["utc"] as? Bool ?? false))
     case "usage_summary":
         let days = intArg(arguments, "days", default: 30, range: 1...365)
         let ctx = await Report.load(days: days, cache: cache)
@@ -142,7 +152,7 @@ func handle(_ message: [String: Any]) async {
             "protocolVersion": version,
             "capabilities": ["tools": ["listChanged": false]],
             "serverInfo": ["name": "planmeter", "version": serverVersion],
-            "instructions": "PlanMeter reports local AI coding-agent usage split by personal vs work subscription. Start with usage_summary; drill into usage_by_model or usage_timeline; codex_limits shows remaining Codex quota. Costs are API-equivalent estimates, not subscription charges.",
+            "instructions": "Start with usage_summary for the dashboard's preferred totals: dated workspace credits replace overlapping known-thread account/day estimates; other accounts or missing dates use local token prices and available dated cloud turns. localTotal retains the transcript-only comparison; knownThreadTotal includes local/cloud usage. Workspace text tokens cover Work/Codex; billing credits also include Chat/voice/image. Timeline resolution becomes day when workspace data is present; never invent hourly distribution. Cloud turn aggregates use completion time (start time if incomplete), not individual response times, and exclude thread IDs already represented locally. account_usage.dailyUsage exposes product/model/reasoning/speed/surface/I/O where available and provider USD conversion; unavailable dimensions retain combined model/speed readings. Optional date queries a specific day and can preserve model names grouped under Other in longer windows. Default workspace history is 90 dates; cloud discovery is bounded and may be incomplete. cloudUsage exposes dated turns through ordinary CLI login; plan restrictions remain explicit. serviceThreads is lifetime usage and never enters charts. serviceCostUsd is a billing estimate; tokenRateCostUsd uses standard model rates without speed premiums. usage_threads retains known local/cloud spend. Never add overlapping local/workspace/cloud readings, lifetime totals, or generic account tokens, and never price an unmatched token difference.",
         ])
     case "notifications/initialized", "notifications/cancelled", "notifications/roots/list_changed":
         return

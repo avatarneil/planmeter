@@ -80,10 +80,16 @@ final class AppModel {
     var metric: Metric = .cost
     var discovery = Discovery()
     var cells: [CellKey: Cell] = [:]
+    var threadCells: [ThreadCellEntry] = []
+    var accountUsage: [AccountUsageSnapshot] = []
+    var dailyUsage: [CodexDailyUsageSnapshot] = []
+    var cloudUsage: [CodexCloudUsageSnapshot] = []
+    var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
     var sources: [SourceReport] = []
     var rates = RateTable()
     var buckets: [Bucket] = []
+    var workspaceAccountIds: Set<String> = []
     var isScanning = false
     var lastScan: Date?
     var lastError: String?
@@ -186,22 +192,77 @@ final class AppModel {
         }
     }
 
-    func refresh() async {
+    func refresh(forceAccountUsage: Bool = false) async {
         if isScanning { return }
         isScanning = true
+        defer { isScanning = false }
         lastError = nil
         let settings = T3Settings.load()
         discovery = AccountDiscovery.discover(settings: settings)
+        accountUsage = accountUsage.compactMap { snapshot in
+            guard let target = discovery.codexUsageTargets.first(where: {
+                $0.id == snapshot.target.id && $0.home == snapshot.target.home && $0.plan == snapshot.target.plan
+            }) else { return nil }
+            var snapshot = snapshot
+            snapshot.target = target
+            return snapshot
+        }
+        dailyUsage = dailyUsage.compactMap { snapshot in
+            guard let target = discovery.codexUsageTargets.first(where: {
+                $0.id == snapshot.target.id && $0.home == snapshot.target.home && $0.plan == snapshot.target.plan
+            }) else { return nil }
+            var snapshot = snapshot
+            snapshot.target = target
+            return snapshot
+        }
+        cloudUsage = cloudUsage.compactMap { snapshot in
+            guard let target = discovery.codexUsageTargets.first(where: {
+                $0.id == snapshot.target.id && $0.home == snapshot.target.home && $0.plan == snapshot.target.plan
+            }) else { return nil }
+            var snapshot = snapshot
+            snapshot.target = target
+            return snapshot
+        }
         // Scan far enough back for the widest range, plus a day of slack for
         // time zones and files that were touched after their sessions ended.
         let sinceMs = Int64((Date().timeIntervalSince1970 - TimeInterval(TimeRange.quarter.dayCount + 1) * 86_400) * 1000)
         let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
         cells = output.cells
+        threadCells = output.threads
+        threadCatalog = ThreadCatalog.load(discovery: discovery)
         rateLimits = output.rateLimits
         sources = output.sources
         lastScan = output.scannedAt
-        isScanning = false
         recompute()
+        async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+        async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+        accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+        dailyUsage = await daily
+        cloudUsage = await cloud
+        let combined = CodexCloudProjection.merging(cloudUsage, into: output)
+        cells = combined.cells
+        threadCells = combined.threads
+        sources = combined.sources
+        threadCatalog = CodexCloudProjection.catalog(cloudUsage, local: threadCatalog)
+        recompute()
+    }
+
+    var coverage: [UsageReconciliation] {
+        UsageCoverage.reconcile(accountUsage, entries: threadCells, rates: rates, days: range.dayCount)
+    }
+
+    func coverageThreads(accountId: String) -> [ThreadSpend] {
+        let window = Report.window(days: range.dayCount, calendar: UsageCoverage.utcCalendar)
+        return ThreadCatalog.link(UsageCoverage.threads(threadCells, rates: rates, from: window.from, to: window.to), catalog: threadCatalog)
+            .filter { $0.accountId == accountId }
+    }
+
+    func threads(in scope: UsageScope? = nil) -> [ThreadSpend] {
+        let window = range.window()
+        let ids = scope.map { Set(accounts(in: $0).map(\.id)) }
+        return ThreadCatalog.link(UsageCoverage.threads(threadCells, rates: rates, from: window.from, to: window.to), catalog: threadCatalog).filter {
+            ids == nil || ids!.contains($0.accountId)
+        }
     }
 
     func refreshPricing() async {
@@ -224,10 +285,36 @@ final class AppModel {
 
     func recompute(now: Date = Date()) {
         let window = range.window(now: now)
-        buckets = Aggregation.buckets(cells: cells, rates: rates, from: window.from, to: window.to,
-                                      resolution: range.resolution)
+        let result = projectedUsage(from: window.from, to: window.to, resolution: chartResolution, includeWorkspace: range != .day)
+        buckets = result.buckets
+        workspaceAccountIds = result.workspaceAccountIds
         publishDesktopWidget(now: now)
         Task { await cloudSync.publish(model: self) }
+    }
+
+    var hasWorkspaceUsage: Bool { UsageProjection.available(dailyUsage, accounts: accounts) }
+    var chartResolution: Resolution { range != .day && hasWorkspaceUsage ? .day : range.resolution }
+    var usageNote: String {
+        if range == .day && hasWorkspaceUsage { return "Last 24 hours uses local transcripts and available cloud turn estimates; workspace analytics provide calendar days. Choose Today or a longer range for workspace usage." }
+        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates and available cloud turns. Daily readings replace overlapping known-thread spend; provider data may lag. Sessions cover known threads; cache savings use standard model rates." }
+        if cloudUsage.contains(where: { $0.turns.contains(where: { $0.totals != nil }) }) {
+            return "Local usage and dated cloud turns · Costs use service estimates where available, otherwise API-equivalent token prices; cloud aggregates use turn completion time"
+        }
+        return "Local transcript usage · API-equivalent estimates"
+    }
+
+    func projectedUsage(from: Date, to: Date, resolution: Resolution, includeWorkspace: Bool = true) -> UsageProjection.Result {
+        let local = Aggregation.buckets(cells: cells, rates: rates, from: from, to: to, resolution: resolution)
+        return UsageProjection.buckets(local: local, snapshots: includeWorkspace ? dailyUsage : [], accounts: accounts, from: from, to: to)
+    }
+
+    func inspectWorkspaceDay(target: CodexUsageTarget, date: String, usage: CodexDailyUsage = .shared) async -> CodexDailyUsageSnapshot? {
+        let snapshot = await usage.loadDay(targets: [target], date: date).first
+        guard !Task.isCancelled, let snapshot, snapshot.fetchedAt != nil,
+              dailyUsage.contains(where: { $0.target == target }), snapshot.days.contains(where: { $0.date == date }) else { return nil }
+        // Focused readings keep their own conversion, freshness, and partial
+        // status. Only a range refresh replaces shared dashboard analytics.
+        return snapshot
     }
 
     // MARK: Accounts and groups
@@ -287,7 +374,7 @@ final class AppModel {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: Date())
         let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
-        return Aggregation.total(Aggregation.buckets(cells: cells, rates: rates, from: start, to: end, resolution: .day))
+        return Aggregation.total(projectedUsage(from: start, to: end, resolution: .day).buckets)
     }
 
     /// The selected groups' spend from the same buckets as the visible usage.
@@ -323,7 +410,7 @@ final class AppModel {
     func title(for scope: UsageScope) -> String {
         switch scope {
         case .account(let id): return account(for: id).displayName
-        case .provider(let provider): return provider.displayName
+        case .provider(let provider): return provider == .codex && !workspaceAccountIds.isEmpty ? "Codex / ChatGPT" : provider.displayName
         case .group(let group): return group.displayName
         }
     }

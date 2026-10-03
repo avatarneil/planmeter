@@ -258,6 +258,7 @@ public struct Cell: Codable, Hashable, Sendable {
 }
 
 public enum CostSource: String, Codable, Hashable, Sendable {
+    case workspaceCredits
     case providerReported
     case modelPriced
     case mixed

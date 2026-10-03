@@ -10,19 +10,18 @@ extension AppModel {
         let window = range.window(now: now)
         let selected = accounts.filter { menuBarSpendGroups.contains(group(for: $0)) }
         let ids = Set(selected.map(\.id))
-        let buckets = Aggregation.buckets(cells: cells.filter { ids.contains($0.key.accountId) }, rates: rates,
-                                          from: window.from, to: window.to, resolution: .day)
+        let buckets = projectedUsage(from: window.from, to: window.to, resolution: .day, includeWorkspace: range != .day)
+            .buckets.filter { ids.contains($0.accountId) }
         let total = Aggregation.total(buckets)
         let providers = ProviderKind.allCases.compactMap { provider -> DesktopSnapshot.Provider? in
             let providerIDs = Set(selected.filter { $0.provider == provider }.map(\.id))
             guard !providerIDs.isEmpty else { return nil }
             let cost = Aggregation.total(buckets.filter { providerIDs.contains($0.accountId) }).costUsd
-            return .init(id: provider.rawValue, name: provider.displayName, cost: cost)
+            return .init(id: provider.rawValue, name: title(for: .provider(provider)), cost: cost)
         }.sorted { $0.cost == $1.cost ? $0.id < $1.id : $0.cost > $1.cost }
-        let hourly = range.resolution == .hour
+        let hourly = chartResolution == .hour
         let trendBuckets = hourly
-            ? Aggregation.buckets(cells: cells.filter { ids.contains($0.key.accountId) }, rates: rates,
-                                  from: window.from, to: window.to, resolution: .hour)
+            ? projectedUsage(from: window.from, to: window.to, resolution: .hour, includeWorkspace: range != .day).buckets.filter { ids.contains($0.accountId) }
             : buckets
         let costsByDate = Dictionary(grouping: trendBuckets, by: \.periodStart).mapValues { Aggregation.total($0).costUsd }
         var trend: [DesktopSnapshot.Detail.Point] = []

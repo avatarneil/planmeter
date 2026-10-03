@@ -9,8 +9,13 @@ struct ContentView: View {
         @Bindable var model = model
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                SummaryRow()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(model.usageNote).font(.caption).foregroundStyle(.secondary)
+                    SummaryRow()
+                }
                 UsageChartCard()
+                AccountCoverageCard()
+                Card(title: "Known threads and chats") { ThreadSpendList(rows: model.threads()) }
                 HStack(alignment: .top, spacing: 20) {
                     BreakdownCard()
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -40,12 +45,12 @@ struct ContentView: View {
                     ProgressView().controlSize(.small)
                 }
                 Button {
-                    Task { await model.refresh() }
+                    Task { await model.refresh(forceAccountUsage: true) }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .disabled(model.isScanning)
-                .help("Rescan provider transcripts (⌘R)")
+                .help("Refresh transcripts and account-wide usage (⌘R)")
                 Button {
                     model.showAccounts = true
                 } label: {
