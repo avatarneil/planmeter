@@ -9,11 +9,13 @@ final class CloudSyncState {
     private(set) var isEnabled = UserDefaults.standard.bool(forKey: "cloudSync.enabled")
     private(set) var isBusy = false
     private(set) var lastUploaded: Date?
-    private(set) var lastFailure: String?
     private(set) var status = "Enable iCloud to read this Mac’s usage on your iPhone without Tailscale."
     private let store = CloudSnapshotStore()
     private let account = CloudAccountGuard()
-    private var accountVerified = false
+    /// When the signed-in account last matched; rechecked periodically in case
+    /// a change notification is missed.
+    private var accountVerifiedAt: Date?
+    private var accountGeneration = 0
     private var retryAfter = Date.distantPast
     private let publisherID: String = {
         let defaults = UserDefaults.standard
@@ -30,8 +32,8 @@ final class CloudSyncState {
                 guard let self, self.isEnabled else { return }
                 // Re-check the account before the next upload instead of pausing:
                 // this notification also fires when nothing about the account changed.
-                self.accountVerified = false
-                self.retryAfter = .distantPast
+                self.accountGeneration += 1
+                self.accountVerifiedAt = nil
                 _ = await self.verifyAccount()
             }
         }
@@ -45,9 +47,9 @@ final class CloudSyncState {
         if enabled {
             // Turning sync on is consent to upload to whichever account is signed in now.
             account.reset()
-            accountVerified = false
+            accountGeneration += 1
+            accountVerifiedAt = nil
             retryAfter = .distantPast
-            lastFailure = nil
         } else {
             status = "Uploads paused. The last snapshot stays in iCloud until you delete it."
         }
@@ -55,16 +57,18 @@ final class CloudSyncState {
 
     /// Pauses uploads only when a different Apple Account is signed in.
     private func verifyAccount() async -> Bool {
+        let generation = accountGeneration
         do {
             let identifier = try await store.accountIdentifier()
-            guard isEnabled else { return false }
+            // A newer notification arrived meanwhile; its own check decides.
+            guard isEnabled, generation == accountGeneration else { return false }
             if account.verify(identifier) == .changed {
                 setEnabled(false)
                 lastUploaded = nil
                 status = "A different iCloud account is signed in. Turn sync on again to upload to this account."
                 return false
             }
-            accountVerified = true
+            accountVerifiedAt = Date()
             return true
         } catch {
             // Signed out or offline: nothing can reach another account, so keep
@@ -79,7 +83,7 @@ final class CloudSyncState {
         guard isEnabled, !isBusy, Date() >= retryAfter, let scannedAt = model.lastScan else { return }
         isBusy = true
         defer { isBusy = false }
-        if !accountVerified {
+        if accountVerifiedAt.map({ Date().timeIntervalSince($0) > 600 }) ?? true {
             guard await verifyAccount() else { return }
         }
         let now = Date()
@@ -98,7 +102,6 @@ final class CloudSyncState {
             let uploadedAt = Date()
             retryAfter = .distantPast
             lastUploaded = uploadedAt
-            lastFailure = nil
             status = "Uploaded \(uploadedAt.formatted(date: .abbreviated, time: .shortened))"
         } catch {
             // Respect CloudKit's backoff, and avoid retrying every scan while offline.
@@ -109,7 +112,6 @@ final class CloudSyncState {
     }
 
     private func fail(_ error: Error) {
-        lastFailure = error.localizedDescription
         status = "Upload failed; will retry automatically. \(error.localizedDescription)"
     }
 

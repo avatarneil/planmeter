@@ -73,7 +73,11 @@ final class WatchCloudSyncTests: XCTestCase {
             let chosen = try XCTUnwrap(WatchCloudSync.select([cloud], cached: direct, selectedMacID: selectedMacID))
             XCTAssertEqual(chosen.updatedAt, direct.updatedAt)
             XCTAssertEqual(chosen.todayCostUsd, 3)
+            XCTAssertEqual(chosen.cloudMacID, "mac-a") // The relay keeps the iCloud selection.
         }
+        // With several Macs, the remembered selection still resolves to that Mac.
+        let other = try WatchCloudSync.payload(from: snapshot(id: "mac-b"))
+        XCTAssertEqual(try WatchCloudSync.select([cloud, other], cached: direct, selectedMacID: "mac-a")?.cloudMacID, "mac-a")
         // An older relay, or another Mac's relay, does not replace the cloud summary.
         direct.updatedAt = now.addingTimeInterval(-60)
         XCTAssertEqual(try WatchCloudSync.select([cloud], cached: direct)?.updatedAt, now)

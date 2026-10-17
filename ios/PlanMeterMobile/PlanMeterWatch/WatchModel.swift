@@ -40,7 +40,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
                     status = nil
                     // The Mac may have stopped uploading; the phone can still
                     // reach it directly, so ask it for anything newer.
-                    if p.isStale(at: Date()) {
+                    if Date().timeIntervalSince(p.updatedAt) >= Self.outdatedAfter {
                         status = Self.staleMessage
                         refreshFromPhone(keepCurrent: true)
                         return
@@ -69,9 +69,10 @@ final class WatchModel: NSObject, WCSessionDelegate {
         choice.complicationPreferences = payload?.complicationPreferences
             ?? ComplicationPreferences.load(from: WatchPayload.sharedDefaults())
         apply(choice)
-        status = choice.isStale(at: Date()) ? Self.staleMessage : nil
+        status = Date().timeIntervalSince(payload?.updatedAt ?? choice.updatedAt) >= Self.outdatedAfter ? Self.staleMessage : nil
     }
 
+    private static let outdatedAfter: TimeInterval = 15 * 60
     private static let staleMessage = "Your Mac hasn’t uploaded recently. Keep PlanMeter open on your Mac with iCloud sync on."
 
     /// `keepCurrent` supplements a cloud summary that is already shown: a phone
@@ -91,8 +92,11 @@ final class WatchModel: NSObject, WCSessionDelegate {
                 guard let self else { return }
                 self.isRefreshing = false
                 if let data = reply[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) {
+                    // A supplement must describe the Mac already shown; the phone
+                    // may be connected to a different one.
+                    if keepCurrent, let current = self.payload, !current.isSameSource(as: p) { return }
                     self.apply(p)
-                    if let current = self.payload, !current.isStale(at: Date()) { self.status = nil }
+                    if let current = self.payload, Date().timeIntervalSince(current.updatedAt) < Self.outdatedAfter { self.status = nil }
                 } else if !keepCurrent {
                     if reply[WatchPayload.clearContextKey] as? Bool == true { self.clear() }
                     if let error = reply["error"] as? String { self.status = error }
@@ -114,9 +118,13 @@ final class WatchModel: NSObject, WCSessionDelegate {
 
     private func apply(_ p: WatchPayload) {
         var incoming = p
-        if let payload, payload.isSameSource(as: p), payload.updatedAt > p.updatedAt {
-            incoming = payload
-            incoming.complicationPreferences = p.complicationPreferences ?? payload.complicationPreferences
+        if let payload, payload.isSameSource(as: p) {
+            if payload.updatedAt > p.updatedAt {
+                incoming = payload
+                incoming.complicationPreferences = p.complicationPreferences ?? payload.complicationPreferences
+            }
+            // A direct relay has no iCloud record ID; keep the selected Mac's.
+            incoming.cloudMacID = p.cloudMacID ?? payload.cloudMacID
         }
         incoming.complicationPreferences = incoming.complicationPreferences ?? ComplicationPreferences.load(from: WatchPayload.sharedDefaults())
         payload = incoming

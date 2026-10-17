@@ -81,6 +81,7 @@ final class MobileModel {
         }
     }
     private let cloudStore = CloudSnapshotStore()
+    private let cloudAccount = CloudAccountGuard()
     private var subscriptionReady = false
     private var subscriptionRetryAfter = Date.distantPast
     var pushRegistrationStatus = "Registering for background notifications…"
@@ -140,15 +141,28 @@ final class MobileModel {
         accountObserver = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.usesCloud else { return }
-                // This also fires without an account switch. A refresh replaces the
-                // snapshots; a signed-out or different account clears what it can't read.
+                // This also fires without an account switch; keep showing usage
+                // unless a different account is signed in or it can't be checked.
                 self.subscriptionReady = false
+                if await self.cloudAccountChanged() {
+                    self.clearReports()
+                    self.cloudSnapshots = []
+                    self.selectedCloudMac = ""
+                }
                 await self.refresh()
             }
         }
     }
 
     deinit { if let accountObserver { NotificationCenter.default.removeObserver(accountObserver) } }
+
+    private func cloudAccountChanged() async -> Bool {
+        guard let identifier = try? await cloudStore.accountIdentifier() else { return true }
+        guard cloudAccount.verify(identifier) == .changed else { return false }
+        cloudAccount.reset()
+        _ = cloudAccount.verify(identifier)
+        return true
+    }
 
     // MARK: Lifecycle
 
@@ -337,7 +351,7 @@ final class MobileModel {
                 let snapshots = try await cloudStore.fetch()
                 guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
                 cloudSnapshots = snapshots
-                if !snapshots.contains(where: { $0.id == selectedCloudMac }) { selectedCloudMac = snapshots.first?.id ?? "" }
+                if selectedCloudMac.isEmpty, let first = snapshots.first { selectedCloudMac = first.id }
                 error = nil
                 applyCloudSelection()
                 if !subscriptionReady && Date() >= subscriptionRetryAfter {
