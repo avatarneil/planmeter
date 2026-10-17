@@ -5,8 +5,13 @@ struct LimitsCard: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Card(title: "Subscription limits") {
-            let codex = model.accounts.filter { $0.provider == .codex }
+        Card(title: "Subscription limits", info: "Codex records its rate-limit windows in each session transcript, so these reflect the last turn each account ran. Claude Code doesn’t store limits locally; check T3 Code’s Limits view or the Claude app.") {
+            // Placeholder accounts never carry limit readings.
+            let configured = Set(model.discovery.accounts.map(\.id))
+            let codex = model.accounts.filter { account in
+                account.provider == .codex && (configured.contains(account.id)
+                    || model.rateLimits[account.id.replacingOccurrences(of: "codex:plan:", with: "")] != nil)
+            }
             if codex.isEmpty {
                 Text("No Codex accounts configured.").foregroundStyle(.secondary)
             }
@@ -39,10 +44,6 @@ struct LimitsCard: View {
                 }
                 .padding(.bottom, 6)
             }
-            Divider()
-            Text("Codex writes its rate-limit windows into every session transcript, so these reflect the last turn each account ran. Claude Code does not store limits locally; use T3 Code's Limits view or the Claude app for those.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -100,7 +101,7 @@ struct SourcesCard: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Card(title: "Sources") {
+        Card(title: "Sources", info: "Transcript folders and databases PlanMeter reads. Workspace readings use the provider's credit conversion instead of token prices.") {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(model.sources) { source in
                     HStack(spacing: 8) {
@@ -152,8 +153,8 @@ struct SourcesCard: View {
     }
 
     private var pricingText: String {
-        if model.rates.isEmpty { return "Local token prices unavailable; dated workspace credits use the provider's USD conversion." }
+        if model.rates.isEmpty { return "Token prices unavailable" }
         let when = model.rates.fetchedAt.map { Format.relative($0) } ?? "unknown time"
-        return "Local token pricing: \(model.rates.knownModels) models from \(model.rates.source), fetched \(when). Workspace readings use the provider's credit conversion instead."
+        return "\(model.rates.knownModels) model prices from \(model.rates.source), fetched \(when)"
     }
 }

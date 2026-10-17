@@ -8,21 +8,17 @@ struct ContentView: View {
     var body: some View {
         @Bindable var model = model
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(model.usageNote).font(.caption).foregroundStyle(.secondary)
-                    SummaryRow()
-                }
+            VStack(alignment: .leading, spacing: 16) {
+                StatusBanner()
+                SummaryRow()
                 UsageChartCard()
-                AccountCoverageCard()
-                Card(title: "Known threads and chats") { ThreadSpendList(rows: model.threads()) }
-                HStack(alignment: .top, spacing: 20) {
+                HStack(alignment: .top, spacing: 16) {
                     BreakdownCard()
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                     LimitsCard()
-                        .frame(width: 340, alignment: .topLeading)
+                        .frame(width: 320, alignment: .topLeading)
                 }
-                SourcesCard()
+                Card(title: "Threads and chats") { ThreadSpendList(rows: model.threads(), limit: 8) }
             }
             .padding(20)
         }
@@ -58,11 +54,12 @@ struct ContentView: View {
                 }
                 .help("Assign accounts to Personal or Work")
                 Button {
-                    model.showRemote = true
+                    openWindow(id: "diagnostics")
                 } label: {
-                    Label("Remote", systemImage: model.remote.isListening ? "iphone.radiowaves.left.and.right" : "iphone")
+                    Label("Diagnostics", systemImage: "stethoscope")
                 }
-                .help("Pair the iOS app over Tailscale")
+                .help("Account readings, sources, and pricing")
+                CloudSyncButton()
             }
         }
         .sheet(item: $model.usageDetail) { scope in
@@ -99,7 +96,8 @@ struct SummaryRow: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let summaries = model.groupSummaries
+        // An unused Other group adds a card of zeros; show it once it has usage.
+        let summaries = model.groupSummaries.filter { $0.group != .other || $0.aggregate.totals.total > 0 || $0.aggregate.costUsd > 0 }
         let grand = model.total
         HStack(alignment: .top, spacing: 16) {
             ForEach(summaries) { summary in
@@ -137,16 +135,13 @@ struct GroupCard: View {
                         .foregroundStyle(.secondary)
                 }
                 ShareBar(fraction: share, color: Palette.color(for: summary.group))
-                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 4) {
-                    GridRow {
-                        Stat(label: "Sessions", value: "\(summary.aggregate.sessions)")
-                        Stat(label: "Cache savings", value: Format.usd(summary.aggregate.cacheSavingsUsd))
-                        Stat(label: "Cached input", value: Format.percent(cachedShare))
-                    }
-                }
+                Text("\(summary.aggregate.sessions) \(summary.aggregate.sessions == 1 ? "session" : "sessions") · \(Format.percent(cachedShare)) cached · \(Format.usd(summary.aggregate.cacheSavingsUsd)) saved")
+                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    .help("Known sessions, the share of input served from cache, and what caching saved at standard model rates.")
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(summary.accounts.enumerated()), id: \.element.account.id) { index, row in
+                        Button { model.usageDetail = .account(row.account.id) } label: {
                         HStack(spacing: 8) {
                             Circle().fill(model.color(for: row.account)).frame(width: 8, height: 8)
                             Text(row.account.displayName).lineLimit(1)
@@ -161,6 +156,10 @@ struct GroupCard: View {
                                 .foregroundStyle(row.aggregate.totals.total == 0 ? .secondary : .primary)
                         }
                         .font(.callout)
+                        .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Explore \(row.account.displayName)")
                         .tag(index)
                     }
                     if summary.accounts.isEmpty {
@@ -212,12 +211,16 @@ struct ShareBar: View {
 
 struct Card<Content: View>: View {
     var title: String? = nil
+    var info: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let title {
-                Text(title).font(.headline)
+                HStack(spacing: 4) {
+                    Text(title).font(.headline)
+                    if let info { InfoButton(text: info, topic: title) }
+                }
             }
             content
         }
@@ -225,5 +228,69 @@ struct Card<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.primary.opacity(0.06)))
+    }
+}
+
+/// Explanations live behind a small ⓘ instead of in the layout.
+struct InfoButton: View {
+    var text: String
+    var topic: String? = nil
+    @State private var isShown = false
+
+    var body: some View {
+        Button { isShown.toggle() } label: {
+            Image(systemName: "info.circle").foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(text)
+        .accessibilityLabel(topic.map { "About \($0)" } ?? "More information")
+        .popover(isPresented: $isShown, arrowEdge: .bottom) {
+            Text(text)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 320, alignment: .leading)
+                .padding(14)
+        }
+    }
+}
+
+/// Errors that need attention; routine status stays in Diagnostics.
+struct StatusBanner: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        let messages = [model.lastError, model.pricingError, model.desktopWidgetError].compactMap { $0 } + model.readingWarnings()
+        if !messages.isEmpty {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(messages, id: \.self) { Text($0).font(.callout) }
+                }
+                Spacer()
+                Button("Details") { openWindow(id: "diagnostics") }.controlSize(.small)
+            }
+            .padding(10)
+            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+}
+
+/// iCloud upload state at a glance, so a paused upload doesn't go unnoticed.
+struct CloudSyncButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let sync = model.cloudSync
+        let failing = sync.isEnabled && sync.status.hasPrefix("Upload failed")
+        // Tailscale-only setups are fine without iCloud; show the direct connection instead.
+        let symbol = sync.isEnabled ? (failing ? "exclamationmark.icloud" : "icloud")
+            : model.remote.isListening ? "iphone.radiowaves.left.and.right" : "icloud.slash"
+        Button {
+            model.showRemote = true
+        } label: {
+            Label("Remote", systemImage: symbol)
+        }
+        .help(sync.isEnabled ? "iCloud sync and remote access · \(sync.status)" : "iCloud sync is off · Phone and Watch won’t update without Tailscale")
     }
 }

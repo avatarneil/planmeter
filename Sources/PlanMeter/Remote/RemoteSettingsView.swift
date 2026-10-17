@@ -23,6 +23,7 @@ struct RemoteSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             GroupBox {
                 VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 4) {
                     Toggle("Sync usage through iCloud", isOn: Binding(
                         get: { model.cloudSync.isEnabled },
                         set: { enabled in
@@ -31,10 +32,12 @@ struct RemoteSettingsView: View {
                         }
                     ))
                     .disabled(model.cloudSync.isBusy)
-                    Text("Use the same Apple Account on your Mac and iPhone. Uploads account names, usage totals, charts, model breakdowns, and limits to your private iCloud database. Prompts, transcripts, credentials, and source paths stay on this Mac.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("Scans and uploads every 30 seconds while this Mac is awake and PlanMeter is running.").font(.caption).foregroundStyle(.secondary)
-                    Text(model.cloudSync.status).font(.caption)
+                        InfoButton(text: "Use the same Apple Account on your Mac, iPhone, and Watch. PlanMeter uploads account names, usage totals, charts, model breakdowns, and limits to your private iCloud database every 30 seconds while this Mac is awake. Prompts, transcripts, credentials, and source paths stay on this Mac.", topic: "iCloud sync")
+                    }
+                    // Routine "off" copy must not hide a failed deletion or an account change.
+                    let routine = model.cloudSync.status.hasPrefix("Enable iCloud") || model.cloudSync.status.hasPrefix("Uploads paused")
+                    Text(model.cloudSync.isEnabled || !routine ? model.cloudSync.status : "Off. Your iPhone and Watch only update over Tailscale.")
+                        .font(.caption).foregroundStyle(model.cloudSync.isEnabled ? Color.secondary : Color.orange)
                     HStack {
                         Button("Sync now") { Task { await model.cloudSync.publish(model: model) } }
                             .disabled(!model.cloudSync.isEnabled || model.cloudSync.isBusy)
@@ -47,13 +50,12 @@ struct RemoteSettingsView: View {
             .confirmationDialog("Delete this Mac’s iCloud snapshot and stop uploading?", isPresented: $confirmCloudDelete) {
                 Button("Delete snapshot", role: .destructive) { Task { await model.cloudSync.deleteSnapshot() } }
             }
-            HStack {
-                Text("Direct access").font(.title2.weight(.semibold))
+            HStack(spacing: 6) {
+                Text("Direct access over Tailscale").font(.title3.weight(.semibold))
+                InfoButton(text: "Serves the PlanMeter iOS app and a mobile web client over your tailnet only. Every request is end-to-end encrypted to this Mac's key and signed by the device's key, on top of Tailscale's WireGuard tunnel.", topic: "direct access")
                 Spacer()
                 Toggle("Enabled", isOn: $remote.isEnabled).toggleStyle(.switch)
             }
-            Text("Serves the PlanMeter iOS app and a mobile web client over your tailnet only. Every request is end-to-end encrypted to this Mac's key and signed by the device's key, on top of Tailscale's WireGuard tunnel.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -232,7 +234,7 @@ struct RemoteSettingsView: View {
             } else if remote.httpsEnabled, let message = remote.httpsMessage {
                 Text(message).font(.caption).foregroundStyle(.orange)
             } else {
-                Text("Publishes the web client at https://\(remote.httpsDomain ?? "<machine>.<tailnet>.ts.net")/ via `tailscale serve`, tailnet-only, with a certificate Tailscale issues. Stays on until turned off.")
+                Text("Serves the web client at https://\(remote.httpsDomain ?? "<machine>.<tailnet>.ts.net")/ on your tailnet.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }

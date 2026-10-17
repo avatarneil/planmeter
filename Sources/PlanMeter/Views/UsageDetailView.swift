@@ -31,6 +31,7 @@ struct UsageDetailSheet: View {
 /// Shared by the main window's drill-down sheet and the compact menu bar view.
 struct UsageDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     var scope: UsageScope
     var compact = false
 
@@ -44,9 +45,11 @@ struct UsageDetailView: View {
         }
         VStack(alignment: .leading, spacing: 12) {
             Text(model.title(for: scope)).font(compact ? .headline : .title2.bold())
-            Text("\(model.range.rawValue) · \(accountCount) \(accountCount == 1 ? "account" : "accounts") · Estimated usage cost")
-                .font(.caption).foregroundStyle(.secondary)
-            Text(model.usageNote).font(.caption2).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("\(model.range.rawValue) · \(accountCount) \(accountCount == 1 ? "account" : "accounts") · Estimated cost")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !compact { InfoButton(text: model.usageNote, topic: "these estimates") }
+            }
             HStack(spacing: 20) {
                 Stat(label: "Cost", value: Format.usd(total.costUsd))
                 Stat(label: "Tokens", value: Format.tokens(total.totals.total))
@@ -99,9 +102,13 @@ struct UsageDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         if !compact {
-            AccountCoverageCard(scope: scope)
-            Text("Known threads and chats").font(.headline)
-            ThreadSpendList(rows: model.threads(in: scope))
+            let codexTargets = Set(model.accounts(in: scope).map(\.id))
+            if model.coverage.contains(where: { $0.snapshot.target.localAccountId.map(codexTargets.contains) == true }) {
+                Button("Account readings…") { openWindow(id: "diagnostics") }
+                    .help("Workspace credits, cloud turns, and token comparisons in Diagnostics")
+            }
+            Text("Threads and chats").font(.headline).padding(.top, 8)
+            ThreadSpendList(rows: model.threads(in: scope), limit: 12)
         }
     }
 }

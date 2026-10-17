@@ -16,9 +16,17 @@ struct PlanMeterApp: App {
                     if let path = SnapshotMode.path { await SnapshotMode.capture(to: path) }
                     if let path = SnapshotMode.menuPath { await SnapshotMode.captureMenu(to: path, model: model) }
                     if let path = SnapshotMode.remotePath { await SnapshotMode.captureRemote(to: path, model: model) }
+                    if let path = SnapshotMode.diagnosticsPath { await SnapshotMode.captureDiagnostics(to: path, model: model) }
                 }
         }
         .windowResizability(.contentMinSize)
+
+        Window("Diagnostics", id: "diagnostics") {
+            DiagnosticsView()
+                .environment(model)
+                .frame(minWidth: 720, minHeight: 480)
+        }
+        .defaultSize(width: 900, height: 760)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updates.checkForUpdates() }

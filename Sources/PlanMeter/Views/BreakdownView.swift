@@ -26,8 +26,9 @@ struct BreakdownCard: View {
                     Text("All").tag(PlanGroup?.none)
                     ForEach(PlanGroup.allCases) { Text($0.displayName).tag(PlanGroup?.some($0)) }
                 }
+                .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 300)
+                .frame(width: 280)
             }
             let rows = self.rows.sorted(using: sortOrder)
             if rows.isEmpty {
@@ -40,11 +41,7 @@ struct BreakdownCard: View {
                             Text(row.accountName).lineLimit(1)
                         }
                     }
-                    .width(min: 120, ideal: 150)
-                    TableColumn("Provider", value: \.provider.rawValue) { row in
-                        Text(row.provider.displayName).foregroundStyle(.secondary)
-                    }
-                    .width(min: 80, ideal: 100)
+                    .width(min: 110, ideal: 140)
                     TableColumn("Model", value: \.model) { row in
                         HStack(spacing: 6) {
                             Text(row.model).lineLimit(1).truncationMode(.middle)
@@ -55,7 +52,7 @@ struct BreakdownCard: View {
                             }
                         }
                     }
-                    .width(min: 160, ideal: 220)
+                    .width(min: 140, ideal: 200)
                     TableColumn("Cost", value: \.aggregate.costUsd) { row in
                         Text(Format.usd(row.aggregate.costUsd)).monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing)
                     }
@@ -71,7 +68,7 @@ struct BreakdownCard: View {
                     TableColumn("Sessions", value: \.aggregate.sessions) { row in
                         Text("\(row.aggregate.sessions)").monospacedDigit().frame(maxWidth: .infinity, alignment: .trailing)
                     }
-                    .width(70)
+                    .width(64)
                 }
                 .frame(minHeight: 200, idealHeight: CGFloat(rows.count) * 26 + 40, maxHeight: 460)
             }
