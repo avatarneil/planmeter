@@ -46,12 +46,14 @@ final class WatchModel: NSObject, WCSessionDelegate {
                         return
                     }
                 } else {
-                    // The selected Mac stopped publishing to iCloud; the phone may
-                    // still reach it directly.
                     clear()
                     status = cloudChoices.isEmpty ? "Enable iCloud sync in PlanMeter on your Mac." : "Choose a Mac below."
-                    refreshFromPhone()
-                    return
+                    // No Mac publishes to iCloud any more; the phone may still reach
+                    // one directly. With other Macs listed, let the user choose.
+                    if cloudChoices.isEmpty {
+                        refreshFromPhone()
+                        return
+                    }
                 }
                 isRefreshing = false
             } catch WatchCloudError.signedOut {
