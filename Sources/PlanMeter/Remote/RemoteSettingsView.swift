@@ -32,7 +32,7 @@ struct RemoteSettingsView: View {
                         }
                     ))
                     .disabled(model.cloudSync.isBusy)
-                        InfoButton(text: "Use the same Apple Account on your Mac, iPhone, and Watch. PlanMeter uploads account names, usage totals, charts, model breakdowns, and limits to your private iCloud database every 30 seconds while this Mac is awake. Prompts, transcripts, credentials, and source paths stay on this Mac.")
+                        InfoButton(text: "Use the same Apple Account on your Mac, iPhone, and Watch. PlanMeter uploads account names, usage totals, charts, model breakdowns, and limits to your private iCloud database every 30 seconds while this Mac is awake. Prompts, transcripts, credentials, and source paths stay on this Mac.", topic: "iCloud sync")
                     }
                     // Routine "off" copy must not hide a failed deletion or an account change.
                     let routine = model.cloudSync.status.hasPrefix("Enable iCloud") || model.cloudSync.status.hasPrefix("Uploads paused")
@@ -52,7 +52,7 @@ struct RemoteSettingsView: View {
             }
             HStack(spacing: 6) {
                 Text("Direct access over Tailscale").font(.title3.weight(.semibold))
-                InfoButton(text: "Serves the PlanMeter iOS app and a mobile web client over your tailnet only. Every request is end-to-end encrypted to this Mac's key and signed by the device's key, on top of Tailscale's WireGuard tunnel.")
+                InfoButton(text: "Serves the PlanMeter iOS app and a mobile web client over your tailnet only. Every request is end-to-end encrypted to this Mac's key and signed by the device's key, on top of Tailscale's WireGuard tunnel.", topic: "direct access")
                 Spacer()
                 Toggle("Enabled", isOn: $remote.isEnabled).toggleStyle(.switch)
             }

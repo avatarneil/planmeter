@@ -48,7 +48,7 @@ struct UsageDetailView: View {
             HStack(spacing: 4) {
                 Text("\(model.range.rawValue) · \(accountCount) \(accountCount == 1 ? "account" : "accounts") · Estimated cost")
                     .font(.caption).foregroundStyle(.secondary)
-                if !compact { InfoButton(text: model.usageNote) }
+                if !compact { InfoButton(text: model.usageNote, topic: "these estimates") }
             }
             HStack(spacing: 20) {
                 Stat(label: "Cost", value: Format.usd(total.costUsd))

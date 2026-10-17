@@ -165,6 +165,9 @@ struct CodexDailyUsageView: View {
                     Text("Workspace usage")
                     InfoButton(text: Self.about, topic: "workspace usage")
                     Spacer()
+                    // Provider days are UTC, so they can differ from the dashboard's local days.
+                    Text(selected.fromDay == selected.toDay ? "\(selected.toDay) UTC" : "\(selected.fromDay) – \(selected.toDay) UTC")
+                        .font(.caption).foregroundStyle(.secondary)
                     Text(selected.estimatedCostUsd.map(Format.usd) ?? "USD unavailable").monospacedDigit()
                     if let total = selected.credits {
                         Text("\(credits(total)) credits").font(.caption).foregroundStyle(.secondary).monospacedDigit()
@@ -184,8 +187,10 @@ struct CodexDailyUsageView: View {
     private func credits(_ value: Double) -> String { value.formatted(.number.precision(.fractionLength(0...3))) }
 
     private static func freshness(_ value: String) -> String? {
-        guard let date = ISO8601DateFormatter().date(from: value) else { return nil }
-        return date.formatted(date: Calendar.current.isDateInToday(date) ? .omitted : .abbreviated, time: .shortened)
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value) else { return nil }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
