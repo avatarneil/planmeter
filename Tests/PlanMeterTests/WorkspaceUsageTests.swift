@@ -6,7 +6,8 @@ import PlanMeterRemote
 final class WorkspaceUsageTests: XCTestCase {
     @MainActor
     func testFocusedInspectionKeepsPartialAndCompleteReadingsSeparateFromSharedUsage() async throws {
-        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 12))!
+        // 10:30 UTC is inside UTC October 1 and never exactly local midnight, in every time zone.
+        let now = UsageCoverage.utcCalendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 10, minute: 30))!
         let fetched = now.addingTimeInterval(300)
         let date = "2026-10-01"
         let target = CodexUsageTarget(id: "workspace:member", name: "Work", home: "/tmp/unused", email: "member@example.com",
@@ -78,7 +79,8 @@ final class WorkspaceUsageTests: XCTestCase {
     @MainActor
     func testWorkspaceUsageFlowsThroughDashboardDrilldownsMenuWidgetsAndRemoteReports() throws {
         let model = AppModel()
-        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 12))!
+        // 10:30 UTC is inside UTC October 1 and never exactly local midnight, in every time zone.
+        let now = UsageCoverage.utcCalendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 10, minute: 30))!
         var account = Account.placeholder(id: "codex:plan:business")
         account.suggestedGroup = .work
         model.discovery = Discovery(accounts: [account])

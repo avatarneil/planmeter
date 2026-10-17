@@ -74,7 +74,7 @@ public enum UsageProjection {
                 let rows = workspaceRows(day: day, snapshot: snapshot, account: account, credits: credits, cost: cost, models: models)
                 for (index, piece) in pieces.enumerated() where piece.day >= from && piece.day < to {
                     var pieceRows: [Bucket] = rows.compactMap { row in
-                        let (lower, upper) = row.totals.total > 0 ? textCuts[index] : hourCuts[index]
+                        let (lower, upper) = row.totals.total > 0 || row.model == unattributed ? textCuts[index] : hourCuts[index]
                         guard upper > lower else { return nil }
                         var row = row
                         row.periodStart = piece.day
@@ -86,7 +86,7 @@ public enum UsageProjection {
                     // even when no share of the reading lands on this day.
                     guard !local[index].isEmpty else { projected += pieceRows; continue }
                     if pieceRows.isEmpty {
-                        pieceRows = [Bucket(periodStart: piece.day, accountId: account, model: rows.first?.model ?? "Workspace usage", totals: .zero,
+                        pieceRows = [Bucket(periodStart: piece.day, accountId: account, model: "Workspace usage", totals: .zero,
                                             costUsd: 0, cacheSavingsUsd: 0, costSource: .workspaceCredits, records: 0, sessions: 0)]
                     }
                     let top = pieceRows.indices.max { pieceRows[$0].costUsd == pieceRows[$1].costUsd ? pieceRows[$0].model > pieceRows[$1].model : pieceRows[$0].costUsd < pieceRows[$1].costUsd }!
@@ -106,6 +106,9 @@ public enum UsageProjection {
             return $0.costSource.rawValue < $1.costSource.rawValue
         }, workspaceAccountIds: ids)
     }
+
+    /// The whole day's cost when the provider gave no model breakdown; it follows local usage.
+    private static let unattributed = "Workspace credits (model unavailable)"
 
     /// One day's reading as model rows whose costs sum exactly to `cost`.
     private static func workspaceRows(day: CodexDailyUsageDay, snapshot: CodexDailyUsageSnapshot, account: String,
@@ -150,7 +153,7 @@ public enum UsageProjection {
                 rows[group.key] = row
             }
         } else {
-            var row = empty("Workspace credits (model unavailable)")
+            var row = empty(unattributed)
             row.costUsd = cost
             rows[row.model] = row
         }
