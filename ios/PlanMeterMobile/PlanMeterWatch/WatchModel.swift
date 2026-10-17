@@ -37,7 +37,14 @@ final class WatchModel: NSObject, WCSessionDelegate {
                 }
                 if let p = try WatchCloudSync.select(cloudChoices, cached: payload, selectedMacID: WatchCloudSync.selectedMacID) {
                     apply(p)
-                    status = "Synced directly with iCloud"
+                    status = nil
+                    // The Mac may have stopped uploading; the phone can still
+                    // reach it directly, so ask it for anything newer.
+                    if p.isStale(at: Date()) {
+                        status = Self.staleMessage
+                        refreshFromPhone(keepCurrent: true)
+                        return
+                    }
                 } else {
                     clear()
                     status = cloudChoices.isEmpty ? "Enable iCloud sync in PlanMeter on your Mac." : "Choose a Mac below."
@@ -62,34 +69,39 @@ final class WatchModel: NSObject, WCSessionDelegate {
         choice.complicationPreferences = payload?.complicationPreferences
             ?? ComplicationPreferences.load(from: WatchPayload.sharedDefaults())
         apply(choice)
-        status = "Synced directly with iCloud"
+        status = choice.isStale(at: Date()) ? Self.staleMessage : nil
     }
 
-    private func refreshFromPhone() {
+    private static let staleMessage = "Your Mac hasn’t uploaded recently. Keep PlanMeter open on your Mac with iCloud sync on."
+
+    /// `keepCurrent` supplements a cloud summary that is already shown: a phone
+    /// that cannot reach the Mac must not clear it.
+    private func refreshFromPhone(keepCurrent: Bool = false) {
         let session = WCSession.default
         guard session.activationState == .activated else { isRefreshing = false; return }
         guard session.isReachable else {
             isRefreshing = false
-            status = (status ?? "iCloud unavailable.") + " Showing last sync; iPhone is also unreachable."
+            if !keepCurrent { status = (status ?? "iCloud unavailable.") + " Showing last sync; iPhone is also unreachable." }
             return
         }
         isRefreshing = true
-        status = nil
+        if !keepCurrent { status = nil }
         session.sendMessage(["refresh": true], replyHandler: { [weak self] reply in
             Task { @MainActor in
                 guard let self else { return }
                 self.isRefreshing = false
-                if reply[WatchPayload.clearContextKey] as? Bool == true { self.clear() }
                 if let data = reply[WatchPayload.contextKey] as? Data, let p = WatchPayload.decode(data) {
                     self.apply(p)
-                } else if let error = reply["error"] as? String {
-                    self.status = error
+                    if let current = self.payload, !current.isStale(at: Date()) { self.status = nil }
+                } else if !keepCurrent {
+                    if reply[WatchPayload.clearContextKey] as? Bool == true { self.clear() }
+                    if let error = reply["error"] as? String { self.status = error }
                 }
             }
         }, errorHandler: { [weak self] error in
             Task { @MainActor in
                 self?.isRefreshing = false
-                self?.status = error.localizedDescription
+                if !keepCurrent { self?.status = error.localizedDescription }
             }
         })
     }
@@ -102,7 +114,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
 
     private func apply(_ p: WatchPayload) {
         var incoming = p
-        if let payload, payload.cloudMacID == p.cloudMacID, payload.serverName == p.serverName, payload.updatedAt > p.updatedAt {
+        if let payload, payload.isSameSource(as: p), payload.updatedAt > p.updatedAt {
             incoming = payload
             incoming.complicationPreferences = p.complicationPreferences ?? payload.complicationPreferences
         }

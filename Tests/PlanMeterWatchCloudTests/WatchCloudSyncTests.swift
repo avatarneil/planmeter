@@ -62,6 +62,26 @@ final class WatchCloudSyncTests: XCTestCase {
         XCTAssertEqual(try WatchCloudSync.select([], cached: direct), direct)
     }
 
+    func testNewerPhoneRelayOfTheSameMacOutlivesAStaleCloudUpload() throws {
+        let cloud = try WatchCloudSync.payload(from: snapshot())
+        var direct = cloud
+        direct.cloudMacID = nil
+        direct.updatedAt = now.addingTimeInterval(14 * 86_400)
+        direct.todayCostUsd = 3
+        // A remembered iCloud Mac selection must not resurrect its old upload either.
+        for selectedMacID in [nil, "mac-a"] {
+            let chosen = try XCTUnwrap(WatchCloudSync.select([cloud], cached: direct, selectedMacID: selectedMacID))
+            XCTAssertEqual(chosen.updatedAt, direct.updatedAt)
+            XCTAssertEqual(chosen.todayCostUsd, 3)
+        }
+        // An older relay, or another Mac's relay, does not replace the cloud summary.
+        direct.updatedAt = now.addingTimeInterval(-60)
+        XCTAssertEqual(try WatchCloudSync.select([cloud], cached: direct)?.updatedAt, now)
+        direct.updatedAt = now.addingTimeInterval(60)
+        direct.serverName = "Other Mac"
+        XCTAssertEqual(try WatchCloudSync.select([cloud], cached: direct)?.updatedAt, now)
+    }
+
     func testUnsupportedCloudSchemaIsRejected() {
         var value = snapshot()
         value.version = 2

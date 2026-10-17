@@ -83,7 +83,18 @@ public struct WatchPayload: Codable, Equatable, Sendable {
 
     /// A cached "today" total must not silently become tomorrow's total.
     public func isStale(at date: Date, calendar: Calendar = .current) -> Bool {
-        date.timeIntervalSince(updatedAt) >= 15 * 60 || !calendar.isDate(updatedAt, inSameDayAs: date)
+        date.timeIntervalSince(updatedAt) >= 15 * 60 || !coversToday(at: date, calendar: calendar)
+    }
+
+    /// Whether `todayCostUsd` describes the calendar day containing `date`.
+    public func coversToday(at date: Date, calendar: Calendar = .current) -> Bool {
+        calendar.isDate(updatedAt, inSameDayAs: date)
+    }
+
+    /// The same Mac, whether its summary arrived from iCloud or was relayed
+    /// by the phone over a direct connection (which has no iCloud record ID).
+    public func isSameSource(as other: WatchPayload) -> Bool {
+        serverName == other.serverName && (cloudMacID == nil || other.cloudMacID == nil || cloudMacID == other.cloudMacID)
     }
 
     public func nextWidgetRefresh(after date: Date, calendar: Calendar = .current) -> Date {

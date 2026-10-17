@@ -9,8 +9,11 @@ final class CloudSyncState {
     private(set) var isEnabled = UserDefaults.standard.bool(forKey: "cloudSync.enabled")
     private(set) var isBusy = false
     private(set) var lastUploaded: Date?
+    private(set) var lastFailure: String?
     private(set) var status = "Enable iCloud to read this Mac’s usage on your iPhone without Tailscale."
     private let store = CloudSnapshotStore()
+    private let account = CloudAccountGuard()
+    private var accountVerified = false
     private var retryAfter = Date.distantPast
     private let publisherID: String = {
         let defaults = UserDefaults.standard
@@ -24,9 +27,12 @@ final class CloudSyncState {
     init() {
         accountObserver = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.setEnabled(false)
-                self?.lastUploaded = nil
-                self?.status = "Your iCloud account changed. Enable sync again to upload to the current account."
+                guard let self, self.isEnabled else { return }
+                // Re-check the account before the next upload instead of pausing:
+                // this notification also fires when nothing about the account changed.
+                self.accountVerified = false
+                self.retryAfter = .distantPast
+                _ = await self.verifyAccount()
             }
         }
     }
@@ -36,13 +42,46 @@ final class CloudSyncState {
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: "cloudSync.enabled")
-        if !enabled { status = "Uploads paused. The last snapshot stays in iCloud until you delete it." }
+        if enabled {
+            // Turning sync on is consent to upload to whichever account is signed in now.
+            account.reset()
+            accountVerified = false
+            retryAfter = .distantPast
+            lastFailure = nil
+        } else {
+            status = "Uploads paused. The last snapshot stays in iCloud until you delete it."
+        }
+    }
+
+    /// Pauses uploads only when a different Apple Account is signed in.
+    private func verifyAccount() async -> Bool {
+        do {
+            let identifier = try await store.accountIdentifier()
+            guard isEnabled else { return false }
+            if account.verify(identifier) == .changed {
+                setEnabled(false)
+                lastUploaded = nil
+                status = "A different iCloud account is signed in. Turn sync on again to upload to this account."
+                return false
+            }
+            accountVerified = true
+            return true
+        } catch {
+            // Signed out or offline: nothing can reach another account, so keep
+            // sync on and retry once iCloud is available again.
+            retryAfter = Date().addingTimeInterval(60)
+            fail(error)
+            return false
+        }
     }
 
     func publish(model: AppModel) async {
         guard isEnabled, !isBusy, Date() >= retryAfter, let scannedAt = model.lastScan else { return }
         isBusy = true
         defer { isBusy = false }
+        if !accountVerified {
+            guard await verifyAccount() else { return }
+        }
         let now = Date()
         let reports = CloudSnapshot.supportedDays.map { days in
             RemoteReply(
@@ -59,13 +98,19 @@ final class CloudSyncState {
             let uploadedAt = Date()
             retryAfter = .distantPast
             lastUploaded = uploadedAt
+            lastFailure = nil
             status = "Uploaded \(uploadedAt.formatted(date: .abbreviated, time: .shortened))"
         } catch {
             // Respect CloudKit's backoff, and avoid retrying every scan while offline.
             let delay = (error as? CKError)?.retryAfterSeconds ?? 60
             retryAfter = Date().addingTimeInterval(max(30, delay))
-            status = "Upload failed; will retry automatically. \(error.localizedDescription)"
+            fail(error)
         }
+    }
+
+    private func fail(_ error: Error) {
+        lastFailure = error.localizedDescription
+        status = "Upload failed; will retry automatically. \(error.localizedDescription)"
     }
 
     func deleteSnapshot() async {

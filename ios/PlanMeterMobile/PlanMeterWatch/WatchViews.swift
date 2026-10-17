@@ -61,15 +61,24 @@ struct SummaryPage: View {
     var payload: WatchPayload
 
     var body: some View {
-        ScrollView {
+        TimelineView(.everyMinute) { context in
+            content(now: context.date)
+        }
+    }
+
+    private func content(now: Date) -> some View {
+        // An older day's total is not today's spend; show it only as history.
+        let current = payload.coversToday(at: now)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Today").font(.caption2).foregroundStyle(.secondary)
-                    Text(WatchPayload.usd(payload.todayCostUsd))
+                    Text(current ? "Today" : "Today · not synced yet").font(.caption2).foregroundStyle(.secondary)
+                    Text(current ? WatchPayload.usd(payload.todayCostUsd) : "—")
                         .font(.system(.title, design: .rounded, weight: .semibold))
                         .monospacedDigit()
                 }
-                Text("Last \(payload.days) days").font(.caption2).foregroundStyle(.secondary)
+                Text(current ? rangeName : "\(rangeName) to \(payload.updatedAt.formatted(.dateTime.month(.abbreviated).day()))")
+                    .font(.caption2).foregroundStyle(.secondary)
                 GroupRow(name: "Personal", cost: payload.personalCostUsd, tokens: payload.personalTokens, total: payload.totalCostUsd, color: Palette.personal)
                 GroupRow(name: "Work", cost: payload.workCostUsd, tokens: payload.workTokens, total: payload.totalCostUsd, color: Palette.work)
                 if payload.otherCostUsd > 0 {
@@ -79,10 +88,15 @@ struct SummaryPage: View {
                     Text(status).font(.caption2).foregroundStyle(.orange)
                 }
                 Text("Synced \(payload.updatedAt.formatted(.relative(presentation: .named)))")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.caption2).foregroundStyle(payload.isStale(at: now) ? Color.orange : Color.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var rangeName: String {
+        guard payload.days == 1 else { return "Last \(payload.days) days" }
+        return payload.usesProviderDates == true ? "Day" : "Last 24 hours"
     }
 }
 

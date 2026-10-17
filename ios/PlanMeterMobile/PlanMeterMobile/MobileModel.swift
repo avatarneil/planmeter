@@ -140,10 +140,9 @@ final class MobileModel {
         accountObserver = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.usesCloud else { return }
+                // This also fires without an account switch. A refresh replaces the
+                // snapshots; a signed-out or different account clears what it can't read.
                 self.subscriptionReady = false
-                self.clearReports()
-                self.cloudSnapshots = []
-                self.selectedCloudMac = ""
                 await self.refresh()
             }
         }
@@ -338,7 +337,7 @@ final class MobileModel {
                 let snapshots = try await cloudStore.fetch()
                 guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
                 cloudSnapshots = snapshots
-                if selectedCloudMac.isEmpty, let first = snapshots.first { selectedCloudMac = first.id }
+                if !snapshots.contains(where: { $0.id == selectedCloudMac }) { selectedCloudMac = snapshots.first?.id ?? "" }
                 error = nil
                 applyCloudSelection()
                 if !subscriptionReady && Date() >= subscriptionRetryAfter {

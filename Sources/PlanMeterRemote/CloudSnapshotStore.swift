@@ -35,7 +35,18 @@ public struct CloudSnapshotStore {
         return subscription
     }
 
+    /// An opaque, stable identifier for the signed-in iCloud account. Account
+    /// change notifications also fire for token refreshes, so compare this
+    /// before treating a notification as a different account.
+    public func accountIdentifier() async throws -> String {
+        try await container().userRecordID().recordName
+    }
+
     private func database() async throws -> CKDatabase {
+        try await container().privateCloudDatabase
+    }
+
+    private func container() async throws -> CKContainer {
         #if os(macOS)
         // CKContainer can terminate an unentitled SwiftPM/ad-hoc process.
         guard let task = SecTaskCreateFromSelf(nil),
@@ -50,7 +61,7 @@ public struct CloudSnapshotStore {
         #endif
         let container = CKContainer(identifier: Self.containerIdentifier)
         guard try await container.accountStatus() == .available else { throw CloudSyncError.signedOut }
-        return container.privateCloudDatabase
+        return container
     }
 
     public func save(_ snapshot: CloudSnapshot) async throws {
