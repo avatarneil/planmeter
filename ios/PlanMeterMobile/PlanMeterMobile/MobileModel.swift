@@ -82,6 +82,7 @@ final class MobileModel {
     }
     private let cloudStore = CloudSnapshotStore()
     private let cloudAccount = CloudAccountGuard()
+    private var cloudAccountSeeded = false
     private var subscriptionReady = false
     private var subscriptionRetryAfter = Date.distantPast
     var pushRegistrationStatus = "Registering for background notifications…"
@@ -354,6 +355,16 @@ final class MobileModel {
                 if selectedCloudMac.isEmpty, let first = snapshots.first { selectedCloudMac = first.id }
                 error = nil
                 applyCloudSelection()
+                if !cloudAccountSeeded, let identifier = try? await cloudStore.accountIdentifier() {
+                    // These snapshots came from the current account; remember it so a
+                    // later change notification can tell a real switch apart.
+                    cloudAccountSeeded = true
+                    if cloudAccount.verify(identifier) == .changed {
+                        cloudAccount.reset()
+                        _ = cloudAccount.verify(identifier)
+                    }
+                    guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
+                }
                 if !subscriptionReady && Date() >= subscriptionRetryAfter {
                     do {
                         try await cloudStore.subscribeToChanges()

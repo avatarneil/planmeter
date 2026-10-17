@@ -71,6 +71,7 @@ final class CloudSyncState {
             accountVerifiedAt = Date()
             return true
         } catch {
+            guard generation == accountGeneration else { return false }
             // Signed out or offline: nothing can reach another account, so keep
             // sync on and retry once iCloud is available again.
             retryAfter = Date().addingTimeInterval(60)
