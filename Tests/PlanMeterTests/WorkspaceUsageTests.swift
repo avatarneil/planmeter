@@ -6,7 +6,8 @@ import PlanMeterRemote
 final class WorkspaceUsageTests: XCTestCase {
     @MainActor
     func testFocusedInspectionKeepsPartialAndCompleteReadingsSeparateFromSharedUsage() async throws {
-        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 12))!
+        // 10:30 UTC is inside UTC October 1 and never exactly local midnight, in every time zone.
+        let now = UsageCoverage.utcCalendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 10, minute: 30))!
         let fetched = now.addingTimeInterval(300)
         let date = "2026-10-01"
         let target = CodexUsageTarget(id: "workspace:member", name: "Work", home: "/tmp/unused", email: "member@example.com",
@@ -22,9 +23,10 @@ final class WorkspaceUsageTests: XCTestCase {
                  "uncached_text_input_tokens": tokens, "cached_text_input_tokens": 0,
                  "text_output_tokens": 0, "text_total_tokens": tokens]]] }]
         }
-        let dates = ["2026-09-30", date]
-        let oldFreshness = "2026-10-01T10:00:00Z"
-        let newFreshness = "2026-10-01T11:00:00Z"
+        let dates = [date]
+        // Both readings report all of UTC October 1, so they cover the local usage.
+        let oldFreshness = "2026-10-02T00:00:00Z"
+        let newFreshness = "2026-10-02T01:00:00Z"
         let shared = try CodexDailyUsage.decode(
             products: creditFeed("product", dates: dates, credits: 25, freshness: oldFreshness),
             modelCredits: creditFeed("model", dates: dates, credits: 25, freshness: oldFreshness),
@@ -77,14 +79,16 @@ final class WorkspaceUsageTests: XCTestCase {
     @MainActor
     func testWorkspaceUsageFlowsThroughDashboardDrilldownsMenuWidgetsAndRemoteReports() throws {
         let model = AppModel()
-        let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 12))!
+        // 10:30 UTC is inside UTC October 1 and never exactly local midnight, in every time zone.
+        let now = UsageCoverage.utcCalendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 10, minute: 30))!
         var account = Account.placeholder(id: "codex:plan:business")
         account.suggestedGroup = .work
         model.discovery = Discovery(accounts: [account])
         model.lastScan = now
         model.cells[CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)), accountId: account.id, model: "test")] = Cell(totals: TokenTotals(uncachedInput: 500), reportedCostUsd: 99)
         let target = CodexUsageTarget(id: "workspace:member", name: "Work", home: "/tmp/unused", email: "member@example.com", plan: "business", serviceAccountId: "workspace", localAccountId: account.id)
-        let products: [String: Any] = ["breakdown": "product", "series": [["key": "work", "label": "Work"]], "data": [["date": "2026-10-01", "values": ["work": 25]]]]
+        // Reported through the end of UTC October 1, so the reading covers the local usage.
+        let products: [String: Any] = ["breakdown": "product", "series": [["key": "work", "label": "Work"]], "data_freshness_ts": "2026-10-02T00:00:00Z", "data": [["date": "2026-10-01", "values": ["work": 25]]]]
         let tokens: [String: Any] = ["units": "credits", "group_by": "day", "data": [["date": "2026-10-01", "models": [["model": "test", "speed": "standard", "credits": 25, "uncached_text_input_tokens": 20, "cached_text_input_tokens": 80, "text_output_tokens": 10, "text_total_tokens": 110]]]]]
         model.dailyUsage = [try CodexDailyUsage.decode(products: products, modelCredits: nil, tokens: tokens, estimate: ["estimated_usage_usd_micros": 40_000], target: target, from: "2026-10-01", to: "2026-10-01", now: now)]
         model.recompute(now: now)
