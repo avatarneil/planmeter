@@ -90,7 +90,7 @@ Task {
         var out: [String: Any] = [:]
         out["days"] = days
         out["accountWide"] = Report.coverage(ctx, days: days)
-        out["note"] = "Workspace credit readings replace overlapping known-thread estimates; other accounts/dates use local transcripts and available dated cloud turns. --threads retains per-thread spend."
+        out["note"] = "Workspace credit readings replace overlapping known-thread estimates within the hours the provider has reported; other accounts/dates use local transcripts and available dated cloud turns. --threads retains per-thread spend."
         out["accounts"] = accounts.map { a -> [String: Any] in
             let agg = byAccount[a.id] ?? Aggregate()
             return [
@@ -105,7 +105,7 @@ Task {
         print(String(decoding: data, as: UTF8.self))
     } else {
         print("PlanMeter · last \(days) days · pricing: \(rates.knownModels) models from \(rates.source)")
-        print("Dated workspace credits replace overlapping local estimates; other accounts/dates use local token prices.")
+        print("Dated workspace credits replace overlapping local estimates within reported hours; other accounts/dates use local token prices.")
         print("scan: \(String(format: "%.1fs", elapsed)), \(output.cells.count) cells")
         print("")
         for group in PlanGroup.allCases {

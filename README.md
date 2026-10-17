@@ -127,8 +127,10 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   counterpart; text-model totals are not a complete billing total. The date picker
   defaults to the latest completed day and is independent of the chart range.
   Inspecting a day performs a focused query to preserve model names the provider
-  may group as Other in longer windows. These service amounts replace overlapping
-  local account/day estimates in summaries, charts, model drill-downs, menu-bar
+  may group as Other in longer windows. Provider dates are UTC days reported through a
+  freshness time. Each reading replaces overlapping local estimates only in the hours
+  it covers, is shared across the local days those hours fall on in proportion to the
+  local usage it replaces, and leaves later hours on live local estimates. This applies to summaries, charts, model drill-downs, menu-bar
   totals, desktop widgets, and companion reports. Other accounts and missing dates
   retain local usage. Ambiguous same-plan logins cannot replace a local account.
   Lifetime thread readings never enter these totals. Missing routes remain unavailable, and
@@ -162,8 +164,8 @@ from T3 Code's cached copy when present and fetched directly otherwise.
   thread comparisons, CLI/MCP reports, widgets, and companion reports. Each turn is
   placed at its completion time (start time if incomplete); this is a turn aggregate,
   not a response-by-response hourly ledger. A matching local rollout takes precedence
-  for the entire thread, and workspace daily totals replace overlapping account/day
-  estimates. Cloud discovery and pagination are bounded, so coverage may be incomplete.
+  for the entire thread, and workspace daily totals replace overlapping estimates
+  in the hours they cover. Cloud discovery and pagination are bounded, so coverage may be incomplete.
   This path requires no admin API key or browser session. Personal Pro login can read
   cloud thread/turn history, but the tested per-turn dollar/token endpoint returned
   forbidden: those fields remain unavailable, while local per-response I/O and daily

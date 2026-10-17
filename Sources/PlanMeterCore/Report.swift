@@ -74,8 +74,8 @@ public enum Report {
 
     public static func buckets(_ ctx: ReportContext, days: Int, resolution: Resolution = .day) -> [Bucket] {
         let w = window(days: days)
-        let local = Aggregation.buckets(cells: ctx.scan.cells, rates: ctx.rates, from: w.from, to: w.to, resolution: effectiveResolution(ctx, requested: resolution))
-        return UsageProjection.buckets(local: local, snapshots: ctx.dailyUsage, accounts: ctx.accounts, from: w.from, to: w.to).buckets
+        return UsageProjection.buckets(cells: ctx.scan.cells, rates: ctx.rates, snapshots: ctx.dailyUsage, accounts: ctx.accounts,
+                                       from: w.from, to: w.to, resolution: effectiveResolution(ctx, requested: resolution)).buckets
     }
 
     static func effectiveResolution(_ ctx: ReportContext, requested: Resolution) -> Resolution {
@@ -153,7 +153,7 @@ public enum Report {
             "timeZone": TimeZone.current.identifier,
             "groups": groups,
             "pricing": ["source": ctx.rates.source, "knownModels": ctx.rates.knownModels],
-            "note": "Dated workspace credits replace overlapping known-thread estimates for unambiguous accounts/dates. Workspace costs use the provider's conversion and include Work/Codex/Chat; workspace text tokens cover Work/Codex. Other accounts and missing dates use local token prices and available cloud turn estimates. Cloud aggregates use turn completion time (start time if incomplete). Provider data may lag. Sessions cover known local/cloud threads; cache savings use standard model rates. Lifetime readings never enter totals.",
+            "note": "Dated workspace credits replace overlapping known-thread estimates for unambiguous accounts, within the UTC-day hours the provider has reported; each reading is shared across local days by the usage it replaces, and later hours keep local estimates. Workspace costs use the provider's conversion and include Work/Codex/Chat; workspace text tokens cover Work/Codex. Other accounts and missing dates use local token prices and available cloud turn estimates. Cloud aggregates use turn completion time (start time if incomplete). Provider data may lag. Sessions cover known local/cloud threads; cache savings use standard model rates. Lifetime readings never enter totals.",
         ]
         out["total"] = aggregateJSON(total)
         out["localTotal"] = aggregateJSON(Aggregation.total(Aggregation.buckets(cells: ctx.localCells, rates: ctx.rates, from: w.from, to: w.to, resolution: .day)))

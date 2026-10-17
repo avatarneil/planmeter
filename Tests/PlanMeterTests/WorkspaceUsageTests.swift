@@ -23,8 +23,9 @@ final class WorkspaceUsageTests: XCTestCase {
                  "text_output_tokens": 0, "text_total_tokens": tokens]]] }]
         }
         let dates = ["2026-09-30", date]
-        let oldFreshness = "2026-10-01T10:00:00Z"
-        let newFreshness = "2026-10-01T11:00:00Z"
+        // Both readings report all of UTC October 1, so they cover the local usage.
+        let oldFreshness = "2026-10-02T00:00:00Z"
+        let newFreshness = "2026-10-02T01:00:00Z"
         let shared = try CodexDailyUsage.decode(
             products: creditFeed("product", dates: dates, credits: 25, freshness: oldFreshness),
             modelCredits: creditFeed("model", dates: dates, credits: 25, freshness: oldFreshness),

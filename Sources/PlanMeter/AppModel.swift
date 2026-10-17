@@ -304,8 +304,8 @@ final class AppModel {
     }
 
     func projectedUsage(from: Date, to: Date, resolution: Resolution, includeWorkspace: Bool = true) -> UsageProjection.Result {
-        let local = Aggregation.buckets(cells: cells, rates: rates, from: from, to: to, resolution: resolution)
-        return UsageProjection.buckets(local: local, snapshots: includeWorkspace ? dailyUsage : [], accounts: accounts, from: from, to: to)
+        UsageProjection.buckets(cells: cells, rates: rates, snapshots: includeWorkspace ? dailyUsage : [], accounts: accounts,
+                                from: from, to: to, resolution: resolution)
     }
 
     func inspectWorkspaceDay(target: CodexUsageTarget, date: String, usage: CodexDailyUsage = .shared) async -> CodexDailyUsageSnapshot? {
