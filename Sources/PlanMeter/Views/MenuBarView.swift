@@ -53,7 +53,6 @@ struct MenuBarView: View {
             }
 
             SpendThresholdCard()
-            Text(model.usageNote).font(.caption2).foregroundStyle(.secondary)
 
             if let detail {
                 Button { self.detail = nil } label: {
@@ -65,7 +64,7 @@ struct MenuBarView: View {
                 }
                 .frame(height: 340)
             } else {
-                let summaries = model.groupSummaries
+                let summaries = model.groupSummaries.filter { $0.group != .other || $0.aggregate.totals.total > 0 || $0.aggregate.costUsd > 0 }
                 let grand = model.total
                 ForEach(summaries) { summary in
                     VStack(alignment: .leading, spacing: 5) {
@@ -119,7 +118,7 @@ struct MenuBarView: View {
                             HStack {
                                 Text("\(account.displayName) · \(Format.windowName(minutes: window.windowMinutes))").font(.caption)
                                 Spacer()
-                                Text("\(Int(window.usedPercent.rounded()))% · resets \(Format.relative(window.resetDate))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                                Text("\(Int(window.usedPercent.rounded()))% · \(window.resetDate > Date() ? "resets \(Format.relative(window.resetDate))" : "reset pending")").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                             }
                             ShareBar(fraction: window.usedPercent / 100, color: window.usedPercent > 90 ? .red : window.usedPercent > 70 ? .orange : .accentColor)
                         }

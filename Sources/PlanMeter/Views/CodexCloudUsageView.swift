@@ -12,7 +12,7 @@ struct CodexCloudUsageView: View {
             return date >= window.from && date < window.to
         }.sorted { ($0.completedAt ?? $0.startedAt) > ($1.completedAt ?? $1.startedAt) }
         let measured = turns.filter { $0.totals != nil }
-        DisclosureGroup("Cloud turns — \(measured.count) usage readings / \(turns.count) discovered") {
+        DisclosureGroup {
             if !turns.isEmpty {
                 ScrollView(.horizontal) {
                     Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
@@ -42,14 +42,19 @@ struct CodexCloudUsageView: View {
                     }.textSelection(.enabled)
                 }
             }
-            Text("Cloud usage uses ordinary Codex login. Turn totals enter charts at completion time (start time if incomplete); individual response times are unavailable. Local rollouts take precedence for matching thread IDs. Discovery is bounded and may be incomplete.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        if let message = snapshot.message {
-            Text(message).font(.caption).foregroundStyle(.secondary)
+            if let message = snapshot.message {
+                Text(message).font(.caption).foregroundStyle(.secondary)
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text("Cloud turns")
+                InfoButton(text: "Read with the ordinary Codex login. Turn totals enter charts at completion time (start time if incomplete); individual response times are unavailable. Local transcripts take precedence for matching threads. Discovery is bounded and may be incomplete.")
+                Spacer()
+                Text("\(measured.count) of \(turns.count) with usage").font(.caption).foregroundStyle(.secondary)
+            }
         }
         if !snapshot.quotas.isEmpty {
-            DisclosureGroup("Current cloud thread allowance usage (\(snapshot.quotas.count))") {
+            DisclosureGroup("Cloud thread allowances (\(snapshot.quotas.count))") {
                 Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
                     GridRow {
                         Text("Thread")
@@ -68,7 +73,7 @@ struct CodexCloudUsageView: View {
                         }.font(.caption).monospacedDigit()
                     }
                 }.textSelection(.enabled)
-                Text("Allowance percentages and purchased-credit usage use separate units. Neither provides an input/output token count or dollar charge.")
+                Text("Percentages and purchased credits are separate units, without token counts or dollar charges.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

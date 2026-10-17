@@ -63,6 +63,34 @@ enum SnapshotMode {
         NSApp.terminate(nil)
     }
 
+    /// `--snapshot-diagnostics /path/out.png` renders the Diagnostics content off-screen.
+    static var diagnosticsPath: String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--snapshot-diagnostics"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    @MainActor
+    static func captureDiagnostics(to path: String, model: AppModel) async {
+        try? await Task.sleep(for: .seconds(2))
+        let view = VStack(alignment: .leading, spacing: 16) {
+            AccountCoverageCard()
+            SourcesCard()
+        }
+        .padding(20).frame(width: 900).environment(model).background(Color(nsColor: .windowBackgroundColor))
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else {
+            FileHandle.standardError.write(Data("snapshot-diagnostics: render failed\n".utf8))
+            exit(1)
+        }
+        try? png.write(to: URL(fileURLWithPath: path))
+        print("snapshot-diagnostics: wrote \(path)")
+        NSApp.terminate(nil)
+    }
+
     /// `--snapshot-desktop /tmp/widget` writes small, medium, and empty widget previews.
     static var desktopPath: String? {
         let args = CommandLine.arguments

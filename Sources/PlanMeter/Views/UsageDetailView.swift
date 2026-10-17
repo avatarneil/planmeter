@@ -44,9 +44,11 @@ struct UsageDetailView: View {
         }
         VStack(alignment: .leading, spacing: 12) {
             Text(model.title(for: scope)).font(compact ? .headline : .title2.bold())
-            Text("\(model.range.rawValue) · \(accountCount) \(accountCount == 1 ? "account" : "accounts") · Estimated usage cost")
-                .font(.caption).foregroundStyle(.secondary)
-            Text(model.usageNote).font(.caption2).foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                Text("\(model.range.rawValue) · \(accountCount) \(accountCount == 1 ? "account" : "accounts") · Estimated cost")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !compact { InfoButton(text: model.usageNote) }
+            }
             HStack(spacing: 20) {
                 Stat(label: "Cost", value: Format.usd(total.costUsd))
                 Stat(label: "Tokens", value: Format.tokens(total.totals.total))
@@ -99,9 +101,8 @@ struct UsageDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         if !compact {
-            AccountCoverageCard(scope: scope)
-            Text("Known threads and chats").font(.headline)
-            ThreadSpendList(rows: model.threads(in: scope))
+            Text("Threads and chats").font(.headline).padding(.top, 8)
+            ThreadSpendList(rows: model.threads(in: scope), limit: 12)
         }
     }
 }

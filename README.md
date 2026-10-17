@@ -232,6 +232,10 @@ Switch between **By account**, **By provider**, and **Personal vs Work** to expl
 slices. Details show a time chart, cost and token totals, and a model breakdown for the selected
 range. Click **Done** to return to the overview.
 
+**Diagnostics** (stethoscope in the toolbar) opens a separate window with account readings,
+workspace and cloud-turn detail, transcript sources, and pricing. Explanations throughout the
+app are behind ⓘ buttons.
+
 In the menu bar popover, click an account or group name to see a compact chart and model
 breakdown. **All usage** goes back; **Open PlanMeter** opens the same details in the main app.
 Drilling down does not change which groups count toward your spending limit.
@@ -369,7 +373,7 @@ guides for the Apple account setup.
 Mac over your tailnet. It uses QR pairing with a single-use token, proof-of-possession on every
 request, a replay cache, and Tailscale as the network layer.
 
-**Mac side** (PlanMeter → Remote in the toolbar): turn on remote access, create a pairing code,
+**Mac side** (PlanMeter → Remote, the cloud button in the toolbar): turn on remote access, create a pairing code,
 scan it from the phone. The Mac listens only on its Tailscale address (plus loopback for
 same-machine clients such as the simulator) and refuses connections from any other source address.
 Paired devices are listed with last-seen time and can be revoked.

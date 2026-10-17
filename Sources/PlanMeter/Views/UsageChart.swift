@@ -32,20 +32,48 @@ struct UsageChartCard: View {
 
     var body: some View {
         Card {
-            HStack {
-                Text(model.metric == .cost ? "Cost over time" : "Tokens over time").font(.headline)
+            let (points, scopes, colors) = data
+            // One calendar day at day resolution is a single bar; compare series instead.
+            let singlePeriod = Set(points.map(\.period)).count <= 1 && model.chartResolution == .day
+            HStack(spacing: 4) {
+                Text(singlePeriod ? (model.metric == .cost ? "Cost by series" : "Tokens by series")
+                     : (model.metric == .cost ? "Cost over time" : "Tokens over time")).font(.headline)
+                InfoButton(text: model.usageNote + " Click a bar or a name to explore its usage.")
                 Spacer()
                 Picker("Series", selection: $seriesMode) {
                     ForEach(SeriesMode.allCases) { Text($0.rawValue).tag($0) }
                 }
+                .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 360)
+                .frame(width: 320)
             }
-            let (points, scopes, colors) = data
             if points.isEmpty {
                 Text("No usage in this range.")
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 220)
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            } else if singlePeriod {
+                let largest = points.map(\.value).max() ?? 0
+                VStack(spacing: 8) {
+                    ForEach(points.sorted { $0.value > $1.value }) { point in
+                        let color = colors[scopes.firstIndex(of: point.scope) ?? 0]
+                        Button { model.usageDetail = point.scope } label: {
+                            HStack(spacing: 10) {
+                                Text(model.title(for: point.scope)).lineLimit(1)
+                                    .frame(width: 150, alignment: .leading)
+                                GeometryReader { geo in
+                                    RoundedRectangle(cornerRadius: 3).fill(color)
+                                        .frame(width: max(2, largest > 0 ? point.value / largest * geo.size.width : 0))
+                                }
+                                .frame(height: 14)
+                                Text(model.metric == .cost ? Format.usd(point.value) : Format.tokens(Int(point.value)))
+                                    .monospacedDigit().frame(width: 80, alignment: .trailing)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Explore \(model.title(for: point.scope))")
+                    }
+                }
             } else {
                 Chart(points) { point in
                     BarMark(
@@ -96,9 +124,9 @@ struct UsageChartCard: View {
                             }
                     }
                 }
-                .frame(minHeight: 240)
-                Text("Click a bar or a name to explore its usage.")
-                    .font(.caption).foregroundStyle(.secondary)
+                .frame(minHeight: 220)
+            }
+            if !points.isEmpty && !singlePeriod {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), alignment: .leading)], alignment: .leading, spacing: 8) {
                     ForEach(Array(scopes.enumerated()), id: \.element.id) { index, scope in
                         Button {
