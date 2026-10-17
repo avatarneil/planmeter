@@ -296,7 +296,7 @@ final class AppModel {
     var chartResolution: Resolution { range != .day && hasWorkspaceUsage ? .day : range.resolution }
     var usageNote: String {
         if range == .day && hasWorkspaceUsage { return "Last 24 hours uses local transcripts and available cloud turn estimates; workspace analytics provide calendar days. Choose Today or a longer range for workspace usage." }
-        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates and available cloud turns. Daily readings replace overlapping known-thread spend; provider data may lag. Sessions cover known threads; cache savings use standard model rates." }
+        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates and available cloud turns. Workspace readings replace overlapping local estimates for the hours the provider has reported; newer hours use local estimates until it catches up. Sessions cover known threads; cache savings use standard model rates." }
         if cloudUsage.contains(where: { $0.turns.contains(where: { $0.totals != nil }) }) {
             return "Local usage and dated cloud turns · Costs use service estimates where available, otherwise API-equivalent token prices; cloud aggregates use turn completion time"
         }

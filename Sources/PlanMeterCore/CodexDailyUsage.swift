@@ -44,6 +44,8 @@ public struct CodexDailyUsageSnapshot: Codable, Sendable, Identifiable {
     public var days: [CodexDailyUsageDay] = []
     public var fetchedAt: Date?
     public var dataFreshness: String?
+    /// The credit feed's own freshness, which bounds the hours a day's credits cover.
+    public var creditsFreshness: String? = nil
     public var estimatedUsdPerCredit: Double?
     public var status: SourceStatus = .missing
     public var message: String?
@@ -253,9 +255,11 @@ public actor CodexDailyUsage {
             snapshot.estimatedUsdPerCredit = Double(micros) / 1_000_000
         }
         snapshot.fetchedAt = now
-        // Conservatively report the oldest component freshness.
+        // Conservatively report the oldest component freshness, compared as dates.
         snapshot.dataFreshness = ([products, modelCredits, tokens] + (productTokens?.values.map { Optional($0) } ?? []))
-            .compactMap { $0?["data_freshness_ts"] as? String }.min()
+            .compactMap { $0?["data_freshness_ts"] as? String }
+            .min { (ISO8601.parseMs($0) ?? .min) < (ISO8601.parseMs($1) ?? .min) }
+        snapshot.creditsFreshness = products["data_freshness_ts"] as? String
         let readingsPartial = !snapshot.missingCreditDays.isEmpty || modelDays == nil || tokenDays == nil || snapshot.estimatedUsdPerCredit == nil
             || productDays.keys.contains { modelDays?[$0] == nil || tokenDays?[$0] == nil }
         snapshot.status = readingsPartial || detailPartial ? .partial : .ok

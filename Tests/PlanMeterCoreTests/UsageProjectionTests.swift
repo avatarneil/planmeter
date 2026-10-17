@@ -98,11 +98,15 @@ final class UsageProjectionTests: XCTestCase {
         XCTAssertEqual(Aggregation.total(project([snapshot]).buckets).costUsd, 1.0875, accuracy: 0.000000001)
     }
 
-    func testWithoutLocalActivityAFullProviderDayStaysOnItsCalendarDate() throws {
-        let from = newYork.date(from: DateComponents(year: 2026, month: 10, day: 1))!
-        let result = project([try fixture.snapshot()], cells: [], from: from, to: from.addingTimeInterval(86_400), calendar: newYork)
-        XCTAssertTrue(result.buckets.allSatisfy { $0.periodStart == from })
-        XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875)
+    func testWithoutLocalActivityAReadingSpreadsOverItsReportedHours() throws {
+        // UTC October 1 is 8pm–midnight September 30 and midnight–8pm October 1 in New York.
+        let sep30 = newYork.date(from: DateComponents(year: 2026, month: 9, day: 30))!
+        let oct1 = newYork.date(from: DateComponents(year: 2026, month: 10, day: 1))!
+        let result = project([try fixture.snapshot()], cells: [], from: sep30, to: oct1.addingTimeInterval(86_400), calendar: newYork)
+        let byDay = Dictionary(grouping: result.buckets, by: \.periodStart).mapValues(Aggregation.total)
+        XCTAssertEqual(try XCTUnwrap(byDay[sep30]).costUsd, 1.6875 * 4 / 24, accuracy: 0.0000001)
+        XCTAssertEqual(try XCTUnwrap(byDay[oct1]).costUsd, 1.6875 * 20 / 24, accuracy: 0.0000001)
+        XCTAssertEqual(Aggregation.total(result.buckets).totals.total, 160)
     }
 
     func testProviderDayIsSharedAcrossLocalDaysByTheUsageItReplaces() throws {
@@ -114,8 +118,10 @@ final class UsageProjectionTests: XCTestCase {
         let oct1 = newYork.date(from: DateComponents(year: 2026, month: 10, day: 1))!
         let result = project([try fixture.snapshot()], cells: [evening, morning], from: sep30, to: oct1.addingTimeInterval(86_400), calendar: newYork)
         let byDay = Dictionary(grouping: result.buckets, by: \.periodStart).mapValues(Aggregation.total)
-        XCTAssertEqual(try XCTUnwrap(byDay[sep30]).costUsd, 1.6875 / 4, accuracy: 0.0000001)
-        XCTAssertEqual(try XCTUnwrap(byDay[oct1]).costUsd, 1.6875 * 3 / 4, accuracy: 0.0000001)
+        // Text usage follows local usage (1:3); voice credits have no local trace
+        // and spread over the reported hours (4:20).
+        XCTAssertEqual(try XCTUnwrap(byDay[sep30]).costUsd, 1.65 / 4 + 0.0375 * 4 / 24, accuracy: 0.0000001)
+        XCTAssertEqual(try XCTUnwrap(byDay[oct1]).costUsd, 1.65 * 3 / 4 + 0.0375 * 20 / 24, accuracy: 0.0000001)
         // Each token field is shared separately, so counts round per field.
         XCTAssertEqual(Double(try XCTUnwrap(byDay[sep30]).totals.total), 40, accuracy: 2)
         XCTAssertEqual((byDay[sep30]?.totals.total ?? 0) + (byDay[oct1]?.totals.total ?? 0), 160)
@@ -126,7 +132,7 @@ final class UsageProjectionTests: XCTestCase {
 
     func testHoursAfterProviderFreshnessKeepTheirLocalUsage() throws {
         var snapshot = try fixture.snapshot()
-        snapshot.dataFreshness = "2026-10-01T12:00:00Z"
+        snapshot.creditsFreshness = "2026-10-01T12:00:00Z"
         let reported = cell(at: from.addingTimeInterval(3 * 3600), cost: 2)
         let recent = cell(at: from.addingTimeInterval(15 * 3600), cost: 4, session: "s2")
         let result = project([snapshot], cells: [reported, recent])
@@ -139,7 +145,7 @@ final class UsageProjectionTests: XCTestCase {
         var snapshot = try fixture.snapshot()
         snapshot.days[0].date = "2026-10-02"
         snapshot.fromDay = "2026-10-02"; snapshot.toDay = "2026-10-02"
-        snapshot.dataFreshness = "2026-10-02T03:00:00Z"
+        snapshot.creditsFreshness = "2026-10-02T03:00:00Z"
         let oct1 = newYork.date(from: DateComponents(year: 2026, month: 10, day: 1))!
         let oct2 = newYork.date(from: DateComponents(year: 2026, month: 10, day: 2))!
         let today = project([snapshot], cells: [], from: oct2, to: oct2.addingTimeInterval(50 * 60), calendar: newYork)
@@ -147,6 +153,58 @@ final class UsageProjectionTests: XCTestCase {
         XCTAssertTrue(today.workspaceAccountIds.isEmpty)
         let yesterday = project([snapshot], cells: [], from: oct1, to: oct2, calendar: newYork)
         XCTAssertEqual(Aggregation.total(yesterday.buckets).costUsd, 1.6875)
+    }
+
+    func testMissingFreshnessCoversOnlyUntilTheReadingWasFetched() throws {
+        var snapshot = try fixture.snapshot()
+        snapshot.creditsFreshness = nil
+        snapshot.dataFreshness = nil
+        snapshot.fetchedAt = from.addingTimeInterval(12 * 3600)
+        let result = project([snapshot], cells: [cell(at: from.addingTimeInterval(3 * 3600), cost: 2), cell(at: from.addingTimeInterval(15 * 3600), cost: 4, session: "s2")])
+        XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875 + 4, accuracy: 0.0000001)
+    }
+
+    func testCreditFreshnessBoundsCoverageWhenOtherFeedsLag() throws {
+        var snapshot = try fixture.snapshot()
+        snapshot.dataFreshness = "2026-10-01T06:00:00Z" // A lagging token feed.
+        snapshot.creditsFreshness = "2026-10-01T12:00:00Z"
+        let result = project([snapshot], cells: [cell(at: from.addingTimeInterval(9 * 3600), cost: 2)])
+        XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875, accuracy: 0.0000001) // Credits already cover 9am.
+    }
+
+    func testUnpricedLocalModelsShareByTokensAndKeepTheirRecords() throws {
+        let sep30 = newYork.date(from: DateComponents(year: 2026, month: 9, day: 30))!
+        let oct1 = newYork.date(from: DateComponents(year: 2026, month: 10, day: 1))!
+        let evening = cell(at: from.addingTimeInterval(2 * 3600), cost: 1, session: "late")
+        let tokens = TokenTotals(uncachedInput: 99_500)
+        let newModel = (CellKey(hourStartMs: Int64(from.addingTimeInterval(14 * 3600).timeIntervalSince1970 * 1000), accountId: account.id, model: "brand-new"),
+                        Cell(totals: tokens, unpricedTotals: tokens, records: 50, sessionIds: ["day"]))
+        let result = project([try fixture.snapshot()], cells: [evening, newModel], from: sep30, to: oct1.addingTimeInterval(86_400), calendar: newYork)
+        let byDay = Dictionary(grouping: result.buckets, by: \.periodStart).mapValues(Aggregation.total)
+        XCTAssertEqual(try XCTUnwrap(byDay[oct1]).costUsd, 1.65 * 0.995 + 0.0375 * 20 / 24, accuracy: 0.0000001)
+        XCTAssertEqual(Aggregation.total(result.buckets).records, 52)
+        XCTAssertEqual(Aggregation.total(result.buckets).sessions, 2)
+        XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875, accuracy: 0.0000001)
+    }
+
+    func testLocalPiecesPartitionReportedHoursAcrossTimeZonesAndDaylightSaving() throws {
+        for zone in ["America/New_York", "Asia/Kolkata", "Pacific/Kiritimati", "America/Santiago", "Australia/Lord_Howe", "Pacific/Chatham"] {
+            var calendar = UsageCoverage.utcCalendar
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            var start = Int64(try XCTUnwrap(UsageCoverage.utcCalendar.date(from: DateComponents(year: 2026, month: 1, day: 1))).timeIntervalSince1970 * 1000)
+            for _ in 0..<366 {
+                let pieces = UsageProjection.localPieces(start: start, end: start + 86_400_000, calendar: calendar)
+                XCTAssertEqual(pieces.first?.from, start, zone)
+                XCTAssertEqual(pieces.last?.to, start + 86_400_000, zone)
+                for (a, b) in zip(pieces, pieces.dropFirst()) { XCTAssertEqual(a.to, b.from, zone) }
+                for piece in pieces {
+                    let interval = try XCTUnwrap(calendar.dateInterval(of: .day, for: Date(timeIntervalSince1970: TimeInterval(piece.from) / 1000)))
+                    XCTAssertEqual(piece.day, interval.start, zone)
+                    XCTAssertLessThanOrEqual(Double(piece.to) / 1000, interval.end.timeIntervalSince1970, zone)
+                }
+                start += 86_400_000
+            }
+        }
     }
 
     func testProductAndReasoningDetailKeepsSharedChartTotalsUnchanged() throws {
