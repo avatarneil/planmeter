@@ -169,7 +169,7 @@ struct CodexDailyUsageView: View {
                     if let total = selected.credits {
                         Text("\(credits(total)) credits").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    if let freshness = snapshot.dataFreshness.flatMap(Self.freshness) {
+                    if let freshness = (snapshot.creditsFreshness ?? snapshot.dataFreshness).flatMap(Self.freshness) {
                         Text("· through \(freshness)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
