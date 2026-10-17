@@ -37,8 +37,12 @@ public enum WatchCloudSync {
             throw WatchCloudError.chooseMac
         }
         guard var selected else { return nil }
-        if let cached, cached.cloudMacID == selected.cloudMacID, cached.updatedAt > selected.updatedAt {
+        // Keep a newer summary of the same Mac, such as one the phone relayed
+        // directly while the Mac's iCloud upload was behind.
+        if let cached, cached.isSameSource(as: selected), cached.updatedAt > selected.updatedAt {
+            let id = selected.cloudMacID
             selected = cached
+            selected.cloudMacID = id // Keep the iCloud selection; a relay has no record ID.
         }
         selected.complicationPreferences = cached?.complicationPreferences
         return selected

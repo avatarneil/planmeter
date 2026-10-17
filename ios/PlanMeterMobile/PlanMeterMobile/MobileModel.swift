@@ -81,6 +81,8 @@ final class MobileModel {
         }
     }
     private let cloudStore = CloudSnapshotStore()
+    private let cloudAccount = CloudAccountGuard()
+    private var cloudAccountSeeded = false
     private var subscriptionReady = false
     private var subscriptionRetryAfter = Date.distantPast
     var pushRegistrationStatus = "Registering for background notifications…"
@@ -140,16 +142,28 @@ final class MobileModel {
         accountObserver = NotificationCenter.default.addObserver(forName: .CKAccountChanged, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.usesCloud else { return }
+                // This also fires without an account switch; keep showing usage
+                // unless a different account is signed in or it can't be checked.
                 self.subscriptionReady = false
-                self.clearReports()
-                self.cloudSnapshots = []
-                self.selectedCloudMac = ""
+                if await self.cloudAccountChanged() {
+                    self.clearReports()
+                    self.cloudSnapshots = []
+                    self.selectedCloudMac = ""
+                }
                 await self.refresh()
             }
         }
     }
 
     deinit { if let accountObserver { NotificationCenter.default.removeObserver(accountObserver) } }
+
+    private func cloudAccountChanged() async -> Bool {
+        guard let identifier = try? await cloudStore.accountIdentifier() else { return true }
+        guard cloudAccount.verify(identifier) == .changed else { return false }
+        cloudAccount.reset()
+        _ = cloudAccount.verify(identifier)
+        return true
+    }
 
     // MARK: Lifecycle
 
@@ -341,6 +355,16 @@ final class MobileModel {
                 if selectedCloudMac.isEmpty, let first = snapshots.first { selectedCloudMac = first.id }
                 error = nil
                 applyCloudSelection()
+                if !cloudAccountSeeded, let identifier = try? await cloudStore.accountIdentifier() {
+                    // These snapshots came from the current account; remember it so a
+                    // later change notification can tell a real switch apart.
+                    cloudAccountSeeded = true
+                    if cloudAccount.verify(identifier) == .changed {
+                        cloudAccount.reset()
+                        _ = cloudAccount.verify(identifier)
+                    }
+                    guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
+                }
                 if !subscriptionReady && Date() >= subscriptionRetryAfter {
                     do {
                         try await cloudStore.subscribeToChanges()

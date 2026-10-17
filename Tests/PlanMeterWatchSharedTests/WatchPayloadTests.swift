@@ -26,6 +26,23 @@ final class WatchPayloadTests: XCTestCase {
         XCTAssertNil(legacy.todayCost(groups: ["work"]))
     }
 
+    func testOlderDaysNeverCountAsTodayAndSourcesMatchAcrossTransports() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let synced = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 3, hour: 22)))
+        var p = payload(updatedAt: synced)
+        XCTAssertTrue(p.coversToday(at: synced.addingTimeInterval(3600), calendar: calendar))
+        XCTAssertFalse(p.coversToday(at: synced.addingTimeInterval(14 * 86_400), calendar: calendar))
+        var cloud = p
+        cloud.cloudMacID = "mac-a"
+        XCTAssertTrue(p.isSameSource(as: cloud))
+        p.cloudMacID = "mac-b"
+        XCTAssertFalse(p.isSameSource(as: cloud))
+        p.cloudMacID = nil
+        p.serverName = "Other"
+        XCTAssertFalse(p.isSameSource(as: cloud))
+    }
+
     func testWidgetExpiresAtFifteenMinutes() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let p = payload(updatedAt: now)
