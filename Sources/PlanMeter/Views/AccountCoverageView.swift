@@ -23,6 +23,10 @@ struct AccountCoverageCard: View {
                                 Text("Fetched \(Format.relative(fetched))").font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        ForEach(model.readingWarnings(targetId: row.snapshot.target.id), id: \.self) { warning in
+                            Label(warning, systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
                         if let daily = model.dailyUsage.first(where: { $0.id == row.snapshot.id }) {
                             CodexDailyUsageView(snapshot: daily)
                         }
@@ -159,7 +163,7 @@ struct CodexDailyUsageView: View {
             } label: {
                 HStack(spacing: 6) {
                     Text("Workspace usage")
-                    InfoButton(text: Self.about)
+                    InfoButton(text: Self.about, topic: "workspace usage")
                     Spacer()
                     Text(selected.estimatedCostUsd.map(Format.usd) ?? "USD unavailable").monospacedDigit()
                     if let total = selected.credits {
@@ -247,7 +251,7 @@ struct CodexServiceThreadsView: View {
         } label: {
             HStack(spacing: 6) {
                 Text("Lifetime thread totals (\(rows.count))")
-                InfoButton(text: Self.about)
+                InfoButton(text: Self.about, topic: "lifetime thread totals")
             }
         }
     }
@@ -312,6 +316,7 @@ struct ThreadSpendRow: View {
             if let chatURL = row.chatURL, let url = URL(string: chatURL) {
                 Link(destination: url) { Image(systemName: "arrow.up.forward.square") }
                     .help("Open chat")
+                    .accessibilityLabel("Open chat")
             } else {
                 Image(systemName: "arrow.up.forward.square").hidden()
             }

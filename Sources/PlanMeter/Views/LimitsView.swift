@@ -155,6 +155,6 @@ struct SourcesCard: View {
     private var pricingText: String {
         if model.rates.isEmpty { return "Token prices unavailable" }
         let when = model.rates.fetchedAt.map { Format.relative($0) } ?? "unknown time"
-        return "\(model.rates.knownModels) model prices from \(model.rates.source), \(when)"
+        return "\(model.rates.knownModels) model prices from \(model.rates.source), fetched \(when)"
     }
 }

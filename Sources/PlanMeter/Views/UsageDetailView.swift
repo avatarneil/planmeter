@@ -31,6 +31,7 @@ struct UsageDetailSheet: View {
 /// Shared by the main window's drill-down sheet and the compact menu bar view.
 struct UsageDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
     var scope: UsageScope
     var compact = false
 
@@ -101,6 +102,11 @@ struct UsageDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         if !compact {
+            let codexTargets = Set(model.accounts(in: scope).map(\.id))
+            if model.coverage.contains(where: { $0.snapshot.target.localAccountId.map(codexTargets.contains) == true }) {
+                Button("Account readings…") { openWindow(id: "diagnostics") }
+                    .help("Workspace credits, cloud turns, and token comparisons in Diagnostics")
+            }
             Text("Threads and chats").font(.headline).padding(.top, 8)
             ThreadSpendList(rows: model.threads(in: scope), limit: 12)
         }

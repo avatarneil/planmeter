@@ -34,11 +34,11 @@ struct UsageChartCard: View {
         Card {
             let (points, scopes, colors) = data
             // One calendar day at day resolution is a single bar; compare series instead.
-            let singlePeriod = Set(points.map(\.period)).count <= 1 && model.chartResolution == .day
+            let singlePeriod = model.range == .today && model.chartResolution == .day
             HStack(spacing: 4) {
                 Text(singlePeriod ? (model.metric == .cost ? "Cost by series" : "Tokens by series")
                      : (model.metric == .cost ? "Cost over time" : "Tokens over time")).font(.headline)
-                InfoButton(text: model.usageNote + " Click a bar or a name to explore its usage.")
+                InfoButton(text: model.usageNote + " Click a bar or a name to explore its usage.", topic: "these estimates")
                 Spacer()
                 Picker("Series", selection: $seriesMode) {
                     ForEach(SeriesMode.allCases) { Text($0.rawValue).tag($0) }

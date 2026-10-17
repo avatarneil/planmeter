@@ -48,7 +48,7 @@ struct CodexCloudUsageView: View {
         } label: {
             HStack(spacing: 6) {
                 Text("Cloud turns")
-                InfoButton(text: "Read with the ordinary Codex login. Turn totals enter charts at completion time (start time if incomplete); individual response times are unavailable. Local transcripts take precedence for matching threads. Discovery is bounded and may be incomplete.")
+                InfoButton(text: "Read with the ordinary Codex login. Turn totals enter charts at completion time (start time if incomplete); individual response times are unavailable. Local transcripts take precedence for matching threads. Discovery is bounded and may be incomplete.", topic: "cloud turns")
                 Spacer()
                 Text("\(measured.count) of \(turns.count) with usage").font(.caption).foregroundStyle(.secondary)
             }

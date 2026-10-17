@@ -141,6 +141,7 @@ struct GroupCard: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(summary.accounts.enumerated()), id: \.element.account.id) { index, row in
+                        Button { model.usageDetail = .account(row.account.id) } label: {
                         HStack(spacing: 8) {
                             Circle().fill(model.color(for: row.account)).frame(width: 8, height: 8)
                             Text(row.account.displayName).lineLimit(1)
@@ -156,7 +157,8 @@ struct GroupCard: View {
                         }
                         .font(.callout)
                         .contentShape(Rectangle())
-                        .onTapGesture { model.usageDetail = .account(row.account.id) }
+                        }
+                        .buttonStyle(.plain)
                         .help("Explore \(row.account.displayName)")
                         .tag(index)
                     }
@@ -217,7 +219,7 @@ struct Card<Content: View>: View {
             if let title {
                 HStack(spacing: 4) {
                     Text(title).font(.headline)
-                    if let info { InfoButton(text: info) }
+                    if let info { InfoButton(text: info, topic: title) }
                 }
             }
             content
@@ -232,6 +234,7 @@ struct Card<Content: View>: View {
 /// Explanations live behind a small ⓘ instead of in the layout.
 struct InfoButton: View {
     var text: String
+    var topic: String? = nil
     @State private var isShown = false
 
     var body: some View {
@@ -240,7 +243,7 @@ struct InfoButton: View {
         }
         .buttonStyle(.borderless)
         .help(text)
-        .accessibilityLabel("About this")
+        .accessibilityLabel(topic.map { "About \($0)" } ?? "More information")
         .popover(isPresented: $isShown, arrowEdge: .bottom) {
             Text(text)
                 .font(.callout)
@@ -257,7 +260,7 @@ struct StatusBanner: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        let messages = [model.lastError, model.pricingError, model.desktopWidgetError].compactMap { $0 }
+        let messages = [model.lastError, model.pricingError, model.desktopWidgetError].compactMap { $0 } + model.readingWarnings()
         if !messages.isEmpty {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -280,10 +283,13 @@ struct CloudSyncButton: View {
     var body: some View {
         let sync = model.cloudSync
         let failing = sync.isEnabled && sync.status.hasPrefix("Upload failed")
+        // Tailscale-only setups are fine without iCloud; show the direct connection instead.
+        let symbol = sync.isEnabled ? (failing ? "exclamationmark.icloud" : "icloud")
+            : model.remote.isListening ? "iphone.radiowaves.left.and.right" : "icloud.slash"
         Button {
             model.showRemote = true
         } label: {
-            Label("Remote", systemImage: !sync.isEnabled ? "icloud.slash" : failing ? "exclamationmark.icloud" : "icloud")
+            Label("Remote", systemImage: symbol)
         }
         .help(sync.isEnabled ? "iCloud sync and remote access · \(sync.status)" : "iCloud sync is off · Phone and Watch won’t update without Tailscale")
     }
