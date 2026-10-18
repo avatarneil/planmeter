@@ -80,6 +80,13 @@ button:disabled { opacity: 0.5; }
 .select-wrap select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .select-wrap select:disabled { color: var(--muted); cursor: default; }
 .select-wrap:has(select:disabled)::after { opacity: 0.4; }
+/* Room for five tabs, including an older Mac's "Today", on 320px screens. */
+@media (max-width: 359px) {
+  .range-row { gap: 6px; }
+  .segmented button { font-size: 13px; letter-spacing: -0.01em; }
+  .select-wrap::after { right: 10px; }
+  .select-wrap select { width: 5.25em; padding: 0 22px 0 10px; }
+}
 
 .group-head { display: flex; align-items: center; gap: 8px; }
 .group-head .name { font-weight: 600; font-size: 17px; }
