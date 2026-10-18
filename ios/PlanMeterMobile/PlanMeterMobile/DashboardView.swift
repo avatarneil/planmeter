@@ -229,7 +229,8 @@ struct TimelineCard: View {
                 }
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 6)
                 .frame(height: 220)
-                if timeline.resolution != model.granularity {
+                // Only once the reply to that request has arrived, not while it's loading.
+                if !model.usesCloud, model.requestedGranularity == model.granularity, timeline.resolution != model.granularity {
                     Text("Showing \(MobileRange.label(granularity: timeline.resolution).lowercased()) buckets; update PlanMeter on your Mac for finer ones.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }

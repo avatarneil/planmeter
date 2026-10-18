@@ -161,6 +161,8 @@ final class MobileModel {
     }
     /// False once a directly connected Mac answers a sub-day request with a whole day (older versions).
     private(set) var directSupportsMinutes = true
+    /// The bucket size the shown direct-mode timeline was requested at.
+    private(set) var requestedGranularity: String?
     /// The last hour by minute and today by 15 minutes, for the watch.
     private var activity: (lastHour: [RemoteTimeline.GroupBar]?, today: [RemoteTimeline.GroupBar]?) = (nil, nil)
     /// The watch and widgets always describe a day or longer, even while 1h is shown here.
@@ -343,6 +345,7 @@ final class MobileModel {
         do {
             let paired = try await RemoteClient.pair(invite: invite, deviceName: UIDevice.current.name, platform: Self.platformName, signer: signer)
             try store.writeCodable(paired, Self.serverKey)
+            directSupportsMinutes = true
             usesCloud = false
             server = paired
             client = RemoteClient(server: paired, signer: signer)
@@ -354,6 +357,7 @@ final class MobileModel {
 
     func unpair() {
         try? store.delete(Self.serverKey)
+        directSupportsMinutes = true
         server = nil
         client = nil
         if !usesCloud { clearReports() }
@@ -387,6 +391,10 @@ final class MobileModel {
         limits = nil
         models = []
         lastUpdated = nil
+        // Never relay one Mac's totals under another's selection.
+        watchSummary = nil
+        watchTimeline = nil
+        activity = (nil, nil)
         guard let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) else {
             clearPublishedSummary()
             return
@@ -470,7 +478,7 @@ final class MobileModel {
             // The watch's compact charts, and its day summary while 1h is shown here.
             // Older Macs ignore sub-day windows and finer buckets, so replies are validated.
             async let lastHour = watch ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "minute", minutes: 60)) : nil
-            async let today = watch ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "5m")) : nil
+            async let today = watch ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "15m")) : nil
             async let daySummary = minutes != nil ? Self.optionalCall(client, RemoteRequest(method: .summary, days: 1)) : nil
             async let dayTimeline = minutes != nil ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "hour")) : nil
             let (sr, tr, lr, mr) = try await (s, t, l, m)
@@ -484,6 +492,7 @@ final class MobileModel {
             }
             summary = sr.summary
             timeline = tr.timeline
+            requestedGranularity = granularity
             watchSummary = minutes == nil ? sr.summary : dayReply?.summary
             watchTimeline = minutes == nil ? tr.timeline : dayTimelineReply?.timeline
             activity = (hourReply?.timeline.flatMap { $0.minutes == 60 && $0.resolution == "minute" ? $0.groupBars() : nil },
