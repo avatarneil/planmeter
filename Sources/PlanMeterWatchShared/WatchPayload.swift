@@ -35,8 +35,34 @@ public struct WatchPayload: Codable, Equatable, Sendable {
         }
     }
 
+    /// One chart bar: cost by plan group, with the untimed workspace baseline apart.
+    public struct Bar: Codable, Equatable, Sendable, Identifiable {
+        public var start: Date
+        public var costs: [String: Double]
+        public var baselines: [String: Double]
+        public var id: Date { start }
+        public var total: Double { costs.values.reduce(0, +) }
+
+        /// Cents-level precision and no empty groups keep relayed payloads small.
+        public var compacted: Bar {
+            func round(_ values: [String: Double]) -> [String: Double] {
+                values.compactMapValues { $0 > 0 ? ($0 * 10_000).rounded() / 10_000 : nil }
+            }
+            return Bar(start: start, costs: round(costs), baselines: round(baselines))
+        }
+
+        public init(start: Date, costs: [String: Double], baselines: [String: Double] = [:]) {
+            self.start = start
+            self.costs = costs
+            self.baselines = baselines
+        }
+    }
+
     public var updatedAt: Date
     public var days: Int
+    /// The last hour by minute and today by 15 minutes, when available.
+    public var lastHour: [Bar]?
+    public var today: [Bar]?
     public var serverName: String
     public var personalCostUsd: Double
     public var workCostUsd: Double

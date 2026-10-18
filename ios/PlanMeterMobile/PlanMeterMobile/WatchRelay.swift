@@ -21,6 +21,13 @@ final class WatchRelay: NSObject, WCSessionDelegate {
         try? WCSession.default.updateApplicationContext([WatchPayload.clearContextKey: true])
     }
 
+    /// Avoids fetching watch-only data when no watch app would receive it.
+    var hasWatchApp: Bool {
+        guard WCSession.isSupported() else { return false }
+        let session = WCSession.default
+        return session.activationState == .activated && session.isPaired && session.isWatchAppInstalled
+    }
+
     func activate() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default

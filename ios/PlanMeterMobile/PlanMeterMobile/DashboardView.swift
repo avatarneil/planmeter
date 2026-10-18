@@ -10,7 +10,7 @@ struct DashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Picker("Range", selection: $model.range) {
-                    ForEach(MobileRange.allCases) { Text($0.rawValue == 1 && model.summary?.usesProviderDates == true ? "Today" : $0.label).tag($0) }
+                    ForEach(model.availableRanges) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
@@ -48,7 +48,7 @@ struct DashboardView: View {
                         if let updated = model.lastUpdated {
                             Text("Updated \(Fmt.relative(updated)) · data as of \(Fmt.relative(summary.generatedAt))").font(.caption2).foregroundStyle(.tertiary)
                         }
-                        Text(summary.usesProviderDates == true ? "Workspace daily credits replace overlapping local estimates; other accounts use local token prices. Workspace tokens cover Work and Codex text usage." : "API-equivalent token prices, not subscription charges.").font(.caption2).foregroundStyle(.tertiary)
+                        Text("Estimated costs: API-equivalent token prices, or workspace credits where reported.").font(.caption2).foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 4)
                 } else if model.isLoading {
@@ -134,29 +134,91 @@ struct TimelineCard: View {
     @Environment(MobileModel.self) private var model
     var timeline: RemoteTimeline
 
+    private struct Segment: Identifiable {
+        var id: String
+        var start: Date
+        var end: Date
+        var low: Double
+        var high: Double
+        var account: String
+        var baseline: Bool
+    }
+
+    /// Stacked per period: untimed workspace baselines first, then timed usage.
+    private var segments: [Segment] {
+        let names = Dictionary(timeline.accounts.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let order = Dictionary(timeline.accounts.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let step = RemoteTimeline.stepSeconds(timeline.resolution)
+        var out: [Segment] = []
+        for (period, points) in Dictionary(grouping: timeline.points, by: \.period) {
+            let end = step.map { period.addingTimeInterval($0 * 0.88) }
+                ?? (Calendar.current.dateInterval(of: .day, for: period)?.end ?? period.addingTimeInterval(86_400)).addingTimeInterval(-86_400 * 0.12)
+            let sorted = points.sorted { (order[$0.accountId] ?? .max) < (order[$1.accountId] ?? .max) }
+            var top = 0.0
+            for baseline in [true, false] {
+                for point in sorted {
+                    let base = min(point.costUsd, point.baselineCostUsd ?? 0)
+                    let value = baseline ? base : point.costUsd - base
+                    guard value > 0 else { continue }
+                    out.append(Segment(id: "\(point.id):\(baseline)", start: period, end: end, low: top, high: top + value,
+                                       account: names[point.accountId] ?? point.accountId, baseline: baseline))
+                    top += value
+                }
+            }
+        }
+        return out
+    }
+
+    /// The whole window, so a few active buckets don't zoom the axis.
+    private var domain: ClosedRange<Date> {
+        let first = timeline.periods.first ?? timeline.points.map(\.period).min() ?? Date()
+        let last = timeline.periods.last ?? timeline.points.map(\.period).max() ?? first
+        let end = RemoteTimeline.stepSeconds(timeline.resolution).map { last.addingTimeInterval($0) }
+            ?? Calendar.current.dateInterval(of: .day, for: last)?.end ?? last.addingTimeInterval(86_400)
+        return first...max(end, first.addingTimeInterval(60))
+    }
+
+    private func label(_ date: Date) -> String {
+        switch timeline.resolution {
+        case "minute", "5m": return date.formatted(.dateTime.hour().minute())
+        case "15m", "hour": return timeline.days > 1 ? date.formatted(.dateTime.weekday(.abbreviated).hour()) : date.formatted(.dateTime.hour())
+        default: return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+    }
+
     var body: some View {
+        @Bindable var model = model
         VStack(alignment: .leading, spacing: 10) {
-            Text("Cost over time").font(.headline)
+            HStack {
+                Text("Cost over time").font(.headline)
+                Spacer()
+                if model.availableGranularities.count > 1 {
+                    Picker("Bucket size", selection: $model.granularity) {
+                        ForEach(model.availableGranularities, id: \.self) { Text(MobileRange.label(granularity: $0)).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+            let segments = self.segments
             if timeline.points.isEmpty {
                 Text("No usage in this range.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                let names = Dictionary(uniqueKeysWithValues: timeline.accounts.map { ($0.id, $0.name) })
-                Chart(timeline.points) { point in
-                    BarMark(
-                        x: .value("Period", point.period, unit: timeline.resolution == "hour" ? .hour : .day),
-                        y: .value("Cost", point.costUsd)
+                Chart(segments) { segment in
+                    RectangleMark(
+                        xStart: .value("Start", segment.start),
+                        xEnd: .value("End", segment.end),
+                        yStart: .value("Cost", segment.low),
+                        yEnd: .value("Cost", segment.high)
                     )
-                    .foregroundStyle(by: .value("Account", names[point.accountId] ?? point.accountId))
+                    .foregroundStyle(by: .value("Account", segment.account))
+                    .opacity(segment.baseline ? 0.35 : 1)
                 }
                 .chartForegroundStyleScale(domain: timeline.accounts.map(\.name), range: timeline.accounts.map { model.color(for: $0.id) })
+                .chartXScale(domain: domain)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { value in
                         AxisGridLine().foregroundStyle(Color.primary.opacity(0.06))
-                        AxisValueLabel {
-                            if let date = value.as(Date.self) {
-                                Text(timeline.resolution == "hour" ? date.formatted(.dateTime.hour()) : date.formatted(.dateTime.month(.abbreviated).day()))
-                            }
-                        }
+                        AxisValueLabel { if let date = value.as(Date.self) { Text(label(date)) } }
                     }
                 }
                 .chartYAxis {
@@ -167,6 +229,15 @@ struct TimelineCard: View {
                 }
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 6)
                 .frame(height: 220)
+                // Only once the reply to that request has arrived, not while it's loading.
+                if !model.usesCloud, model.requestedGranularity == model.granularity, timeline.resolution != model.granularity {
+                    Text("Showing \(MobileRange.label(granularity: timeline.resolution).lowercased()) buckets; update PlanMeter on your Mac for finer ones.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                if segments.contains(where: \.baseline) {
+                    Text("Lighter bars: workspace credits without timing, spread evenly over the hours the provider reported.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             }
         }
         .modifier(CardBackground())

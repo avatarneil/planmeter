@@ -9,8 +9,8 @@ public struct CloudSnapshot: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var generatedAt: Date
     public var reports: [RemoteReply]
-    /// Finer timelines: the last hour by minute and the last 24 hours by five
-    /// minutes. Optional so older snapshots and clients still decode.
+    /// Finer timelines for day reports, e.g. the last 24 hours by five minutes
+    /// and seven days by hour. Optional so older snapshots and clients still decode.
     public var timelines: [RemoteTimeline]?
 
     public init(id: String, name: String, generatedAt: Date, reports: [RemoteReply], timelines: [RemoteTimeline]? = nil) {
@@ -21,14 +21,22 @@ public struct CloudSnapshot: Codable, Sendable, Equatable, Identifiable {
         self.timelines = timelines.map { $0.compactMap { Self.sanitized(RemoteReply(timeline: $0)).timeline } }
     }
 
-    /// The finer timeline for a sub-day window (`minutes`) or the last 24 hours (nil).
-    public func fineTimeline(minutes: Int?) -> RemoteTimeline? {
-        timelines?.first { $0.minutes == minutes }
+    /// The finer timeline published for a day report, if any.
+    public func fineTimeline(days: Int) -> RemoteTimeline? {
+        timelines?.first { $0.days == days && $0.minutes == nil }
     }
 
-    public func report(days: Int) throws -> RemoteReply {
+    /// The last hour by minute and today in 15-minute buckets, for compact charts.
+    public func activity(calendar: Calendar = .current) -> (lastHour: [RemoteTimeline.GroupBar]?, today: [RemoteTimeline.GroupBar]?) {
+        let lastHour = (try? report(days: 1, minutes: 60))?.timeline.flatMap { $0.resolution == "minute" ? $0.groupBars() : nil }
+        let fine = fineTimeline(days: 1).flatMap { $0.resolution == "15m" ? $0 : $0.rebucketed(to: "15m") }
+        return (lastHour, fine?.groupBars(on: generatedAt, calendar: calendar))
+    }
+
+    public func report(days: Int, minutes: Int? = nil) throws -> RemoteReply {
         guard version == 1 else { throw CloudSyncError.unsupportedVersion }
-        guard let report = reports.first(where: { $0.summary?.days == days }),
+        // Sub-day reports follow the day reports, so older clients' first match is unchanged.
+        guard let report = reports.first(where: { $0.summary?.days == days && $0.summary?.minutes == minutes }),
               report.summary != nil, report.timeline != nil, report.limits != nil, report.models != nil else {
             throw CloudSyncError.incompleteSnapshot
         }
