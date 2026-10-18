@@ -64,11 +64,17 @@
     </section>
 
     <section id="dashboard" class="hidden">
-      <div class="segmented" id="range" role="tablist">
-        <button data-days="1" role="tab">24h</button>
-        <button data-days="7" role="tab">7d</button>
-        <button data-days="30" role="tab" class="active" aria-selected="true">30d</button>
-        <button data-days="90" role="tab">90d</button>
+      <div class="range-row">
+        <div class="segmented" id="range" role="tablist" aria-label="Range">
+          <button data-range="1h" role="tab" aria-selected="false">1h</button>
+          <button data-range="24h" role="tab" aria-selected="false">24h</button>
+          <button data-range="7d" role="tab" aria-selected="false">7d</button>
+          <button data-range="30d" role="tab" class="active" aria-selected="true">30d</button>
+          <button data-range="90d" role="tab" aria-selected="false">90d</button>
+        </div>
+        <div class="select-wrap">
+          <select id="granularity" aria-label="Chart granularity" title="Chart granularity"></select>
+        </div>
       </div>
       <div id="error" class="error hidden"></div>
       <div id="groups"></div>
@@ -76,6 +82,7 @@
         <h2>Cost over time</h2>
         <div id="chart"></div>
         <div id="legend" class="legend"></div>
+        <div id="chart-notes"></div>
       </section>
       <section class="card" id="limits-card"></section>
       <section class="card" id="models-card"></section>

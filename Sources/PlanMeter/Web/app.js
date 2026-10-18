@@ -152,8 +152,65 @@
     return openResponse(await res.json(), resKey);
   }
 
+  // ---------- ranges and chart granularity ----------
+  // `minutes` asks for a window shorter than a day; Macs that predate it
+  // ignore the field, so `days` always rides along.
+  const RANGES = {
+    "1h": { days: 1, minutes: 60, resolutions: ["minute", "5m"], fallback: "minute" },
+    "24h": { days: 1, resolutions: ["minute", "5m", "15m", "hour"], fallback: "hour" },
+    "7d": { days: 7, resolutions: ["15m", "hour", "day"], fallback: "day" },
+    "30d": { days: 30, resolutions: ["hour", "day"], fallback: "day" },
+    "90d": { days: 90, resolutions: ["day"], fallback: "day" },
+  };
+  const RESOLUTION_LABELS = { minute: "1 min", "5m": "5 min", "15m": "15 min", hour: "1 hour", day: "1 day" };
+  const RESOLUTION_MINUTES = { minute: 1, "5m": 5, "15m": 15, hour: 60, day: 1440 };
+  const RESOLUTIONS_KEY = "planmeter.resolutions";
+  // Candidate x-label spacings in minutes; 43200 means the first of each month.
+  const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080, 20160, 43200];
+  const FMT = {
+    time: new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }),
+    hour: new Intl.DateTimeFormat([], { hour: "numeric" }),
+    weekday: new Intl.DateTimeFormat([], { weekday: "short" }),
+    weekdayHour: new Intl.DateTimeFormat([], { weekday: "short", hour: "numeric" }),
+    weekdayTime: new Intl.DateTimeFormat([], { weekday: "short", hour: "numeric", minute: "2-digit" }),
+    day: new Intl.DateTimeFormat([], { month: "short", day: "numeric" }),
+    dayTime: new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+  };
+
   // ---------- state ----------
-  const state = { server: null, keyPair: null, days: 30, summary: null, timeline: null, limits: null, models: [], loading: false, timer: null };
+  // `legacy` marks a Mac that only answers hourly or daily timelines and has
+  // no sub-day windows; it is rediscovered on every page load.
+  const state = { server: null, keyPair: null, range: "30d", legacy: false, summary: null, timeline: null, limits: null, models: [], loading: false, again: false, timer: null };
+
+  function savedResolutions() {
+    try { return JSON.parse(localStorage.getItem(RESOLUTIONS_KEY)) || {}; } catch (_) { return {}; }
+  }
+
+  function resolutionOptions(range) {
+    const all = RANGES[range].resolutions;
+    return state.legacy ? all.filter((r) => r === "hour" || r === "day") : all;
+  }
+
+  function selectedResolution(range) {
+    const options = resolutionOptions(range);
+    const saved = savedResolutions()[range];
+    if (options.includes(saved)) return saved;
+    return options.includes(RANGES[range].fallback) ? RANGES[range].fallback : options[options.length - 1] || "day";
+  }
+
+  function syncControls() {
+    for (const b of $("range").querySelectorAll("button")) {
+      const on = b.dataset.range === state.range;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      if (RANGES[b.dataset.range].minutes) b.classList.toggle("hidden", state.legacy);
+    }
+    const select = $("granularity");
+    const options = resolutionOptions(state.range);
+    select.replaceChildren(...options.map((r) => { const o = el("option", "", RESOLUTION_LABELS[r]); o.value = r; return o; }));
+    select.value = selectedResolution(state.range);
+    select.disabled = options.length < 2;
+  }
 
   function accountColor(id) {
     const accounts = (state.timeline && state.timeline.accounts) || (state.summary ? state.summary.groups.flatMap((g) => g.accounts.map((a) => a.account)) : []);
@@ -208,6 +265,7 @@
       await kvSet("server", server);
       state.server = server;
       state.keyPair = keyPair;
+      state.legacy = false; syncControls();
       history.replaceState(null, "", location.pathname);
       showDashboard();
       await refresh();
@@ -393,18 +451,36 @@
   }
 
   async function refresh() {
-    if (!state.server || state.loading) return;
+    if (!state.server) return;
+    // A range or granularity change while a request is in flight runs again
+    // once it finishes rather than being dropped.
+    if (state.loading) { state.again = true; return; }
     state.loading = true;
+    state.again = false;
     $("refresh").disabled = true;
     $("subtitle").textContent = "Refreshing…";
     try {
-      const days = state.days;
+      const rangeKey = state.range;
+      const range = RANGES[rangeKey];
+      const resolution = selectedResolution(rangeKey);
+      const query = range.minutes ? { days: 1, minutes: range.minutes } : { days: range.days };
       const [s, t, l, m] = await Promise.all([
-        call("summary", { days }),
-        call("timeline", { days, resolution: days === 1 ? "hour" : "day" }),
+        call("summary", query),
+        call("timeline", Object.assign({ resolution }, query)),
         call("limits"),
-        call("models", { days }),
+        call("models", query),
       ]);
+      if (rangeKey !== state.range || resolution !== selectedResolution(state.range)) { state.again = true; return; }
+      // Older Macs ignore `minutes` and answer anything but "hour" with days.
+      // Offer them only what they can draw and ask again.
+      const fine = resolution !== "hour" && resolution !== "day";
+      if (!state.legacy && ((range.minutes && s.summary.minutes == null) || (fine && t.timeline.resolution === "day"))) {
+        state.legacy = true;
+        if (RANGES[state.range].minutes) state.range = "24h";
+        syncControls();
+        state.again = true;
+        return;
+      }
       state.summary = s.summary; state.timeline = t.timeline; state.limits = l.limits; state.models = m.models || [];
       $("error").classList.add("hidden");
       render();
@@ -416,13 +492,14 @@
     } finally {
       state.loading = false;
       $("refresh").disabled = false;
+      if (state.again) refresh();
     }
   }
 
   // ---------- rendering ----------
   function render() {
     const s = state.summary;
-    document.querySelector('[data-days="1"]').textContent = s.usesProviderDates ? "Today" : "24h";
+    document.querySelector('[data-range="24h"]').textContent = s.usesProviderDates ? "Today" : "24h";
     const groups = $("groups");
     groups.replaceChildren();
     for (const g of s.groups) {
@@ -454,11 +531,14 @@
     $("foot").textContent = `From ${s.serverName} · data as of ${rel(s.generatedAt)} · API-equivalent token prices, not subscription charges.`;
   }
 
+  let chartWidth = 0;
   function renderChart() {
     const t = state.timeline;
-    const chart = $("chart"); const legend = $("legend");
-    chart.replaceChildren(); legend.replaceChildren();
-    if (!t || !t.points.length) { chart.append(el("p", "muted", "No usage in this range.")); return; }
+    const chart = $("chart"); const legend = $("legend"); const notes = $("chart-notes");
+    chart.replaceChildren(); legend.replaceChildren(); notes.replaceChildren();
+    chartWidth = chart.clientWidth;
+    const legacyNote = () => { if (state.legacy) notes.append(el("p", "chart-note", "This Mac's PlanMeter draws hourly and daily bars only. Update it for the last hour and minute bars.")); };
+    if (!t || !t.points.length) { chart.append(el("p", "muted", "No usage in this range.")); legacyNote(); return; }
     const periods = t.periods.map((p) => new Date(p).getTime());
     const byPeriod = new Map(periods.map((p) => [p, []]));
     for (const pt of t.points) {
@@ -473,7 +553,9 @@
     const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
     const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s * 4 >= rawMax) || 10 * mag;
     const max = step * 4;
-    const W = 640, H = 220, padL = 44, padB = 22, padT = 8;
+    // Draw at the container's pixel width so text keeps its shape and x labels
+    // can be spaced by their width.
+    const W = Math.max(160, Math.round(chartWidth || 640)), H = 220, padL = 44, padB = 22, padT = 8;
     const plotW = W - padL - 6, plotH = H - padB - padT;
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
@@ -489,30 +571,93 @@
       svg.append(label);
     }
     const n = keys.length;
-    const slot = plotW / n; const bw = Math.max(2, slot * 0.7);
+    const slot = plotW / n;
+    // Gaps once bars are wide enough to show them; minute bars on a phone touch.
+    const bw = slot >= 4 ? slot * 0.7 : slot >= 2 ? slot - 1 : slot;
     const order = t.accounts.map((a) => a.id);
+    // One path per account and shade keeps ~1,440 periods cheap to draw.
+    const shapes = new Map();
+    const shape = (id, light) => {
+      const key = `${light ? "b" : "f"}:${id}`;
+      if (!shapes.has(key)) shapes.set(key, { id, light, d: [] });
+      return shapes.get(key).d;
+    };
     keys.forEach((k, i) => {
       let y = padT + plotH;
+      const x = (padL + i * slot + (slot - bw) / 2).toFixed(2);
       const pts = byPeriod.get(k).slice().sort((a, b) => order.indexOf(a.accountId) - order.indexOf(b.accountId));
       for (const p of pts) {
-        const h = (p.costUsd / max) * plotH;
-        y -= h;
-        svg.append(mk("rect", { x: padL + i * slot + (slot - bw) / 2, y, width: bw, height: Math.max(0, h), rx: 2, fill: accountColor(p.accountId) }));
+        // Workspace credits without timing sit at the bottom of the account's
+        // bar, lighter; the rest of its cost stacks on top in full color.
+        const base = Math.min(p.costUsd, Math.max(0, p.baselineCostUsd || 0));
+        for (const [part, light] of [[base, true], [p.costUsd - base, false]]) {
+          const h = (part / max) * plotH;
+          if (!(h > 0)) continue;
+          y -= h;
+          shape(p.accountId, light).push(`M${x} ${y.toFixed(2)}h${bw.toFixed(2)}v${h.toFixed(2)}h${(-bw).toFixed(2)}z`);
+        }
       }
     });
-    // x labels
-    const every = Math.max(1, Math.ceil(n / 6));
-    keys.forEach((k, i) => {
-      if (i % every !== 0) return;
+    for (const s of shapes.values()) {
+      const attrs = { d: s.d.join(""), fill: accountColor(s.id) };
+      if (s.light) attrs["fill-opacity"] = "0.35";
+      svg.append(mk("path", attrs));
+    }
+    // x labels: the finest local-time spacing whose labels do not collide.
+    const resMin = RESOLUTION_MINUTES[t.resolution] || (n > 1 ? Math.max(1, Math.round((keys[1] - keys[0]) / 60000)) : 1440);
+    const multiDay = n > 1 && keys[n - 1] - keys[0] >= 36 * 3600 * 1000;
+    const info = keys.map((k) => {
       const d = new Date(k);
-      const label = mk("text", { x: padL + i * slot + slot / 2, y: H - 6, "text-anchor": "middle", "font-size": "11", fill: "currentColor", "fill-opacity": "0.6" });
-      label.textContent = t.resolution === "hour" ? d.toLocaleTimeString([], { hour: "numeric" }) : d.toLocaleDateString([], { month: "short", day: "numeric" });
-      svg.append(label);
+      return { d, min: d.getHours() * 60 + d.getMinutes(), day: Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 };
     });
+    // A period carries step `s`'s label when it holds a local multiple of `s`
+    // (a midnight for whole days; weekly steps land on Mondays).
+    const isTick = (p, s) => {
+      if (s < 1440) return p.min % s < resMin;
+      if (p.min >= resMin) return false;
+      if (s === 43200) return p.d.getDate() === 1;
+      return (s % 10080 === 0 ? p.day + 3 : p.day) % (s / 1440) === 0;
+    };
+    const labelFor = (p, s) => {
+      if (resMin >= 1440) return FMT.day.format(p.d);
+      if (!multiDay) return resMin < 15 || p.d.getMinutes() ? FMT.time.format(p.d) : FMT.hour.format(p.d);
+      if (s >= 1440) return s === 1440 ? FMT.weekday.format(p.d) : FMT.day.format(p.d);
+      return p.d.getMinutes() ? FMT.weekdayTime.format(p.d) : FMT.weekdayHour.format(p.d);
+    };
+    let xTicks = [], fits = false;
+    for (const s of TICK_STEPS) {
+      if (s < resMin) continue;
+      const candidate = [];
+      info.forEach((p, i) => {
+        if (!isTick(p, s)) return;
+        const text = labelFor(p, s);
+        const w = text.length * 6.2; // ~11px system font
+        candidate.push({ text, w, x: Math.min(Math.max(padL + i * slot + slot / 2, w / 2 + 2), W - w / 2 - 2) });
+      });
+      if (!candidate.length) continue;
+      xTicks = candidate;
+      fits = candidate.every((c, j) => j === 0 || c.x - candidate[j - 1].x >= (c.w + candidate[j - 1].w) / 2 + 10);
+      if (fits) break;
+    }
+    for (const c of fits ? xTicks : xTicks.slice(0, 1)) {
+      const label = mk("text", { x: c.x.toFixed(1), y: H - 6, "text-anchor": "middle", "font-size": "11", fill: "currentColor", "fill-opacity": "0.6" });
+      label.textContent = c.text;
+      svg.append(label);
+    }
+    const longSpan = n > 1 && keys[n - 1] - keys[0] >= 7 * 86400 * 1000;
+    const describe = (k) => {
+      const d = new Date(k);
+      return resMin >= 1440 ? FMT.day.format(d) : longSpan ? FMT.dayTime.format(d) : multiDay ? FMT.weekdayTime.format(d) : FMT.time.format(d);
+    };
+    const peak = totals.indexOf(Math.max(...totals));
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `Cost per ${RESOLUTION_LABELS[t.resolution] || "period"}, ${describe(keys[0])} to ${describe(keys[n - 1])}. Highest ${usd(totals[peak])} at ${describe(keys[peak])}.`);
     chart.append(svg);
     for (const a of t.accounts) {
       const span = el("span"); const d = el("i", "dot sm"); d.style.background = accountColor(a.id); span.append(d, document.createTextNode(a.name)); legend.append(span);
     }
+    if (t.points.some((p) => p.baselineCostUsd > 0)) notes.append(el("p", "chart-note", "Lighter bars: workspace credits without timing, spread evenly over the hours the provider reported."));
+    legacyNote();
   }
 
   function renderLimits() {
@@ -586,17 +731,29 @@
   $("unpair").onclick = async () => {
     if (!confirm("Unpair this browser from the Mac? Revoke it on the Mac too to block the key for good.")) return;
     await kvDel("server");
-    state.server = null; state.summary = null;
+    state.server = null; state.summary = null; state.timeline = null;
+    state.legacy = false; syncControls();
     showPairing("Unpaired. Scan a new pairing code to reconnect.");
   };
   for (const b of $("range").querySelectorAll("button")) {
     b.onclick = () => {
-      for (const o of $("range").querySelectorAll("button")) { o.classList.remove("active"); o.removeAttribute("aria-selected"); }
-      b.classList.add("active"); b.setAttribute("aria-selected", "true");
-      state.days = Number(b.dataset.days);
+      state.range = b.dataset.range;
+      syncControls();
       refresh();
     };
   }
+  $("granularity").onchange = (e) => {
+    const saved = savedResolutions();
+    saved[state.range] = e.target.value;
+    try { localStorage.setItem(RESOLUTIONS_KEY, JSON.stringify(saved)); } catch (_) {}
+    refresh();
+  };
+  syncControls();
+  // The chart draws at its pixel width: redraw on rotation, resize, or when
+  // it first becomes visible.
+  const redrawChart = () => { const w = $("chart").clientWidth; if (state.timeline && w && w !== chartWidth) renderChart(); };
+  if (window.ResizeObserver) new ResizeObserver(redrawChart).observe($("chart"));
+  else window.addEventListener("resize", redrawChart);
   $("scan-start").onclick = () => startScanner();
   $("scan-stop").onclick = () => stopScanner();
   $("photo").onchange = (e) => { decodePhoto(e.target.files && e.target.files[0]); e.target.value = ""; };
