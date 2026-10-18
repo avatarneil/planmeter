@@ -9,6 +9,7 @@ import UIKit
 import WidgetKit
 
 enum MobileRange: Int, CaseIterable, Identifiable {
+    case hour = 0
     case day = 1
     case week = 7
     case month = 30
@@ -17,13 +18,43 @@ enum MobileRange: Int, CaseIterable, Identifiable {
     var id: Int { rawValue }
     var label: String {
         switch self {
+        case .hour: return "1h"
         case .day: return "24h"
         case .week: return "7d"
         case .month: return "30d"
         case .quarter: return "90d"
         }
     }
-    var resolution: String { self == .day ? "hour" : "day" }
+    var days: Int { max(1, rawValue) }
+    var minutes: Int? { self == .hour ? 60 : nil }
+
+    /// Bucket sizes a Mac serves over a direct connection.
+    var granularities: [String] {
+        switch self {
+        case .hour: return ["minute", "5m"]
+        case .day: return ["minute", "5m", "15m", "hour"]
+        case .week: return ["15m", "hour", "day"]
+        case .month: return ["hour", "day"]
+        case .quarter: return ["day"]
+        }
+    }
+    var defaultGranularity: String {
+        switch self {
+        case .hour: return "minute"
+        case .day: return "hour"
+        default: return "day"
+        }
+    }
+
+    static func label(granularity: String) -> String {
+        switch granularity {
+        case "minute": return "1 min"
+        case "5m": return "5 min"
+        case "15m": return "15 min"
+        case "hour": return "1 hour"
+        default: return "1 day"
+        }
+    }
 }
 
 /// Keychain first; if the process lacks keychain entitlements (unsigned
@@ -96,6 +127,38 @@ final class MobileModel {
             else { Task { await refresh() } }
         }
     }
+    /// Chosen bucket size per range, persisted.
+    var granularities: [String: String] = UserDefaults.standard.dictionary(forKey: "granularities") as? [String: String] ?? [:] {
+        didSet { UserDefaults.standard.set(granularities, forKey: "granularities") }
+    }
+    /// The chosen bucket size if this source offers it, otherwise the closest default.
+    var granularity: String {
+        get {
+            let available = availableGranularities
+            if let chosen = granularities[String(range.rawValue)], available.contains(chosen) { return chosen }
+            return available.contains(range.defaultGranularity) ? range.defaultGranularity : available.last ?? range.defaultGranularity
+        }
+        set {
+            granularities[String(range.rawValue)] = newValue
+            if usesCloud { applyCloudSelection() }
+            else { Task { await refresh() } }
+        }
+    }
+    /// iCloud snapshots carry fixed timelines; finer buckets come from those that exist.
+    var availableGranularities: [String] {
+        guard usesCloud else { return range.granularities }
+        guard let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) else { return [range.defaultGranularity] }
+        let sources = [(try? snapshot.report(days: range.days, minutes: range.minutes))?.timeline, range.minutes == nil ? snapshot.fineTimeline(days: range.days) : nil]
+            .compactMap { $0?.resolution }
+        return range.granularities.filter { target in sources.contains { $0 == target || RemoteTimeline.coarsens($0, to: target) } }
+    }
+    /// The 1h range needs a Mac that publishes it to iCloud.
+    var availableRanges: [MobileRange] {
+        guard usesCloud, let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) else { return MobileRange.allCases }
+        return MobileRange.allCases.filter { $0 != .hour || (try? snapshot.report(days: 1, minutes: 60)) != nil }
+    }
+    /// The last hour by minute and today by 15 minutes, for the watch.
+    private var activity: (lastHour: [RemoteTimeline.GroupBar]?, today: [RemoteTimeline.GroupBar]?) = (nil, nil)
     var summary: RemoteSummary?
     var timeline: RemoteTimeline?
     var limits: RemoteLimits?
@@ -319,11 +382,12 @@ final class MobileModel {
             return
         }
         do {
-            let report = try snapshot.report(days: range.rawValue)
+            let report = try snapshot.report(days: range.days, minutes: range.minutes)
             summary = report.summary
-            timeline = report.timeline
+            timeline = Self.timeline(granularity, report: report.timeline, fine: range.minutes == nil ? snapshot.fineTimeline(days: range.days) : nil)
             limits = report.limits
             models = report.models ?? []
+            activity = snapshot.activity()
             lastUpdated = snapshot.generatedAt
             publishSummary()
         } catch {
@@ -380,15 +444,21 @@ final class MobileModel {
                 return
             }
             guard let client else { return }
-            let days = range.rawValue
-            async let s = client.call(RemoteRequest(method: .summary, days: days))
-            async let t = client.call(RemoteRequest(method: .timeline, days: days, resolution: range.resolution))
+            let days = range.days, minutes = range.minutes
+            async let s = client.call(RemoteRequest(method: .summary, days: days, minutes: minutes))
+            async let t = client.call(RemoteRequest(method: .timeline, days: days, resolution: granularity, minutes: minutes))
             async let l = client.call(RemoteRequest(method: .limits))
-            async let m = client.call(RemoteRequest(method: .models, days: days))
+            async let m = client.call(RemoteRequest(method: .models, days: days, minutes: minutes))
+            // Compact watch charts; older Macs ignore these windows, so validate the replies.
+            async let lastHour = Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "minute", minutes: 60))
+            async let today = Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "15m"))
             let (sr, tr, lr, mr) = try await (s, t, l, m)
+            let (hourReply, todayReply) = await (lastHour, today)
             guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
             summary = sr.summary
             timeline = tr.timeline
+            activity = (hourReply?.timeline.flatMap { $0.minutes == 60 ? $0.groupBars() : nil },
+                        todayReply?.timeline.flatMap { ["15m", "hour"].contains($0.resolution) ? $0.groupBars(on: Date()) : nil })
             limits = lr.limits
             models = mr.models ?? []
             lastUpdated = Date()
@@ -428,7 +498,7 @@ final class MobileModel {
         // Timeline points are bucketed usage, independent of the selected report range.
         // Use calendar today, never the rolling 24-hour group totals.
         let todayByGroup = timeline?.costByGroup(on: summary.generatedAt)
-        return WatchPayload(
+        var payload = WatchPayload(
             updatedAt: summary.generatedAt,
             days: summary.days,
             serverName: summary.serverName,
@@ -445,6 +515,25 @@ final class MobileModel {
             cloudMacID: usesCloud ? selectedCloudMac : nil,
             usesProviderDates: summary.usesProviderDates
         )
+        func bars(_ groups: [RemoteTimeline.GroupBar]) -> [WatchPayload.Bar] {
+            groups.map { WatchPayload.Bar(start: $0.start, costs: $0.costs, baselines: $0.baselines) }
+        }
+        payload.lastHour = activity.lastHour.map(bars)
+        payload.today = activity.today.map(bars)
+        return payload
+    }
+
+    private static func optionalCall(_ client: RemoteClient, _ request: RemoteRequest) async -> RemoteReply? {
+        try? await client.call(request)
+    }
+
+    /// The report's timeline, or a finer published one, at the chosen bucket size.
+    static func timeline(_ granularity: String, report: RemoteTimeline?, fine: RemoteTimeline?) -> RemoteTimeline? {
+        for source in [report, fine].compactMap({ $0 }) {
+            if source.resolution == granularity { return source }
+            if let rebucketed = source.rebucketed(to: granularity) { return rebucketed }
+        }
+        return report
     }
 
     // MARK: Presentation helpers

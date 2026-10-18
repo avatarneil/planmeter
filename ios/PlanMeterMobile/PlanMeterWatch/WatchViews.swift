@@ -1,3 +1,4 @@
+import Charts
 import PlanMeterWatchShared
 import SwiftUI
 
@@ -9,6 +10,9 @@ struct WatchRootView: View {
             if let payload = model.payload {
                 TabView {
                     SummaryPage(payload: payload).tag(0)
+                    if payload.lastHour != nil || payload.today != nil {
+                        ActivityPage(payload: payload).tag(4)
+                    }
                     LimitsPage(payload: payload).tag(1)
                     AccountsPage(payload: payload).tag(2)
                     ScrollView {
@@ -97,6 +101,84 @@ struct SummaryPage: View {
     private var rangeName: String {
         guard payload.days == 1 else { return "Last \(payload.days) days" }
         return payload.usesProviderDates == true ? "Day" : "Last 24 hours"
+    }
+}
+
+/// Spend over the last hour by minute, or today by 15 minutes, stacked by plan.
+struct ActivityPage: View {
+    var payload: WatchPayload
+    @State private var showLastHour = true
+
+    private struct Segment: Identifiable {
+        var id: String
+        var start: Date
+        var end: Date
+        var low: Double
+        var high: Double
+        var group: String
+        var baseline: Bool
+    }
+
+    private func segments(_ bars: [WatchPayload.Bar], step: TimeInterval) -> [Segment] {
+        bars.flatMap { bar -> [Segment] in
+            var top = 0.0
+            var out: [Segment] = []
+            for baseline in [true, false] {
+                for group in ["personal", "work", "other"] {
+                    let cost = bar.costs[group] ?? 0
+                    let base = min(cost, bar.baselines[group] ?? 0)
+                    let value = baseline ? base : cost - base
+                    guard value > 0 else { continue }
+                    out.append(Segment(id: "\(bar.start.timeIntervalSince1970):\(group):\(baseline)", start: bar.start,
+                                       end: bar.start.addingTimeInterval(step * 0.85), low: top, high: top + value, group: group, baseline: baseline))
+                    top += value
+                }
+            }
+            return out
+        }
+    }
+
+    var body: some View {
+        TimelineView(.everyMinute) { context in
+            let lastHour = showLastHour && payload.lastHour != nil || payload.today == nil
+            let bars = (lastHour ? payload.lastHour : payload.today) ?? []
+            let segments = self.segments(bars, step: lastHour ? 60 : 900)
+            let total = bars.reduce(0) { $0 + $1.total }
+            VStack(alignment: .leading, spacing: 4) {
+                Button { showLastHour.toggle() } label: {
+                    HStack(spacing: 4) {
+                        Text(lastHour ? "Last hour · 1 min" : "Today · 15 min").font(.caption2.weight(.semibold))
+                        Image(systemName: "arrow.left.arrow.right").font(.caption2)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(payload.lastHour == nil || payload.today == nil)
+                Text(WatchPayload.usd(total)).font(.system(.title3, design: .rounded, weight: .semibold)).monospacedDigit()
+                if segments.isEmpty {
+                    Text("No usage in this window.").font(.footnote).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    Chart(segments) { segment in
+                        RectangleMark(xStart: .value("Start", segment.start), xEnd: .value("End", segment.end),
+                                      yStart: .value("Cost", segment.low), yEnd: .value("Cost", segment.high))
+                            .foregroundStyle(Palette.group(segment.group).opacity(segment.baseline ? 0.35 : 1))
+                    }
+                    .chartYAxis(.hidden)
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                            AxisValueLabel {
+                                if let date = value.as(Date.self) {
+                                    Text(lastHour ? date.formatted(.dateTime.hour().minute()) : date.formatted(.dateTime.hour()))
+                                }
+                            }
+                        }
+                    }
+                }
+                Text(payload.isStale(at: context.date) ? "Synced \(payload.updatedAt.formatted(.relative(presentation: .named)))" : "Updated \(payload.updatedAt.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption2).foregroundStyle(payload.isStale(at: context.date) ? Color.orange : Color.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
     }
 }
 

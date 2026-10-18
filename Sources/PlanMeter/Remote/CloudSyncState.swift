@@ -90,7 +90,7 @@ final class CloudSyncState {
             guard await verifyAccount() else { return }
         }
         let now = Date()
-        let reports = CloudSnapshot.supportedDays.map { days in
+        var reports = CloudSnapshot.supportedDays.map { days in
             RemoteReply(
                 summary: RemoteReportBuilder.summary(model: model, days: days, now: now),
                 models: RemoteReportBuilder.models(model: model, days: days, filter: nil, now: now),
@@ -98,11 +98,18 @@ final class CloudSyncState {
                 limits: RemoteReportBuilder.limits(model: model)
             )
         }
+        // After the day reports, so older clients still find those first.
+        reports.append(RemoteReply(
+            summary: RemoteReportBuilder.summary(model: model, days: 1, minutes: 60, now: now),
+            models: RemoteReportBuilder.models(model: model, days: 1, minutes: 60, filter: nil, now: now),
+            timeline: RemoteReportBuilder.timeline(model: model, days: 1, minutes: 60, resolution: .minute, now: now),
+            limits: RemoteReportBuilder.limits(model: model)
+        ))
         let fingerprint = Self.fingerprint(reports)
         if fingerprint == lastFingerprint, let lastUploaded, now.timeIntervalSince(lastUploaded) < 300 { return }
         let timelines = [
-            RemoteReportBuilder.timeline(model: model, days: 1, minutes: 60, resolution: .minute, now: now),
             RemoteReportBuilder.timeline(model: model, days: 1, resolution: .fiveMinutes, now: now),
+            RemoteReportBuilder.timeline(model: model, days: 7, resolution: .hour, now: now),
         ]
         let snapshot = CloudSnapshot(id: publisherID, name: model.remote.serverName, generatedAt: scannedAt, reports: reports, timelines: timelines)
         do {

@@ -212,6 +212,12 @@ public struct RemoteTimeline: Codable, Sendable, Equatable {
         }
     }
 
+    /// Whether a fixed-step timeline can be re-bucketed into `target`.
+    public static func coarsens(_ source: String, to target: String) -> Bool {
+        guard let step = stepSeconds(source), let wide = stepSeconds(target) else { return false }
+        return wide > step && wide.truncatingRemainder(dividingBy: step) == 0
+    }
+
     /// Re-buckets a fixed-step timeline into a coarser fixed step, e.g. 5m into
     /// 15m or hour. Returns nil when the target is not a whole multiple.
     public func rebucketed(to target: String) -> RemoteTimeline? {
@@ -238,6 +244,27 @@ public struct RemoteTimeline: Codable, Sendable, Equatable {
 }
 
 extension RemoteTimeline {
+    /// Cost per period by plan group, with the untimed workspace baseline kept apart.
+    public struct GroupBar: Sendable, Equatable {
+        public var start: Date
+        public var costs: [String: Double]
+        public var baselines: [String: Double]
+    }
+
+    /// Every period (zero-filled), optionally limited to one local calendar day.
+    public func groupBars(on day: Date? = nil, calendar: Calendar = .current) -> [GroupBar] {
+        let groups = Dictionary(accounts.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first })
+        var bars = Dictionary(periods.map { ($0, GroupBar(start: $0, costs: [:], baselines: [:])) }, uniquingKeysWith: { first, _ in first })
+        for point in points {
+            let group = groups[point.accountId] ?? "other"
+            var bar = bars[point.period] ?? GroupBar(start: point.period, costs: [:], baselines: [:])
+            bar.costs[group, default: 0] += point.costUsd
+            if let baseline = point.baselineCostUsd { bar.baselines[group, default: 0] += baseline }
+            bars[point.period] = bar
+        }
+        return bars.values.filter { day == nil || calendar.isDate($0.start, inSameDayAs: day!) }.sorted { $0.start < $1.start }
+    }
+
     /// Sum the calendar day's buckets, excluding earlier hours in a rolling 24h report.
     public func costByGroup(on date: Date, calendar: Calendar = .current) -> [String: Double] {
         let groups = Dictionary(accounts.map { ($0.id, $0.group) }, uniquingKeysWith: { first, _ in first })

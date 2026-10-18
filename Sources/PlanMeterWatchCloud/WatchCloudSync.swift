@@ -52,7 +52,8 @@ public enum WatchCloudSync {
         let report = try snapshot.report(days: 30)
         guard let summary = report.summary else { throw CloudSyncError.incompleteSnapshot }
         func group(_ name: String) -> RemoteGroupUsage? { summary.groups.first { $0.group == name } }
-        return WatchPayload(
+        let activity = snapshot.activity()
+        var payload = WatchPayload(
             updatedAt: snapshot.generatedAt, days: summary.days, serverName: snapshot.name,
             personalCostUsd: group("personal")?.totals.costUsd ?? 0,
             workCostUsd: group("work")?.totals.costUsd ?? 0,
@@ -69,5 +70,12 @@ public enum WatchCloudSync {
             todayCostByGroup: report.timeline?.costByGroup(on: snapshot.generatedAt),
             cloudMacID: snapshot.id,
             usesProviderDates: summary.usesProviderDates)
+        payload.lastHour = activity.lastHour.map(bars)
+        payload.today = activity.today.map(bars)
+        return payload
+    }
+
+    public static func bars(_ groups: [RemoteTimeline.GroupBar]) -> [WatchPayload.Bar] {
+        groups.map { WatchPayload.Bar(start: $0.start, costs: $0.costs, baselines: $0.baselines) }
     }
 }
