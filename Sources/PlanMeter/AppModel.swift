@@ -364,15 +364,17 @@ final class AppModel {
     }
 
     func projectedUsage(from: Date, to: Date, resolution: Resolution) -> UsageProjection.Result {
-        UsageProjection.buckets(cells: projectionCells(for: resolution), rates: rates, snapshots: dailyUsage, accounts: accounts,
+        UsageProjection.buckets(cells: projectionCells(for: resolution, from: from), rates: rates, snapshots: dailyUsage, accounts: accounts,
                                 from: from, to: to, resolution: resolution)
     }
 
     /// Hour cells suffice for hour and day views, except where a boundary can fall
-    /// inside an hour: a workspace reading's freshness, or a half-hour time zone's
-    /// midnight. Those keep minute cells, so every granularity has the same totals.
-    func projectionCells(for resolution: Resolution) -> [CellKey: Cell] {
-        guard (resolution.stepMs ?? .max) >= 3_600_000, TimeZone.current.secondsFromGMT() % 3600 == 0 else { return cells }
+    /// inside an hour: a window starting mid-hour, a workspace reading's freshness,
+    /// or a half-hour time zone's midnight. Those keep minute cells, so every
+    /// granularity has the same totals.
+    func projectionCells(for resolution: Resolution, from: Date) -> [CellKey: Cell] {
+        guard (resolution.stepMs ?? .max) >= 3_600_000, TimeZone.current.secondsFromGMT() % 3600 == 0,
+              from.timeIntervalSince1970.truncatingRemainder(dividingBy: 3600) == 0 else { return cells }
         let workspace = Set(dailyUsage.compactMap(\.target.localAccountId))
         guard !workspace.isEmpty else { return hourCells }
         if let mixedCells { return mixedCells }

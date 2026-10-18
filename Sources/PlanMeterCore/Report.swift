@@ -72,9 +72,11 @@ public enum Report {
         return (from, to)
     }
 
-    /// The last `minutes`, ending at the next boundary of `step` (five minutes by default).
-    public static func window(minutes: Int, step: TimeInterval = 300, now: Date = Date()) -> (from: Date, to: Date) {
-        let end = (floor(now.timeIntervalSince1970 / step) + 1) * step
+    /// The last `minutes`, ending at the next five-minute boundary whatever the
+    /// bucket size, so totals and timelines of one window always agree. Coarser
+    /// buckets at the edges hold only the part inside the window.
+    public static func window(minutes: Int, now: Date = Date()) -> (from: Date, to: Date) {
+        let end = (floor(now.timeIntervalSince1970 / 300) + 1) * 300
         return (Date(timeIntervalSince1970: end - TimeInterval(minutes * 60)), Date(timeIntervalSince1970: end))
     }
 
@@ -274,7 +276,7 @@ public enum Report {
         let requested = minutes != nil && resolution == .day ? Resolution.hour : resolution
         let span = minutes.map { TimeInterval($0 * 60) } ?? TimeInterval(days * 86_400)
         let resolution = bounded(requested, from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: span))
-        let w = minutes.map { window(minutes: $0, step: TimeInterval(resolution.stepMs ?? 300_000) / 1000) } ?? window(days: days)
+        let w = minutes.map { window(minutes: $0) } ?? window(days: days)
         let buckets = self.buckets(ctx, from: w.from, to: w.to, resolution: resolution)
         var periods: [Date: [String: Aggregate]] = [:]
         var baselines: [Date: [String: Double]] = [:]

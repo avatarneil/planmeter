@@ -128,6 +128,13 @@ final class WorkspaceUsageTests: XCTestCase {
         let day = Report.window(days: 1, now: now)
         let totals = Resolution.allCases.map { Aggregation.total(model.projectedUsage(from: day.from, to: day.to, resolution: $0).buckets).costUsd }
         for total in totals { XCTAssertEqual(total, totals[0], accuracy: 0.0000001) }
+        // A window starting mid-hour agrees at every granularity too, workspace or not.
+        let other = CellKey(startMs: Int64(now.timeIntervalSince1970 * 1000) - 20 * 60_000, accountId: "claude:other", model: "test")
+        model.cells[other] = Cell(reportedCostUsd: 5)
+        let midWindow = (from: now.addingTimeInterval(-25 * 60), to: now.addingTimeInterval(35 * 60))
+        let midTotals = Resolution.allCases.filter { $0 != .day }.map { Aggregation.total(model.projectedUsage(from: midWindow.from, to: midWindow.to, resolution: $0).buckets).costUsd }
+        for total in midTotals { XCTAssertEqual(total, midTotals[0], accuracy: 0.0000001) }
+        model.cells[other] = nil
         model.dailyUsage = [midHour]
         model.range = .day
         model.recompute(now: now)

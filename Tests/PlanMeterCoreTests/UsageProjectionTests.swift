@@ -269,9 +269,10 @@ final class UsageProjectionTests: XCTestCase {
     func testSubDayReportWindowsHonorCoarserBuckets() {
         XCTAssertEqual(Report.bounded(.hour, from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: 86_400)), .hour)
         XCTAssertEqual(Report.bounded(.minute, from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: 7 * 86_400)), .fifteenMinutes)
-        let w = Report.window(minutes: 1440, step: 3600, now: Date(timeIntervalSince1970: 1_790_000_123))
-        XCTAssertEqual(w.to.timeIntervalSince1970.truncatingRemainder(dividingBy: 3600), 0)
-        XCTAssertEqual(w.to.timeIntervalSince(w.from), 86_400)
+        // The window itself doesn't depend on the bucket size, so totals and timelines agree.
+        let w = Report.window(minutes: 60, now: Date(timeIntervalSince1970: 1_790_000_123))
+        XCTAssertEqual(w.to.timeIntervalSince1970.truncatingRemainder(dividingBy: 300), 0)
+        XCTAssertEqual(w.to.timeIntervalSince(w.from), 3600)
     }
 
     func testASessionSpanningManyMinuteBucketsCountsOnce() {
