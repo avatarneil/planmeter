@@ -155,7 +155,9 @@ struct ActivityPage: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(payload.lastHour == nil || payload.today == nil)
-                Text(WatchPayload.usd(total)).font(.system(.title3, design: .rounded, weight: .semibold)).monospacedDigit()
+                if lastHour || payload.coversToday(at: context.date) {
+                    Text(WatchPayload.usd(total)).font(.system(.title3, design: .rounded, weight: .semibold)).monospacedDigit()
+                }
                 if !lastHour, !payload.coversToday(at: context.date) {
                     Text("Not synced yet today.").font(.footnote).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
