@@ -169,6 +169,15 @@ struct TimelineCard: View {
         return out
     }
 
+    /// The whole window, so a few active buckets don't zoom the axis.
+    private var domain: ClosedRange<Date> {
+        let first = timeline.periods.first ?? timeline.points.map(\.period).min() ?? Date()
+        let last = timeline.periods.last ?? timeline.points.map(\.period).max() ?? first
+        let end = RemoteTimeline.stepSeconds(timeline.resolution).map { last.addingTimeInterval($0) }
+            ?? Calendar.current.dateInterval(of: .day, for: last)?.end ?? last.addingTimeInterval(86_400)
+        return first...max(end, first.addingTimeInterval(60))
+    }
+
     private func label(_ date: Date) -> String {
         switch timeline.resolution {
         case "minute", "5m": return date.formatted(.dateTime.hour().minute())
@@ -191,7 +200,7 @@ struct TimelineCard: View {
                 }
             }
             let segments = self.segments
-            if segments.isEmpty {
+            if timeline.points.isEmpty {
                 Text("No usage in this range.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
             } else {
                 Chart(segments) { segment in
@@ -205,6 +214,7 @@ struct TimelineCard: View {
                     .opacity(segment.baseline ? 0.35 : 1)
                 }
                 .chartForegroundStyleScale(domain: timeline.accounts.map(\.name), range: timeline.accounts.map { model.color(for: $0.id) })
+                .chartXScale(domain: domain)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { value in
                         AxisGridLine().foregroundStyle(Color.primary.opacity(0.06))
@@ -219,6 +229,10 @@ struct TimelineCard: View {
                 }
                 .chartLegend(position: .bottom, alignment: .leading, spacing: 6)
                 .frame(height: 220)
+                if timeline.resolution != model.granularity {
+                    Text("Showing \(MobileRange.label(granularity: timeline.resolution).lowercased()) buckets; update PlanMeter on your Mac for finer ones.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 if segments.contains(where: \.baseline) {
                     Text("Lighter bars: workspace credits without timing, spread evenly over the hours the provider reported.")
                         .font(.caption2).foregroundStyle(.secondary)

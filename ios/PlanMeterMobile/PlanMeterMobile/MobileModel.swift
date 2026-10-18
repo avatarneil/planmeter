@@ -32,7 +32,7 @@ enum MobileRange: Int, CaseIterable, Identifiable {
     var granularities: [String] {
         switch self {
         case .hour: return ["minute", "5m"]
-        case .day: return ["minute", "5m", "15m", "hour"]
+        case .day: return ["5m", "15m", "hour"]
         case .week: return ["15m", "hour", "day"]
         case .month: return ["hour", "day"]
         case .quarter: return ["day"]
@@ -152,13 +152,20 @@ final class MobileModel {
             .compactMap { $0?.resolution }
         return range.granularities.filter { target in sources.contains { $0 == target || RemoteTimeline.coarsens($0, to: target) } }
     }
-    /// The 1h range needs a Mac that publishes it to iCloud.
+    /// The 1h range needs a Mac that publishes it to iCloud or serves sub-day windows.
     var availableRanges: [MobileRange] {
-        guard usesCloud, let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) else { return MobileRange.allCases }
-        return MobileRange.allCases.filter { $0 != .hour || (try? snapshot.report(days: 1, minutes: 60)) != nil }
+        if usesCloud, let snapshot = cloudSnapshots.first(where: { $0.id == selectedCloudMac }) {
+            return MobileRange.allCases.filter { $0 != .hour || (try? snapshot.report(days: 1, minutes: 60)) != nil }
+        }
+        return MobileRange.allCases.filter { $0 != .hour || directSupportsMinutes }
     }
+    /// False once a directly connected Mac answers a sub-day request with a whole day (older versions).
+    private(set) var directSupportsMinutes = true
     /// The last hour by minute and today by 15 minutes, for the watch.
     private var activity: (lastHour: [RemoteTimeline.GroupBar]?, today: [RemoteTimeline.GroupBar]?) = (nil, nil)
+    /// The watch and widgets always describe a day or longer, even while 1h is shown here.
+    private var watchSummary: RemoteSummary?
+    private var watchTimeline: RemoteTimeline?
     var summary: RemoteSummary?
     var timeline: RemoteTimeline?
     var limits: RemoteLimits?
@@ -368,6 +375,9 @@ final class MobileModel {
         models = []
         lastUpdated = nil
         error = nil
+        watchSummary = nil
+        watchTimeline = nil
+        activity = (nil, nil)
     }
 
     func applyCloudSelection() {
@@ -381,10 +391,17 @@ final class MobileModel {
             clearPublishedSummary()
             return
         }
+        guard availableRanges.contains(range) else {
+            range = .day // e.g. a Mac that doesn't publish the last hour yet.
+            return
+        }
         do {
             let report = try snapshot.report(days: range.days, minutes: range.minutes)
             summary = report.summary
             timeline = Self.timeline(granularity, report: report.timeline, fine: range.minutes == nil ? snapshot.fineTimeline(days: range.days) : nil)
+            let watchReport = range.minutes == nil ? report : try? snapshot.report(days: 1)
+            watchSummary = watchReport?.summary
+            watchTimeline = watchReport?.timeline
             limits = report.limits
             models = report.models ?? []
             activity = snapshot.activity()
@@ -445,20 +462,33 @@ final class MobileModel {
             }
             guard let client else { return }
             let days = range.days, minutes = range.minutes
+            let watch = WatchRelay.shared.hasWatchApp
             async let s = client.call(RemoteRequest(method: .summary, days: days, minutes: minutes))
             async let t = client.call(RemoteRequest(method: .timeline, days: days, resolution: granularity, minutes: minutes))
             async let l = client.call(RemoteRequest(method: .limits))
             async let m = client.call(RemoteRequest(method: .models, days: days, minutes: minutes))
-            // Compact watch charts; older Macs ignore these windows, so validate the replies.
-            async let lastHour = Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "minute", minutes: 60))
-            async let today = Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "15m"))
+            // The watch's compact charts, and its day summary while 1h is shown here.
+            // Older Macs ignore sub-day windows and finer buckets, so replies are validated.
+            async let lastHour = watch ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "minute", minutes: 60)) : nil
+            async let today = watch ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "5m")) : nil
+            async let daySummary = minutes != nil ? Self.optionalCall(client, RemoteRequest(method: .summary, days: 1)) : nil
+            async let dayTimeline = minutes != nil ? Self.optionalCall(client, RemoteRequest(method: .timeline, days: 1, resolution: "hour")) : nil
             let (sr, tr, lr, mr) = try await (s, t, l, m)
-            let (hourReply, todayReply) = await (lastHour, today)
+            let (hourReply, todayReply, dayReply, dayTimelineReply) = await (lastHour, today, daySummary, dayTimeline)
             guard generation == refreshGeneration, !isLocked, !Task.isCancelled else { return }
+            if minutes != nil, sr.summary?.minutes != minutes {
+                // An older Mac answered with a whole day; don't label it as an hour.
+                directSupportsMinutes = false
+                range = .day
+                return
+            }
             summary = sr.summary
             timeline = tr.timeline
-            activity = (hourReply?.timeline.flatMap { $0.minutes == 60 ? $0.groupBars() : nil },
-                        todayReply?.timeline.flatMap { ["15m", "hour"].contains($0.resolution) ? $0.groupBars(on: Date()) : nil })
+            watchSummary = minutes == nil ? sr.summary : dayReply?.summary
+            watchTimeline = minutes == nil ? tr.timeline : dayTimelineReply?.timeline
+            activity = (hourReply?.timeline.flatMap { $0.minutes == 60 && $0.resolution == "minute" ? $0.groupBars() : nil },
+                        todayReply?.timeline.flatMap { Self.timeline("15m", report: $0, fine: nil) }
+                            .flatMap { $0.resolution == "15m" ? $0.groupBars(on: Date()) : nil })
             limits = lr.limits
             models = mr.models ?? []
             lastUpdated = Date()
@@ -483,7 +513,8 @@ final class MobileModel {
 
     /// Compact summary for widgets and the watch, derived from the latest report.
     func watchPayload() -> WatchPayload? {
-        guard let summary else { return nil }
+        guard let summary = watchSummary else { return nil }
+        let timeline = watchTimeline
         func group(_ name: String) -> RemoteGroupUsage? { summary.groups.first { $0.group == name } }
         let personal = group("personal")
         let work = group("work")
@@ -516,7 +547,7 @@ final class MobileModel {
             usesProviderDates: summary.usesProviderDates
         )
         func bars(_ groups: [RemoteTimeline.GroupBar]) -> [WatchPayload.Bar] {
-            groups.map { WatchPayload.Bar(start: $0.start, costs: $0.costs, baselines: $0.baselines) }
+            groups.map { WatchPayload.Bar(start: $0.start, costs: $0.costs, baselines: $0.baselines) }.map(\.compacted)
         }
         payload.lastHour = activity.lastHour.map(bars)
         payload.today = activity.today.map(bars)

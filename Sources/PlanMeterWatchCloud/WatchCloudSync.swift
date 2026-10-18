@@ -76,6 +76,6 @@ public enum WatchCloudSync {
     }
 
     public static func bars(_ groups: [RemoteTimeline.GroupBar]) -> [WatchPayload.Bar] {
-        groups.map { WatchPayload.Bar(start: $0.start, costs: $0.costs, baselines: $0.baselines) }
+        groups.map { WatchPayload.Bar(start: $0.start, costs: $0.costs, baselines: $0.baselines).compacted }
     }
 }

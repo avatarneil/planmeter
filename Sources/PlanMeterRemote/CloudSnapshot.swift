@@ -28,8 +28,8 @@ public struct CloudSnapshot: Codable, Sendable, Equatable, Identifiable {
 
     /// The last hour by minute and today in 15-minute buckets, for compact charts.
     public func activity(calendar: Calendar = .current) -> (lastHour: [RemoteTimeline.GroupBar]?, today: [RemoteTimeline.GroupBar]?) {
-        let lastHour = (try? report(days: 1, minutes: 60))?.timeline?.groupBars()
-        let fine = fineTimeline(days: 1).flatMap { $0.rebucketed(to: "15m") } ?? (try? report(days: 1))?.timeline
+        let lastHour = (try? report(days: 1, minutes: 60))?.timeline.flatMap { $0.resolution == "minute" ? $0.groupBars() : nil }
+        let fine = fineTimeline(days: 1).flatMap { $0.resolution == "15m" ? $0 : $0.rebucketed(to: "15m") }
         return (lastHour, fine?.groupBars(on: generatedAt, calendar: calendar))
     }
 

@@ -141,8 +141,10 @@ struct ActivityPage: View {
     var body: some View {
         TimelineView(.everyMinute) { context in
             let lastHour = showLastHour && payload.lastHour != nil || payload.today == nil
-            let bars = (lastHour ? payload.lastHour : payload.today) ?? []
-            let segments = self.segments(bars, step: lastHour ? 60 : 900)
+            // Yesterday's bars are not today's; show them only while they still describe today.
+            let bars = (lastHour ? payload.lastHour : (payload.coversToday(at: context.date) ? payload.today : nil)) ?? []
+            let step: TimeInterval = lastHour ? 60 : 900
+            let segments = self.segments(bars, step: step)
             let total = bars.reduce(0) { $0 + $1.total }
             VStack(alignment: .leading, spacing: 4) {
                 Button { showLastHour.toggle() } label: {
@@ -164,6 +166,7 @@ struct ActivityPage: View {
                             .foregroundStyle(Palette.group(segment.group).opacity(segment.baseline ? 0.35 : 1))
                     }
                     .chartYAxis(.hidden)
+                    .chartXScale(domain: (bars.first?.start ?? context.date)...((bars.last?.start ?? context.date).addingTimeInterval(step)))
                     .chartXAxis {
                         AxisMarks(values: .automatic(desiredCount: 3)) { value in
                             AxisValueLabel {

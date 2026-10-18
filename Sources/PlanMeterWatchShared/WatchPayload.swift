@@ -43,6 +43,14 @@ public struct WatchPayload: Codable, Equatable, Sendable {
         public var id: Date { start }
         public var total: Double { costs.values.reduce(0, +) }
 
+        /// Cents-level precision and no empty groups keep relayed payloads small.
+        public var compacted: Bar {
+            func round(_ values: [String: Double]) -> [String: Double] {
+                values.compactMapValues { $0 > 0 ? ($0 * 10_000).rounded() / 10_000 : nil }
+            }
+            return Bar(start: start, costs: round(costs), baselines: round(baselines))
+        }
+
         public init(start: Date, costs: [String: Double], baselines: [String: Double] = [:]) {
             self.start = start
             self.costs = costs
