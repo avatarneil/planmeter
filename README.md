@@ -232,6 +232,12 @@ Switch between **By account**, **By provider**, and **Personal vs Work** to expl
 slices. Details show a time chart, cost and token totals, and a model breakdown for the selected
 range. Click **Done** to return to the overview.
 
+**Granularity.** Ranges run from the last hour to 90 days, and the chart's bucket menu goes down
+to one minute (1 min, 5 min, 15 min, 1 hour, 1 day, limited per range to about 1,500 bars).
+Usage is stored per minute. Workspace credits that have local activity follow it minute by
+minute; credits without timing (Chat, voice, image, or a day with no local trace) appear as a
+lighter, even baseline across the hours the provider reported.
+
 **Diagnostics** (stethoscope in the toolbar) opens a separate window with account readings,
 workspace and cloud-turn detail, transcript sources, and pricing. Explanations throughout the
 app are behind ⓘ buttons.

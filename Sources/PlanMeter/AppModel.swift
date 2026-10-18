@@ -5,6 +5,7 @@ import PlanMeterRemote
 import SwiftUI
 
 enum TimeRange: String, CaseIterable, Identifiable {
+    case lastHour = "1h"
     case today = "Today"
     case day = "24h"
     case week = "7 days"
@@ -14,6 +15,7 @@ enum TimeRange: String, CaseIterable, Identifiable {
     // Keep the existing spend-limit keys so saved limits survive range changes.
     var id: String {
         switch self {
+        case .lastHour: return "lastHour"
         case .today: return "today"
         case .day: return "day"
         case .week: return "week"
@@ -24,6 +26,7 @@ enum TimeRange: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .lastHour: return "Last Hour"
         case .today: return "Today"
         case .day: return "Last 24 Hours"
         case .week: return "Last 7 Days"
@@ -32,11 +35,37 @@ enum TimeRange: String, CaseIterable, Identifiable {
         }
     }
 
-    var resolution: Resolution { self == .today || self == .day ? .hour : .day }
+    /// Chart granularities that keep each range readable (at most ~1,500 periods).
+    var granularities: [Resolution] {
+        switch self {
+        case .lastHour: return [.minute, .fiveMinutes]
+        case .today, .day: return [.minute, .fiveMinutes, .fifteenMinutes, .hour]
+        case .week: return [.fifteenMinutes, .hour, .day]
+        case .month: return [.hour, .day]
+        case .quarter: return [.day]
+        }
+    }
+
+    var defaultGranularity: Resolution {
+        switch self {
+        case .lastHour: return .minute
+        case .today, .day: return .hour
+        default: return .day
+        }
+    }
+
+    /// Totals for a range: day buckets need a local-midnight start.
+    var totalsResolution: Resolution {
+        switch self {
+        case .lastHour: return .fiveMinutes
+        case .day: return .hour
+        default: return .day
+        }
+    }
 
     var dayCount: Int {
         switch self {
-        case .today, .day: return 1
+        case .lastHour, .today, .day: return 1
         case .week: return 7
         case .month: return 30
         case .quarter: return 90
@@ -45,6 +74,11 @@ enum TimeRange: String, CaseIterable, Identifiable {
 
     func window(now: Date = Date(), calendar: Calendar = .current) -> (from: Date, to: Date) {
         switch self {
+        case .lastHour:
+            // Sixty minutes ending at the next five-minute boundary, so every
+            // offered granularity has whole buckets.
+            let end = (floor(now.timeIntervalSince1970 / 300) + 1) * 300
+            return (Date(timeIntervalSince1970: end - 3600), Date(timeIntervalSince1970: end))
         case .today:
             return (calendar.startOfDay(for: now), now)
         case .day:
@@ -79,7 +113,14 @@ final class AppModel {
     var range: TimeRange = .today { didSet { recompute() } }
     var metric: Metric = .cost
     var discovery = Discovery()
-    var cells: [CellKey: Cell] = [:]
+    var cells: [CellKey: Cell] = [:] { didSet { hourCells = Aggregation.rollup(cells, stepMs: 3_600_000) } }
+    /// Minute cells merged by hour: hour and day views don't need minute detail,
+    /// and the smaller set keeps frequent refreshes cheap.
+    @ObservationIgnored private(set) var hourCells: [CellKey: Cell] = [:]
+    /// The chosen chart granularity per range, persisted.
+    var granularities: [String: Resolution] = AppModel.loadGranularities() {
+        didSet { UserDefaults.standard.set(granularities.mapValues(\.rawValue), forKey: AppModel.granularitiesKey) }
+    }
     var threadCells: [ThreadCellEntry] = []
     var accountUsage: [AccountUsageSnapshot] = []
     var dailyUsage: [CodexDailyUsageSnapshot] = []
@@ -285,7 +326,7 @@ final class AppModel {
 
     func recompute(now: Date = Date()) {
         let window = range.window(now: now)
-        let result = projectedUsage(from: window.from, to: window.to, resolution: chartResolution, includeWorkspace: range != .day)
+        let result = projectedUsage(from: window.from, to: window.to, resolution: chartResolution)
         buckets = result.buckets
         workspaceAccountIds = result.workspaceAccountIds
         publishDesktopWidget(now: now)
@@ -293,19 +334,34 @@ final class AppModel {
     }
 
     var hasWorkspaceUsage: Bool { UsageProjection.available(dailyUsage, accounts: accounts) }
-    var chartResolution: Resolution { range != .day && hasWorkspaceUsage ? .day : range.resolution }
+    /// The selected granularity for the current range.
+    var granularity: Resolution {
+        get { granularities[range.id].flatMap { range.granularities.contains($0) ? $0 : nil } ?? range.defaultGranularity }
+        set {
+            granularities[range.id] = newValue
+            recompute()
+        }
+    }
+    var chartResolution: Resolution { granularity }
     var usageNote: String {
-        if range == .day && hasWorkspaceUsage { return "Last 24 hours uses local transcripts and available cloud turn estimates; workspace analytics provide calendar days. Choose Today or a longer range for workspace usage." }
-        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. Other accounts and missing dates use local estimates and available cloud turns. Workspace readings replace overlapping local estimates for the hours the provider has reported; newer hours use local estimates until it catches up. Sessions cover known threads; cache savings use standard model rates." }
+        if !workspaceAccountIds.isEmpty { return "Workspace credits include Work, Codex, and Chat; text tokens cover Work and Codex. They replace overlapping local estimates for the hours the provider has reported, following local activity minute by minute. Credits without timing (Chat, voice, image) form a lighter, even baseline across those hours. Newer hours use local estimates until the provider catches up. Sessions cover known threads; cache savings use standard model rates." }
         if cloudUsage.contains(where: { $0.turns.contains(where: { $0.totals != nil }) }) {
             return "Local usage and dated cloud turns · Costs use service estimates where available, otherwise API-equivalent token prices; cloud aggregates use turn completion time"
         }
         return "Local transcript usage · API-equivalent estimates"
     }
 
-    func projectedUsage(from: Date, to: Date, resolution: Resolution, includeWorkspace: Bool = true) -> UsageProjection.Result {
-        UsageProjection.buckets(cells: cells, rates: rates, snapshots: includeWorkspace ? dailyUsage : [], accounts: accounts,
-                                from: from, to: to, resolution: resolution)
+    func projectedUsage(from: Date, to: Date, resolution: Resolution) -> UsageProjection.Result {
+        let source = (resolution.stepMs ?? .max) >= 3_600_000 ? hourCells : cells
+        return UsageProjection.buckets(cells: source, rates: rates, snapshots: dailyUsage, accounts: accounts,
+                                       from: from, to: to, resolution: resolution)
+    }
+
+    static let granularitiesKey = "chartGranularities"
+
+    private static func loadGranularities() -> [String: Resolution] {
+        let raw = UserDefaults.standard.dictionary(forKey: granularitiesKey) as? [String: String] ?? [:]
+        return raw.compactMapValues(Resolution.init(rawValue:))
     }
 
     func inspectWorkspaceDay(target: CodexUsageTarget, date: String, usage: CodexDailyUsage = .shared) async -> CodexDailyUsageSnapshot? {

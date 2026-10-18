@@ -72,14 +72,28 @@ public enum Report {
         return (from, to)
     }
 
-    public static func buckets(_ ctx: ReportContext, days: Int, resolution: Resolution = .day) -> [Bucket] {
-        let w = window(days: days)
-        return UsageProjection.buckets(cells: ctx.scan.cells, rates: ctx.rates, snapshots: ctx.dailyUsage, accounts: ctx.accounts,
-                                       from: w.from, to: w.to, resolution: effectiveResolution(ctx, requested: resolution)).buckets
+    /// The last `minutes`, ending at the next five-minute boundary.
+    public static func window(minutes: Int, now: Date = Date()) -> (from: Date, to: Date) {
+        let end = (floor(now.timeIntervalSince1970 / 300) + 1) * 300
+        return (Date(timeIntervalSince1970: end - TimeInterval(minutes * 60)), Date(timeIntervalSince1970: end))
     }
 
-    static func effectiveResolution(_ ctx: ReportContext, requested: Resolution) -> Resolution {
-        UsageProjection.available(ctx.dailyUsage, accounts: ctx.accounts) ? .day : requested
+    public static func buckets(_ ctx: ReportContext, days: Int, resolution: Resolution = .day) -> [Bucket] {
+        let w = window(days: days)
+        return buckets(ctx, from: w.from, to: w.to, resolution: resolution)
+    }
+
+    static func buckets(_ ctx: ReportContext, from: Date, to: Date, resolution: Resolution) -> [Bucket] {
+        UsageProjection.buckets(cells: ctx.scan.cells, rates: ctx.rates, snapshots: ctx.dailyUsage, accounts: ctx.accounts,
+                                from: from, to: to, resolution: resolution).buckets
+    }
+
+    /// The requested resolution, coarsened to at most ~1,500 periods.
+    static func bounded(_ requested: Resolution, from: Date, to: Date) -> Resolution {
+        let order = Resolution.allCases
+        var index = order.firstIndex(of: requested) ?? order.count - 1
+        while index < order.count - 1, let step = order[index].stepMs, to.timeIntervalSince(from) * 1000 / Double(step) > 1500 { index += 1 }
+        return order[index]
     }
 
     // MARK: JSON-friendly reports
@@ -136,7 +150,7 @@ public enum Report {
                 let a = byAccount[m.id] ?? Aggregate()
                 for b in buckets where b.accountId == m.id { agg.add(b) }
                 var row = accountJSON(m, group: group)
-                row["usageSource"] = buckets.contains { $0.accountId == m.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with known-thread fallback" : "Local transcripts and dated cloud turns"
+                row["usageSource"] = buckets.contains { $0.accountId == m.id && $0.costSource.isWorkspace } ? "Dated workspace credits with known-thread fallback" : "Local transcripts and dated cloud turns"
                 row.merge(aggregateJSON(a)) { _, new in new }
                 rows.append(row)
             }
@@ -254,17 +268,21 @@ public enum Report {
         return ["days": days, "rows": rows]
     }
 
-    public static func timeline(_ ctx: ReportContext, days: Int, resolution: Resolution) -> [String: Any] {
-        let resolution = effectiveResolution(ctx, requested: resolution)
-        let w = window(days: days)
-        let buckets = self.buckets(ctx, days: days, resolution: resolution)
+    /// `minutes` selects a window shorter than a day; otherwise `days` local calendar days.
+    public static func timeline(_ ctx: ReportContext, days: Int, resolution: Resolution, minutes: Int? = nil) -> [String: Any] {
+        let w = minutes.map { window(minutes: $0) } ?? window(days: days)
+        // A sub-day window is aligned to five minutes; day buckets need local midnights.
+        let resolution = bounded(minutes != nil && (resolution.stepMs ?? .max) > 300_000 ? .fiveMinutes : resolution, from: w.from, to: w.to)
+        let buckets = self.buckets(ctx, from: w.from, to: w.to, resolution: resolution)
         var periods: [Date: [String: Aggregate]] = [:]
+        var baselines: [Date: [String: Double]] = [:]
         for b in buckets {
             var perAccount = periods[b.periodStart] ?? [:]
             var a = perAccount[b.accountId] ?? Aggregate()
             a.add(b)
             perAccount[b.accountId] = a
             periods[b.periodStart] = perAccount
+            if b.costSource == .workspaceBaseline { baselines[b.periodStart, default: [:]][b.accountId, default: 0] += b.costUsd }
         }
         let all = Aggregation.periods(from: w.from, to: w.to, resolution: resolution)
         let rows: [[String: Any]] = all.map { start in
@@ -276,7 +294,9 @@ public enum Report {
             for (id, a) in perAccount {
                 let account = ctx.account(for: id)
                 let group = ctx.group(for: account)
-                accounts.append(["accountId": id, "name": account.displayName, "group": group.rawValue, "costUsd": round(a.costUsd), "tokens": a.totals.total])
+                var row: [String: Any] = ["accountId": id, "name": account.displayName, "group": group.rawValue, "costUsd": round(a.costUsd), "tokens": a.totals.total]
+                if let baseline = baselines[start]?[id] { row["baselineCostUsd"] = round(baseline) }
+                accounts.append(row)
                 groups[group.rawValue, default: 0] += a.costUsd
                 total += a.costUsd
                 tokens += a.totals.total
@@ -289,7 +309,9 @@ public enum Report {
                 "accounts": accounts.sorted { ($0["costUsd"] as? Double ?? 0) > ($1["costUsd"] as? Double ?? 0) },
             ]
         }
-        return ["days": days, "resolution": resolution.rawValue, "periods": rows]
+        var out: [String: Any] = ["days": days, "resolution": resolution.rawValue, "from": iso(w.from), "to": iso(w.to), "periods": rows]
+        if let minutes { out["minutes"] = minutes }
+        return out
     }
 
     public static func limits(_ ctx: ReportContext) -> [String: Any] {

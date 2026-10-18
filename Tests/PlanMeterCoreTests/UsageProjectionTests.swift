@@ -14,7 +14,7 @@ final class UsageProjectionTests: XCTestCase {
     }
 
     func cell(_ id: String? = nil, at date: Date? = nil, cost: Double = 9, session: String = "s1") -> (CellKey, Cell) {
-        let key = CellKey(hourStartMs: Int64((date ?? from).timeIntervalSince1970 * 1000), accountId: id ?? account.id, model: "test")
+        let key = CellKey(startMs: Int64((date ?? from).timeIntervalSince1970 * 1000), accountId: id ?? account.id, model: "test")
         return (key, Cell(totals: TokenTotals(uncachedInput: 400, cachedInput: 100), reportedCostUsd: cost, records: 2, sessionIds: [session]))
     }
     func project(_ snapshots: [CodexDailyUsageSnapshot], cells rows: [(CellKey, Cell)]? = nil, from start: Date? = nil, to end: Date? = nil,
@@ -126,7 +126,7 @@ final class UsageProjectionTests: XCTestCase {
         XCTAssertEqual(Double(try XCTUnwrap(byDay[sep30]).totals.total), 40, accuracy: 2)
         XCTAssertEqual((byDay[sep30]?.totals.total ?? 0) + (byDay[oct1]?.totals.total ?? 0), 160)
         XCTAssertEqual(byDay[sep30]?.sessions, 1)
-        XCTAssertTrue(result.buckets.allSatisfy { $0.costSource == .workspaceCredits })
+        XCTAssertTrue(result.buckets.allSatisfy { $0.costSource.isWorkspace })
         XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875, accuracy: 0.0000001)
     }
 
@@ -137,7 +137,7 @@ final class UsageProjectionTests: XCTestCase {
         let recent = cell(at: from.addingTimeInterval(15 * 3600), cost: 4, session: "s2")
         let result = project([snapshot], cells: [reported, recent])
         XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875 + 4, accuracy: 0.0000001)
-        XCTAssertEqual(result.buckets.filter { $0.costSource != .workspaceCredits }.map(\.costUsd), [4])
+        XCTAssertEqual(result.buckets.filter { !$0.costSource.isWorkspace }.map(\.costUsd), [4])
     }
 
     func testEarlyHoursOfAProviderDayBelongToThePreviousLocalEvening() throws {
@@ -177,7 +177,7 @@ final class UsageProjectionTests: XCTestCase {
         let oct1 = newYork.date(from: DateComponents(year: 2026, month: 10, day: 1))!
         let evening = cell(at: from.addingTimeInterval(2 * 3600), cost: 1, session: "late")
         let tokens = TokenTotals(uncachedInput: 99_500)
-        let newModel = (CellKey(hourStartMs: Int64(from.addingTimeInterval(14 * 3600).timeIntervalSince1970 * 1000), accountId: account.id, model: "brand-new"),
+        let newModel = (CellKey(startMs: Int64(from.addingTimeInterval(14 * 3600).timeIntervalSince1970 * 1000), accountId: account.id, model: "brand-new"),
                         Cell(totals: tokens, unpricedTotals: tokens, records: 50, sessionIds: ["day"]))
         let result = project([try fixture.snapshot()], cells: [evening, newModel], from: sep30, to: oct1.addingTimeInterval(86_400), calendar: newYork)
         let byDay = Dictionary(grouping: result.buckets, by: \.periodStart).mapValues(Aggregation.total)
@@ -205,6 +205,58 @@ final class UsageProjectionTests: XCTestCase {
                 start += 86_400_000
             }
         }
+    }
+
+    func testMinuteResolutionKeepsTextWithLocalUsageAndSpreadsUntimedCreditsEvenly() throws {
+        let morning = cell(at: from.addingTimeInterval(3 * 3600 + 7 * 60), cost: 1, session: "a")
+        let afternoon = cell(at: from.addingTimeInterval(15 * 3600 + 42 * 60), cost: 3, session: "b")
+        let result = UsageProjection.buckets(cells: Dictionary([morning, afternoon], uniquingKeysWith: { $1 }), rates: rates,
+                                             snapshots: [try fixture.snapshot()], accounts: [account], from: from, to: to,
+                                             resolution: .minute, calendar: UsageCoverage.utcCalendar)
+        let text = result.buckets.filter { $0.costSource == .workspaceCredits }
+        XCTAssertEqual(Set(text.map(\.periodStart)), [morning.0.startMs, afternoon.0.startMs].map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }.reduce(into: Set<Date>()) { $0.insert($1) })
+        XCTAssertEqual(Aggregation.total(text.filter { $0.periodStart == Date(timeIntervalSince1970: TimeInterval(morning.0.startMs) / 1000) }).costUsd, 1.65 / 4, accuracy: 0.0000001)
+        let baseline = result.buckets.filter { $0.costSource == .workspaceBaseline }
+        XCTAssertEqual(Set(baseline.map(\.periodStart)).count, 1440) // Voice credits: one even share per minute.
+        XCTAssertEqual(try XCTUnwrap(baseline.first).costUsd, 0.0375 / 1440, accuracy: 0.000000001)
+        XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875, accuracy: 0.0000001)
+        XCTAssertEqual(Aggregation.total(result.buckets).totals.total, 160)
+        XCTAssertEqual(Aggregation.total(result.buckets).sessions, 2)
+    }
+
+    func testEveryResolutionConservesTheSameTotals() throws {
+        let cells = [cell(at: from.addingTimeInterval(2 * 3600 + 33 * 60), cost: 1, session: "late"),
+                     cell(at: from.addingTimeInterval(14 * 3600 + 5 * 60), cost: 3, session: "day"),
+                     cell(at: from.addingTimeInterval(30 * 3600), cost: 5, session: "next")]
+        let start = newYork.date(from: DateComponents(year: 2026, month: 9, day: 30))!
+        var totals: [Double] = []
+        for resolution in Resolution.allCases {
+            let result = UsageProjection.buckets(cells: Dictionary(cells, uniquingKeysWith: { $1 }), rates: rates, snapshots: [try fixture.snapshot()],
+                                                 accounts: [account], from: start, to: start.addingTimeInterval(3 * 86_400),
+                                                 resolution: resolution, calendar: newYork)
+            totals.append(Aggregation.total(result.buckets).costUsd)
+            XCTAssertEqual(Aggregation.total(result.buckets).totals.total, 160 + 500, "\(resolution)")
+        }
+        for total in totals { XCTAssertEqual(total, 1.6875 + 5, accuracy: 0.0000001) }
+    }
+
+    func testASessionSpanningManyMinuteBucketsCountsOnce() {
+        let cells = Dictionary((0..<3).map { cell(at: from.addingTimeInterval(TimeInterval($0) * 60), cost: 1, session: "same") }, uniquingKeysWith: { $1 })
+        let buckets = Aggregation.buckets(cells: cells, rates: rates, from: from, to: to, resolution: .minute, calendar: UsageCoverage.utcCalendar)
+        XCTAssertEqual(buckets.count, 3)
+        XCTAssertEqual(Aggregation.total(buckets).sessions, 1)
+    }
+
+    func testFixedStepPeriodsAlignToTheirStep() {
+        // 1_790_000_100 is a 15-minute boundary; 1_790_000_400 is 5 minutes later.
+        let ms: Int64 = 1_790_000_483_456
+        XCTAssertEqual(Resolution.minute.periodStart(forMs: ms).timeIntervalSince1970, 1_790_000_460)
+        XCTAssertEqual(Resolution.fiveMinutes.periodStart(forMs: ms).timeIntervalSince1970, 1_790_000_400)
+        XCTAssertEqual(Resolution.fifteenMinutes.periodStart(forMs: ms).timeIntervalSince1970, 1_790_000_100)
+        let from = Date(timeIntervalSince1970: 1_790_000_483)
+        let periods = Aggregation.periods(from: from, to: from.addingTimeInterval(3600), resolution: .fifteenMinutes)
+        XCTAssertEqual(periods.first?.timeIntervalSince1970, 1_790_000_100)
+        XCTAssertEqual(periods.count, 5)
     }
 
     func testProductAndReasoningDetailKeepsSharedChartTotalsUnchanged() throws {

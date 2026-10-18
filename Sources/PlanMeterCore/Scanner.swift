@@ -33,11 +33,12 @@ struct ScanCacheDocument: Codable {
 public actor ScanCache {
     /// Bump whenever parser output changes shape or semantics; cached entries
     /// are keyed only on file size and mtime, so stale logic would otherwise
-    /// survive a rebuild.
-    static let version = 5
+    /// survive a rebuild. Version 6 keys cells by minute instead of hour.
+    static let version = 6
     let url: URL
     var files: [String: FileScanEntry] = [:]
     var dirty = false
+    var lastSaved = Date.distantPast
 
     public init(url: URL = AppPaths.supportDirectory().appendingPathComponent("scan-cache.json")) {
         self.url = url
@@ -65,8 +66,11 @@ public actor ScanCache {
         if files.count != before { dirty = true }
     }
 
-    public func save() {
-        guard dirty else { return }
+    /// Writes at most every two minutes unless forced; files changed since the
+    /// last write are simply re-parsed on the next launch.
+    public func save(force: Bool = false) {
+        guard dirty, force || Date().timeIntervalSince(lastSaved) >= 120 else { return }
+        lastSaved = Date()
         let doc = ScanCacheDocument(version: Self.version, files: files)
         guard let data = try? JSONEncoder().encode(doc) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -98,7 +102,7 @@ struct TranscriptFile: Sendable {
 }
 
 /// Walks provider transcript directories, parses what changed, and folds the
-/// records into hourly cells keyed by account and model.
+/// records into per-minute cells keyed by account and model.
 public enum Scanner {
     public static func scan(sources: [ScanSource], openCodeDatabase: String?, sinceMs: Int64, cache: ScanCache) async -> ScanOutput {
         var output = ScanOutput()
@@ -173,7 +177,7 @@ public enum Scanner {
                     if seen.contains(key) { continue }
                     seen.insert(key)
                 }
-                let key = CellKey(hourStartMs: CellKey.hourStart(forMs: record.timestampMs), accountId: Account.openCodeLocalId, model: record.model)
+                let key = CellKey(startMs: CellKey.minuteStart(forMs: record.timestampMs), accountId: Account.openCodeLocalId, model: record.model)
                 var cell = output.cells[key] ?? Cell()
                 cell.add(record)
                 output.cells[key] = cell
@@ -239,7 +243,7 @@ public enum Scanner {
             default:
                 accountId = source.fixedAccountId ?? Account.placeholder(id: "\(source.provider.rawValue):unattributed").id
             }
-            let key = CellKey(hourStartMs: CellKey.hourStart(forMs: record.timestampMs), accountId: accountId, model: record.model)
+            let key = CellKey(startMs: CellKey.minuteStart(forMs: record.timestampMs), accountId: accountId, model: record.model)
             var cell = cells[key] ?? Cell()
             cell.add(record)
             cells[key] = cell

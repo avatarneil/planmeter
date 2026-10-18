@@ -16,10 +16,41 @@ final class TimeRangeTests: XCTestCase {
             XCTAssertEqual(window.to.timeIntervalSince(window.from), hoursSinceMidnight * 3600)
             XCTAssertLessThan(TimeRange.day.window(now: now, calendar: calendar).from, window.from)
         }
-        XCTAssertEqual(TimeRange.today.resolution, .hour)
+        XCTAssertEqual(TimeRange.today.defaultGranularity, .hour)
+    }
+
+    func testLastHourEndsOnAFiveMinuteBoundaryAndOffersMinuteBuckets() {
+        let now = Date(timeIntervalSince1970: 1_790_000_123) // 2:03 past a five-minute boundary.
+        let window = TimeRange.lastHour.window(now: now)
+        XCTAssertEqual(window.to.timeIntervalSince1970, 1_790_000_400)
+        XCTAssertEqual(window.to.timeIntervalSince(window.from), 3600)
+        XCTAssertEqual(TimeRange.lastHour.granularities, [.minute, .fiveMinutes])
+        XCTAssertEqual(Aggregation.periods(from: window.from, to: window.to, resolution: .minute).count, 60)
+        for range in TimeRange.allCases {
+            XCTAssertTrue(range.granularities.contains(range.defaultGranularity), range.rawValue)
+            let span = range.window(now: now).to.timeIntervalSince(range.window(now: now).from)
+            for granularity in range.granularities {
+                if let step = granularity.stepMs { XCTAssertLessThanOrEqual(span * 1000 / Double(step), 1500, "\(range) \(granularity)") }
+            }
+        }
+    }
+
+    @MainActor
+    func testGranularityIsRememberedPerRangeAndDrivesTheChart() {
+        let model = AppModel()
+        model.granularities = [:]
+        model.range = .today
+        model.granularity = .fiveMinutes
+        XCTAssertEqual(model.chartResolution, .fiveMinutes)
+        model.range = .week
+        XCTAssertEqual(model.chartResolution, .day)
+        model.range = .today
+        XCTAssertEqual(model.chartResolution, .fiveMinutes)
+        model.granularities = [:]
     }
 
     func testSpendLimitKeysRemainCompatibleWithSavedPreferences() {
+        XCTAssertEqual(TimeRange.lastHour.id, "lastHour")
         XCTAssertEqual(TimeRange.today.id, "today")
         XCTAssertEqual(TimeRange.day.id, "day")
         XCTAssertEqual(TimeRange.week.id, "week")
@@ -53,7 +84,7 @@ final class TimeRangeTests: XCTestCase {
         })
         for (index, account) in model.accounts.enumerated() {
             for (timestamp, cost) in history {
-                model.cells[CellKey(hourStartMs: timestamp, accountId: account.id, model: "test")] =
+                model.cells[CellKey(startMs: timestamp, accountId: account.id, model: "test")] =
                     Cell(reportedCostUsd: cost * Double(index + 1))
             }
         }
@@ -100,7 +131,7 @@ final class TimeRangeTests: XCTestCase {
         var account = Account.placeholder(id: "today-refresh-test")
         account.suggestedGroup = try XCTUnwrap(model.menuBarSpendGroups.first)
         model.discovery = Discovery(accounts: [account])
-        let beforeKey = CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(beforeMidnight.timeIntervalSince1970 * 1000)),
+        let beforeKey = CellKey(startMs: CellKey.hourStart(forMs: Int64(beforeMidnight.timeIntervalSince1970 * 1000)),
                                 accountId: account.id, model: "test")
         model.cells[beforeKey] = Cell(reportedCostUsd: 10)
         model.recompute(now: beforeMidnight)
@@ -117,7 +148,7 @@ final class TimeRangeTests: XCTestCase {
         XCTAssertEqual(model.total.costUsd, 0)
         XCTAssertEqual(model.menuBarTotal.costUsd, 0)
 
-        let afterKey = CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(afterMidnight.timeIntervalSince1970 * 1000)),
+        let afterKey = CellKey(startMs: CellKey.hourStart(forMs: Int64(afterMidnight.timeIntervalSince1970 * 1000)),
                                accountId: account.id, model: "test")
         model.cells[afterKey] = Cell(reportedCostUsd: 3)
         model.recompute(now: afterMidnight)

@@ -117,11 +117,11 @@ final class AggregationTests: XCTestCase {
         var record = UsageRecord(provider: .codex, timestampMs: ms, model: "gpt-5.6-luna", sessionId: "s", totals: TokenTotals(uncachedInput: 10, output: 5), planType: "pro")
         var cell = Cell()
         cell.add(record)
-        cells[CellKey(hourStartMs: CellKey.hourStart(forMs: ms), accountId: "codex:plan:pro", model: "gpt-5.6-luna")] = cell
+        cells[CellKey(startMs: CellKey.hourStart(forMs: ms), accountId: "codex:plan:pro", model: "gpt-5.6-luna")] = cell
         record.timestampMs = ms + 3_600_000
         var cell2 = Cell()
         cell2.add(record)
-        cells[CellKey(hourStartMs: CellKey.hourStart(forMs: ms + 3_600_000), accountId: "codex:plan:pro", model: "gpt-5.6-luna")] = cell2
+        cells[CellKey(startMs: CellKey.hourStart(forMs: ms + 3_600_000), accountId: "codex:plan:pro", model: "gpt-5.6-luna")] = cell2
 
         let from = Date(timeIntervalSince1970: TimeInterval(ms) / 1000 - 86_400 * 3)
         let to = Date(timeIntervalSince1970: TimeInterval(ms) / 1000 + 86_400)

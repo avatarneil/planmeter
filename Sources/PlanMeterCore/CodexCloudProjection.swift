@@ -26,7 +26,7 @@ public enum CodexCloudProjection {
                     let date = turn.completedAt ?? turn.startedAt
                     let timestamp = date.timeIntervalSince1970 * 1000
                     guard timestamp.isFinite, timestamp >= 0, timestamp < Double(Int64.max) else { skipped += 1; continue }
-                    let key = CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(timestamp)), accountId: account, model: model)
+                    let key = CellKey(startMs: CellKey.minuteStart(forMs: Int64(timestamp)), accountId: account, model: model)
                     var cell = result.cells[key] ?? Cell()
                     guard canAdd(totals, to: cell.totals), canAdd(totals, to: cell.unpricedTotals) else { skipped += 1; continue }
                     let record = UsageRecord(provider: .codex, timestampMs: Int64(timestamp), model: model,

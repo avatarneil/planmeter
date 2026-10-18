@@ -64,11 +64,24 @@ struct UsageDetailView: View {
                     return (date: date, value: metric == .cost ? total.costUsd : Double(total.totals.total))
                 }.sorted { $0.date < $1.date }
                 Chart(points, id: \.date) { point in
-                    BarMark(
-                        x: .value("Period", point.date, unit: model.chartResolution == .hour ? .hour : .day),
-                        y: .value(metric.rawValue, point.value)
+                    RectangleMark(
+                        xStart: .value("Start", point.date),
+                        xEnd: .value("End", ChartTime.barEnd(of: point.date, resolution: model.chartResolution)),
+                        yStart: .value(metric.rawValue, 0),
+                        yEnd: .value(metric.rawValue, point.value)
                     )
                     .foregroundStyle(Color.accentColor)
+                }
+                .chartXScale(domain: model.range.window().from...max(model.range.window().to, points.map { ChartTime.end(of: $0.date, resolution: model.chartResolution) }.max() ?? model.range.window().to))
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: compact ? 4 : 6)) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(ChartTime.label(date, resolution: model.chartResolution, multiDay: model.range.dayCount > 1))
+                            }
+                        }
+                    }
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in

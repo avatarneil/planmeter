@@ -202,16 +202,22 @@ public struct RateLimitSnapshot: Codable, Hashable, Sendable {
     }
 }
 
-/// Aggregation key: UTC hour, attribution key, model.
+/// Aggregation key: UTC minute, attribution key, model. Coarser periods are
+/// derived when aggregating, so charts can go down to one-minute buckets.
 public struct CellKey: Hashable, Codable, Sendable {
-    public var hourStartMs: Int64
+    public var startMs: Int64
     public var accountId: String
     public var model: String
 
-    public init(hourStartMs: Int64, accountId: String, model: String) {
-        self.hourStartMs = hourStartMs
+    public init(startMs: Int64, accountId: String, model: String) {
+        self.startMs = startMs
         self.accountId = accountId
         self.model = model
+    }
+
+    public static func minuteStart(forMs ms: Int64) -> Int64 {
+        let minute: Int64 = 60_000
+        return (ms / minute) * minute
     }
 
     public static func hourStart(forMs ms: Int64) -> Int64 {
@@ -259,6 +265,11 @@ public struct Cell: Codable, Hashable, Sendable {
 
 public enum CostSource: String, Codable, Hashable, Sendable {
     case workspaceCredits
+    /// Workspace credits without timing (Chat, voice, image, or no local trace),
+    /// spread evenly over the hours the provider reported.
+    case workspaceBaseline
+
+    public var isWorkspace: Bool { self == .workspaceCredits || self == .workspaceBaseline }
     case providerReported
     case modelPriced
     case mixed

@@ -9,12 +9,21 @@ public struct CloudSnapshot: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var generatedAt: Date
     public var reports: [RemoteReply]
+    /// Finer timelines: the last hour by minute and the last 24 hours by five
+    /// minutes. Optional so older snapshots and clients still decode.
+    public var timelines: [RemoteTimeline]?
 
-    public init(id: String, name: String, generatedAt: Date, reports: [RemoteReply]) {
+    public init(id: String, name: String, generatedAt: Date, reports: [RemoteReply], timelines: [RemoteTimeline]? = nil) {
         self.id = id
         self.name = name
         self.generatedAt = generatedAt
         self.reports = reports.map(Self.sanitized)
+        self.timelines = timelines.map { $0.compactMap { Self.sanitized(RemoteReply(timeline: $0)).timeline } }
+    }
+
+    /// The finer timeline for a sub-day window (`minutes`) or the last 24 hours (nil).
+    public func fineTimeline(minutes: Int?) -> RemoteTimeline? {
+        timelines?.first { $0.minutes == minutes }
     }
 
     public func report(days: Int) throws -> RemoteReply {

@@ -38,8 +38,12 @@ let tools: [Tool] = [
     ),
     Tool(
         name: "usage_timeline",
-        description: "Cost and tokens per period, with a per-account and per-group breakdown for each period. Daily by default; hourly is only sensible for 1-3 days.",
-        schema: ["type": "object", "properties": ["days": daysProperty, "resolution": ["type": "string", "enum": ["day", "hour"], "default": "day"]], "additionalProperties": false]
+        description: "Cost and tokens per period, with a per-account and per-group breakdown for each period. Daily by default; minute, 5m, 15m, and hour buckets suit short windows (requests are coarsened to at most ~1,500 periods). Use minutes for a window shorter than a day (e.g. 60). baselineCostUsd is the part of an account's cost from workspace credits without timing, spread evenly over the hours the provider reported.",
+        schema: ["type": "object", "properties": [
+            "days": daysProperty,
+            "minutes": ["type": "integer", "minimum": 5, "maximum": 1440, "description": "Window shorter than a day, ending now; overrides days."],
+            "resolution": ["type": "string", "enum": ["minute", "5m", "15m", "hour", "day"], "default": "day"],
+        ], "additionalProperties": false]
     ),
     Tool(
         name: "codex_limits",
@@ -117,9 +121,10 @@ func callTool(name: String, arguments: [String: Any]) async -> [String: Any] {
         return textResult(Report.models(ctx, days: days, accountFilter: arguments["account"] as? String))
     case "usage_timeline":
         let days = intArg(arguments, "days", default: 30, range: 1...365)
-        let resolution: Resolution = (arguments["resolution"] as? String) == "hour" ? .hour : .day
-        let ctx = await Report.load(days: days, cache: cache)
-        return textResult(Report.timeline(ctx, days: days, resolution: resolution))
+        let minutes = arguments["minutes"] == nil ? nil : intArg(arguments, "minutes", default: 60, range: 5...1440)
+        let resolution = (arguments["resolution"] as? String).flatMap(Resolution.init(rawValue:)) ?? .day
+        let ctx = await Report.load(days: minutes == nil ? days : 2, cache: cache)
+        return textResult(Report.timeline(ctx, days: days, resolution: resolution, minutes: minutes))
     case "codex_limits":
         let ctx = await Report.load(days: 7, cache: cache)
         return textResult(Report.limits(ctx))
@@ -152,7 +157,7 @@ func handle(_ message: [String: Any]) async {
             "protocolVersion": version,
             "capabilities": ["tools": ["listChanged": false]],
             "serverInfo": ["name": "planmeter", "version": serverVersion],
-            "instructions": "Start with usage_summary for the dashboard's preferred totals: dated workspace credits replace overlapping known-thread estimates within the UTC-day hours the provider has reported (later hours stay local); other accounts or missing dates use local token prices and available dated cloud turns. localTotal retains the transcript-only comparison; knownThreadTotal includes local/cloud usage. Workspace text tokens cover Work/Codex; billing credits also include Chat/voice/image. Timeline resolution becomes day when workspace data is present; never invent hourly distribution. Cloud turn aggregates use completion time (start time if incomplete), not individual response times, and exclude thread IDs already represented locally. account_usage.dailyUsage exposes product/model/reasoning/speed/surface/I/O where available and provider USD conversion; unavailable dimensions retain combined model/speed readings. Optional date queries a specific day and can preserve model names grouped under Other in longer windows. Default workspace history is 90 dates; cloud discovery is bounded and may be incomplete. cloudUsage exposes dated turns through ordinary CLI login; plan restrictions remain explicit. serviceThreads is lifetime usage and never enters charts. serviceCostUsd is a billing estimate; tokenRateCostUsd uses standard model rates without speed premiums. usage_threads retains known local/cloud spend. Never add overlapping local/workspace/cloud readings, lifetime totals, or generic account tokens, and never price an unmatched token difference.",
+            "instructions": "Start with usage_summary for the dashboard's preferred totals: dated workspace credits replace overlapping known-thread estimates within the UTC-day hours the provider has reported (later hours stay local); other accounts or missing dates use local token prices and available dated cloud turns. localTotal retains the transcript-only comparison; knownThreadTotal includes local/cloud usage. Workspace text tokens cover Work/Codex; billing credits also include Chat/voice/image. Timelines go down to minute buckets: workspace text usage follows local activity, and credits without timing appear as an even baselineCostUsd over the hours the provider reported (through its freshness time); later hours stay local. Cloud turn aggregates use completion time (start time if incomplete), not individual response times, and exclude thread IDs already represented locally. account_usage.dailyUsage exposes product/model/reasoning/speed/surface/I/O where available and provider USD conversion; unavailable dimensions retain combined model/speed readings. Optional date queries a specific day and can preserve model names grouped under Other in longer windows. Default workspace history is 90 dates; cloud discovery is bounded and may be incomplete. cloudUsage exposes dated turns through ordinary CLI login; plan restrictions remain explicit. serviceThreads is lifetime usage and never enters charts. serviceCostUsd is a billing estimate; tokenRateCostUsd uses standard model rates without speed premiums. usage_threads retains known local/cloud spend. Never add overlapping local/workspace/cloud readings, lifetime totals, or generic account tokens, and never price an unmatched token difference.",
         ])
     case "notifications/initialized", "notifications/cancelled", "notifications/roots/list_changed":
         return

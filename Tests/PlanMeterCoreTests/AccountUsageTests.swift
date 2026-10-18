@@ -8,7 +8,7 @@ final class AccountUsageTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_790_899_200) // 2026-10-02 UTC
 
     func entry(account: String = "codex:plan:pro", session: String = "one", input: Int = 100, cost: Double = 2) -> ThreadCellEntry {
-        let key = CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)), accountId: account, model: "test")
+        let key = CellKey(startMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)), accountId: account, model: "test")
         return ThreadCellEntry(sessionId: session, key: key,
             cell: Cell(totals: TokenTotals(uncachedInput: input), reportedCostUsd: cost, records: 1, sessionIds: [session]), sourcePath: "/tmp/transcript.jsonl")
     }

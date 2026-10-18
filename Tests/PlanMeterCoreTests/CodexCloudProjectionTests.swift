@@ -37,7 +37,7 @@ final class CodexCloudProjectionTests: XCTestCase {
 
     func testExactLocalThreadWinsWithoutAddingCloudAggregate() {
         var local = ScanOutput()
-        let key = CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(date.timeIntervalSince1970 * 1000)),
+        let key = CellKey(startMs: CellKey.hourStart(forMs: Int64(date.timeIntervalSince1970 * 1000)),
             accountId: target.localAccountId!, model: "test")
         let cell = Cell(totals: TokenTotals(output: 7), reportedCostUsd: 0.5)
         local.cells[key] = cell

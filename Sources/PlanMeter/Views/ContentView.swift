@@ -29,7 +29,7 @@ struct ContentView: View {
                     ForEach(TimeRange.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 380)
+                .frame(width: 430)
                 Picker("Metric", selection: $model.metric) {
                     ForEach(Metric.allCases) { Text($0.rawValue).tag($0) }
                 }

@@ -29,16 +29,20 @@ public enum RemoteMethod: String, Codable, CaseIterable, Sendable {
 public struct RemoteRequest: Codable, Sendable, Equatable {
     public var method: RemoteMethod
     public var days: Int?
-    /// "day" or "hour"; timeline only.
+    /// "minute", "5m", "15m", "hour", or "day"; timeline only. Older Macs
+    /// understand only "hour" and "day".
     public var resolution: String?
     /// Account filter for `models`.
     public var account: String?
+    /// A window shorter than a day, in minutes, ending now; overrides `days`.
+    public var minutes: Int?
 
-    public init(method: RemoteMethod, days: Int? = nil, resolution: String? = nil, account: String? = nil) {
+    public init(method: RemoteMethod, days: Int? = nil, resolution: String? = nil, account: String? = nil, minutes: Int? = nil) {
         self.method = method
         self.days = days
         self.resolution = resolution
         self.account = account
+        self.minutes = minutes
     }
 }
 
@@ -121,8 +125,11 @@ public struct RemoteSummary: Codable, Sendable, Equatable {
     public var serverName: String
     public var pricingSource: String
     public var usesProviderDates: Bool?
+    /// Set for windows shorter than a day.
+    public var minutes: Int?
 
-    public init(days: Int, from: Date, to: Date, groups: [RemoteGroupUsage], total: RemoteTotals, todayCostUsd: Double, generatedAt: Date, serverName: String, pricingSource: String, usesProviderDates: Bool? = nil) {
+    public init(days: Int, from: Date, to: Date, groups: [RemoteGroupUsage], total: RemoteTotals, todayCostUsd: Double, generatedAt: Date, serverName: String, pricingSource: String, usesProviderDates: Bool? = nil, minutes: Int? = nil) {
+        self.minutes = minutes
         self.days = days
         self.from = from
         self.to = to
@@ -162,13 +169,17 @@ public struct RemoteTimelinePoint: Codable, Sendable, Equatable, Identifiable {
     public var accountId: String
     public var costUsd: Double
     public var tokens: Int
+    /// The part of `costUsd` from workspace credits without timing, spread evenly
+    /// over the hours the provider reported. Charts can draw it as a lighter baseline.
+    public var baselineCostUsd: Double?
     public var id: String { "\(period.timeIntervalSince1970):\(accountId)" }
 
-    public init(period: Date, accountId: String, costUsd: Double, tokens: Int) {
+    public init(period: Date, accountId: String, costUsd: Double, tokens: Int, baselineCostUsd: Double? = nil) {
         self.period = period
         self.accountId = accountId
         self.costUsd = costUsd
         self.tokens = tokens
+        self.baselineCostUsd = baselineCostUsd
     }
 }
 
@@ -178,13 +189,51 @@ public struct RemoteTimeline: Codable, Sendable, Equatable {
     public var periods: [Date]
     public var points: [RemoteTimelinePoint]
     public var accounts: [RemoteAccount]
+    /// Set for windows shorter than a day.
+    public var minutes: Int?
 
-    public init(days: Int, resolution: String, periods: [Date], points: [RemoteTimelinePoint], accounts: [RemoteAccount]) {
+    public init(days: Int, resolution: String, periods: [Date], points: [RemoteTimelinePoint], accounts: [RemoteAccount], minutes: Int? = nil) {
         self.days = days
         self.resolution = resolution
         self.periods = periods
         self.points = points
         self.accounts = accounts
+        self.minutes = minutes
+    }
+
+    /// Bucket length in seconds for fixed-step resolutions; nil for calendar days.
+    public static func stepSeconds(_ resolution: String) -> TimeInterval? {
+        switch resolution {
+        case "minute": return 60
+        case "5m": return 300
+        case "15m": return 900
+        case "hour": return 3600
+        default: return nil
+        }
+    }
+
+    /// Re-buckets a fixed-step timeline into a coarser fixed step, e.g. 5m into
+    /// 15m or hour. Returns nil when the target is not a whole multiple.
+    public func rebucketed(to target: String) -> RemoteTimeline? {
+        guard target != resolution else { return self }
+        guard let step = Self.stepSeconds(resolution), let wide = Self.stepSeconds(target), wide > step,
+              wide.truncatingRemainder(dividingBy: step) == 0 else { return nil }
+        func floor(_ date: Date) -> Date { Date(timeIntervalSince1970: (date.timeIntervalSince1970 / wide).rounded(.down) * wide) }
+        struct Key: Hashable { var period: Date; var account: String }
+        var merged: [Key: RemoteTimelinePoint] = [:]
+        for point in points {
+            let key = Key(period: floor(point.period), account: point.accountId)
+            var value = merged[key] ?? RemoteTimelinePoint(period: key.period, accountId: point.accountId, costUsd: 0, tokens: 0)
+            value.costUsd += point.costUsd
+            value.tokens += point.tokens
+            if let baseline = point.baselineCostUsd { value.baselineCostUsd = (value.baselineCostUsd ?? 0) + baseline }
+            merged[key] = value
+        }
+        var periods: [Date] = []
+        for period in self.periods.map(floor) where periods.last != period { periods.append(period) }
+        return RemoteTimeline(days: days, resolution: target, periods: periods,
+                              points: merged.values.sorted { $0.period == $1.period ? $0.accountId < $1.accountId : $0.period < $1.period },
+                              accounts: accounts, minutes: minutes)
     }
 }
 

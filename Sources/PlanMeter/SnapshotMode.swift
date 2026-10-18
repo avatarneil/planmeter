@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import PlanMeterCore
 import PlanMeterDesktopShared
 
 /// `PlanMeter --snapshot /path/out.png [--size WxH]` renders the main window
@@ -120,6 +121,19 @@ enum SnapshotMode {
         }
         print("snapshot-desktop: wrote \(prefix)-{small,medium,large,extra-large,empty}.png")
         NSApp.terminate(nil)
+    }
+
+    /// `--range lastHour|today|day|week|month|quarter` and `--granularity minute|5m|15m|hour|day`
+    /// choose what a snapshot shows.
+    @MainActor
+    static func applyArguments(to model: AppModel) {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--range"), i + 1 < args.count, let range = TimeRange.allCases.first(where: { $0.id == args[i + 1] }) {
+            model.range = range
+        }
+        if let i = args.firstIndex(of: "--granularity"), i + 1 < args.count, let resolution = Resolution(rawValue: args[i + 1]) {
+            model.granularity = resolution
+        }
     }
 
     static var size: NSSize {
