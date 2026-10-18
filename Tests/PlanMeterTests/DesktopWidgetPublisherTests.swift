@@ -18,8 +18,8 @@ final class DesktopWidgetPublisherTests: XCTestCase {
             return account
         })
         for (index, account) in model.accounts.enumerated() {
-            model.cells[CellKey(hourStartMs: hour, accountId: account.id, model: "test")] = Cell(reportedCostUsd: Double((index + 1) * 10))
-            model.cells[CellKey(hourStartMs: hour - 100 * 86_400_000, accountId: account.id, model: "test")] = Cell(reportedCostUsd: 9000)
+            model.cells[CellKey(startMs: hour, accountId: account.id, model: "test")] = Cell(reportedCostUsd: Double((index + 1) * 10))
+            model.cells[CellKey(startMs: hour - 100 * 86_400_000, accountId: account.id, model: "test")] = Cell(reportedCostUsd: 9000)
         }
         model.lastScan = now.addingTimeInterval(-120)
         model.recompute(now: now)

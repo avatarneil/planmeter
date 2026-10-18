@@ -47,7 +47,7 @@ final class WorkspaceUsageTests: XCTestCase {
             account.suggestedGroup = .work
             model.discovery = Discovery(accounts: [account])
             model.lastScan = now
-            model.cells[CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)),
+            model.cells[CellKey(startMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)),
                 accountId: account.id, model: "test")] = Cell(totals: TokenTotals(uncachedInput: 500), reportedCostUsd: 99)
             model.dailyUsage = [shared]
             model.recompute(now: now)
@@ -85,15 +85,18 @@ final class WorkspaceUsageTests: XCTestCase {
         account.suggestedGroup = .work
         model.discovery = Discovery(accounts: [account])
         model.lastScan = now
-        model.cells[CellKey(hourStartMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)), accountId: account.id, model: "test")] = Cell(totals: TokenTotals(uncachedInput: 500), reportedCostUsd: 99)
+        model.cells[CellKey(startMs: CellKey.hourStart(forMs: Int64(now.timeIntervalSince1970 * 1000)), accountId: account.id, model: "test")] = Cell(totals: TokenTotals(uncachedInput: 500), reportedCostUsd: 99)
         let target = CodexUsageTarget(id: "workspace:member", name: "Work", home: "/tmp/unused", email: "member@example.com", plan: "business", serviceAccountId: "workspace", localAccountId: account.id)
         // Reported through the end of UTC October 1, so the reading covers the local usage.
         let products: [String: Any] = ["breakdown": "product", "series": [["key": "work", "label": "Work"]], "data_freshness_ts": "2026-10-02T00:00:00Z", "data": [["date": "2026-10-01", "values": ["work": 25]]]]
         let tokens: [String: Any] = ["units": "credits", "group_by": "day", "data": [["date": "2026-10-01", "models": [["model": "test", "speed": "standard", "credits": 25, "uncached_text_input_tokens": 20, "cached_text_input_tokens": 80, "text_output_tokens": 10, "text_total_tokens": 110]]]]]
         model.dailyUsage = [try CodexDailyUsage.decode(products: products, modelCredits: nil, tokens: tokens, estimate: ["estimated_usage_usd_micros": 40_000], target: target, from: "2026-10-01", to: "2026-10-01", now: now)]
         model.recompute(now: now)
-        XCTAssertEqual(model.chartResolution, .day)
+        XCTAssertEqual(model.chartResolution, .hour) // Workspace readings no longer force daily buckets.
         XCTAssertEqual(model.total.costUsd, 1)
+        // The reading follows the replaced local usage into its hour.
+        let hour = Date(timeIntervalSince1970: (now.timeIntervalSince1970 / 3600).rounded(.down) * 3600)
+        XCTAssertEqual(Aggregation.total(model.buckets.filter { $0.periodStart == hour }).costUsd, 1)
         XCTAssertEqual(model.total.totals.total, 110)
         XCTAssertEqual(model.groupSummaries.first { $0.group == model.group(for: account) }?.aggregate.costUsd, 1)
         XCTAssertEqual(Aggregation.total(model.buckets(in: .account(account.id))).costUsd, 1)
@@ -101,21 +104,42 @@ final class WorkspaceUsageTests: XCTestCase {
         XCTAssertEqual(model.menuBarTotal.costUsd, expectedSelected)
         let widget = try XCTUnwrap(model.desktopSnapshot(now: now))
         XCTAssertEqual(widget.cost, expectedSelected)
-        XCTAssertEqual(widget.detail?.hourly, false)
+        XCTAssertEqual(widget.detail?.hourly, true)
         XCTAssertEqual(widget.detail?.trend.reduce(0) { $0 + $1.cost }, expectedSelected)
         let summary = RemoteReportBuilder.summary(model: model, days: 1, now: now)
         XCTAssertEqual(summary.total.costUsd, 1)
         XCTAssertEqual(summary.total.tokens, 110)
-        XCTAssertEqual(summary.usesProviderDates, true)
+        XCTAssertNil(summary.usesProviderDates) // One day is the rolling 24 hours for every account.
         let timeline = RemoteReportBuilder.timeline(model: model, days: 1, resolution: .hour, now: now)
-        XCTAssertEqual(timeline.resolution, "day")
-        XCTAssertEqual(timeline.points.reduce(0) { $0 + $1.costUsd }, 1)
-        XCTAssertEqual(timeline.periods.count, 1)
+        XCTAssertEqual(timeline.resolution, "hour")
+        XCTAssertEqual(timeline.points.reduce(0) { $0 + $1.costUsd }, 1, accuracy: 0.0000001)
+        XCTAssertEqual(timeline.periods.count, 24)
+        let minutes = RemoteReportBuilder.timeline(model: model, days: 1, minutes: 60, resolution: .minute, now: now)
+        XCTAssertEqual(minutes.resolution, "minute")
+        XCTAssertEqual(minutes.minutes, 60)
+        XCTAssertEqual(minutes.periods.count, 60)
         XCTAssertEqual(RemoteReportBuilder.models(model: model, days: 1, filter: nil, now: now).reduce(0) { $0 + $1.totals.costUsd }, 1)
+        // Every granularity agrees, including mid-hour freshness on hour cells.
+        var midHour = model.dailyUsage[0]
+        midHour.creditsFreshness = ISO8601DateFormatter().string(from: now.addingTimeInterval(-60))
+        model.dailyUsage = [midHour]
+        model.cells[CellKey(startMs: Int64(now.timeIntervalSince1970 * 1000) - 60_000 - 1_000 * 60 * 5, accountId: account.id, model: "test")] = Cell(reportedCostUsd: 2)
+        model.cells[CellKey(startMs: Int64(now.timeIntervalSince1970 * 1000) + 60_000 * 3, accountId: account.id, model: "test")] = Cell(reportedCostUsd: 4)
+        let day = Report.window(days: 1, now: now)
+        let totals = Resolution.allCases.map { Aggregation.total(model.projectedUsage(from: day.from, to: day.to, resolution: $0).buckets).costUsd }
+        for total in totals { XCTAssertEqual(total, totals[0], accuracy: 0.0000001) }
+        // A window starting mid-hour agrees at every granularity too, workspace or not.
+        let other = CellKey(startMs: Int64(now.timeIntervalSince1970 * 1000) - 20 * 60_000, accountId: "claude:other", model: "test")
+        model.cells[other] = Cell(reportedCostUsd: 5)
+        let midWindow = (from: now.addingTimeInterval(-25 * 60), to: now.addingTimeInterval(35 * 60))
+        let midTotals = Resolution.allCases.filter { $0 != .day }.map { Aggregation.total(model.projectedUsage(from: midWindow.from, to: midWindow.to, resolution: $0).buckets).costUsd }
+        for total in midTotals { XCTAssertEqual(total, midTotals[0], accuracy: 0.0000001) }
+        model.cells[other] = nil
+        model.dailyUsage = [midHour]
         model.range = .day
         model.recompute(now: now)
         XCTAssertEqual(model.chartResolution, .hour)
-        XCTAssertEqual(model.total.costUsd, 99)
-        XCTAssertTrue(model.usageNote.contains("calendar days"))
+        XCTAssertGreaterThan(model.total.costUsd, 1) // Usage after the provider's freshness stays local.
+        XCTAssertTrue(model.usageNote.contains("baseline"))
     }
 }

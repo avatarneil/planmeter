@@ -13,7 +13,7 @@ final class RemoteReportBuilderTests: XCTestCase {
         model.discovery = Discovery(accounts: [account])
         for (offset, cost) in [(-24, 1000.0), (-23, 10.0), (-12, 20.0), (0, 30.0), (1, 2000.0)] {
             let date = hour.addingTimeInterval(Double(offset) * 3600)
-            model.cells[CellKey(hourStartMs: Int64(date.timeIntervalSince1970 * 1000), accountId: account.id, model: "test")] = Cell(reportedCostUsd: cost)
+            model.cells[CellKey(startMs: Int64(date.timeIntervalSince1970 * 1000), accountId: account.id, model: "test")] = Cell(reportedCostUsd: cost)
         }
         model.recompute(now: now)
 

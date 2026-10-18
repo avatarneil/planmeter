@@ -17,6 +17,8 @@ final class CloudSyncState {
     private var accountVerifiedAt: Date?
     private var accountGeneration = 0
     private var retryAfter = Date.distantPast
+    /// Usage totals at the last upload; unchanged totals upload at most every five minutes.
+    private var lastFingerprint: Data?
     private let publisherID: String = {
         let defaults = UserDefaults.standard
         if let id = defaults.string(forKey: "cloudSync.publisherID") { return id }
@@ -96,12 +98,19 @@ final class CloudSyncState {
                 limits: RemoteReportBuilder.limits(model: model)
             )
         }
-        let snapshot = CloudSnapshot(id: publisherID, name: model.remote.serverName, generatedAt: scannedAt, reports: reports)
+        let fingerprint = Self.fingerprint(reports)
+        if fingerprint == lastFingerprint, let lastUploaded, now.timeIntervalSince(lastUploaded) < 300 { return }
+        let timelines = [
+            RemoteReportBuilder.timeline(model: model, days: 1, minutes: 60, resolution: .minute, now: now),
+            RemoteReportBuilder.timeline(model: model, days: 1, resolution: .fiveMinutes, now: now),
+        ]
+        let snapshot = CloudSnapshot(id: publisherID, name: model.remote.serverName, generatedAt: scannedAt, reports: reports, timelines: timelines)
         do {
             try await store.save(snapshot)
             guard isEnabled else { return }
             let uploadedAt = Date()
             retryAfter = .distantPast
+            lastFingerprint = fingerprint
             lastUploaded = uploadedAt
             status = "Uploaded \(uploadedAt.formatted(date: .abbreviated, time: .shortened))"
         } catch {
@@ -110,6 +119,15 @@ final class CloudSyncState {
             retryAfter = Date().addingTimeInterval(max(30, delay))
             fail(error)
         }
+    }
+
+    /// Totals and limits only: rolling windows and timestamps change every scan
+    /// even when no usage did.
+    private static func fingerprint(_ reports: [RemoteReply]) -> Data? {
+        struct Parts: Encodable { var groups: [RemoteGroupUsage]?; var today: Double?; var limits: RemoteLimits? }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try? encoder.encode(reports.map { Parts(groups: $0.summary?.groups, today: $0.summary?.todayCostUsd, limits: $0.limits) })
     }
 
     private func fail(_ error: Error) {

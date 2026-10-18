@@ -91,9 +91,9 @@ public enum UsageCoverage {
         let fromMs = Int64(from.timeIntervalSince1970 * 1000)
         let toMs = Int64(to.timeIntervalSince1970 * 1000)
         var rows: [String: ThreadSpend] = [:]
-        for entry in entries where entry.key.hourStartMs >= fromMs && entry.key.hourStartMs < toMs {
+        for entry in entries where entry.key.startMs >= fromMs && entry.key.startMs < toMs {
             let id = "\(entry.key.accountId):\(entry.sessionId)"
-            let date = Date(timeIntervalSince1970: Double(entry.key.hourStartMs) / 1000)
+            let date = Date(timeIntervalSince1970: Double(entry.key.startMs) / 1000)
             var row = rows[id] ?? ThreadSpend(accountId: entry.key.accountId, provider: Account.placeholder(id: entry.key.accountId).provider,
                 sessionId: entry.sessionId, tokens: 0, costUsd: 0, unpricedTokens: 0, models: [], sourcePaths: [], firstActivity: date, lastActivity: date)
             if row.provider == .codex, UUID(uuidString: row.sessionId) != nil { row.chatURL = "codex://threads/\(row.sessionId)" }

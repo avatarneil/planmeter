@@ -21,7 +21,9 @@ public enum UsageProjection {
         }
     }
 
-    /// `from` must be a local midnight; readings appear on local calendar days.
+    /// For `.day`, `from` must be a local midnight. Finer resolutions place each
+    /// share in the bucket where it occurred: text usage follows the local usage
+    /// it replaces minute by minute; credits with no timing form an even baseline.
     public static func buckets(cells: [CellKey: Cell], rates: RateTable, snapshots: [CodexDailyUsageSnapshot], accounts: [Account],
                                from: Date, to: Date, resolution: Resolution, calendar: Calendar = .current) -> Result {
         let known = Set(accounts.map(\.id))
@@ -35,12 +37,15 @@ public enum UsageProjection {
         let workspaceAccounts = Set(eligible.compactMap(\.target.localAccountId))
         var cellsByDay: [DayKey: [CellKey]] = [:]
         for key in cells.keys where workspaceAccounts.contains(key.accountId) {
-            cellsByDay[DayKey(account: key.accountId, startMs: key.hourStartMs / dayMs * dayMs), default: []].append(key)
+            cellsByDay[DayKey(account: key.accountId, startMs: key.startMs / dayMs * dayMs), default: []].append(key)
         }
         func price(_ key: CellKey) -> Double {
             guard let cell = cells[key] else { return 0 }
             return cell.reportedCostUsd + (rates.price(model: key.model, totals: cell.unpricedTotals) ?? 0)
         }
+        // Slices are split at the window's edges, so a partial first or last bucket
+        // gets only the share of the reading inside the window, like local cells.
+        let fromMs = milliseconds(from), toMs = milliseconds(to)
 
         var replaced: Set<CellKey> = []
         var projected: [Bucket] = []
@@ -50,50 +55,59 @@ public enum UsageProjection {
             // Credits bound what a day's reading covers. Without a freshness time,
             // a reading can only cover usage until it was fetched.
             let freshness = (snapshot.creditsFreshness ?? snapshot.dataFreshness).flatMap(ISO8601.parseMs)
-                ?? snapshot.fetchedAt.map { Int64(($0.timeIntervalSince1970 * 1000).rounded()) }
+                ?? snapshot.fetchedAt.map(milliseconds)
             for day in snapshot.days {
                 guard let start = utcStartMs(day.date), let credits = day.credits,
                       let cost = snapshot.estimatedCost(credits: credits), let models = day.textModels else { continue }
                 let end = min(start + dayMs, freshness ?? start + dayMs)
-                let pieces = localPieces(start: start, end: end, calendar: calendar)
-                guard pieces.contains(where: { $0.day >= from && $0.day < to }) else { continue }
-                let covered = (cellsByDay[DayKey(account: account, startMs: start)] ?? []).filter { $0.hourStartMs < end }
-                let local = pieces.map { piece in covered.filter { $0.hourStartMs >= piece.from && $0.hourStartMs < piece.to } }
+                guard end > start, fromMs < end, start < toMs else { continue }
+                let slices = self.slices(start: start, end: end, resolution: resolution, calendar: calendar, cuts: [fromMs, toMs])
+                guard slices.contains(where: { $0.from >= fromMs && $0.from < toMs }) else { continue }
+                let covered = (cellsByDay[DayKey(account: account, startMs: start)] ?? []).filter { $0.startMs < end }
+                var local = Array(repeating: [CellKey](), count: slices.count)
+                for key in covered { local[slice(containing: key.startMs, in: slices)].append(key) }
                 // Text usage follows the local usage it replaces, by cost when every
                 // model is priced; credits without text tokens (Chat, voice, image),
-                // or a reading with no local trace, spread over the reported hours.
-                let hours = pieces.map { Double($0.to - $0.from) }
+                // or a reading with no local trace, spread evenly over the reported time.
+                let duration = slices.map { Double($0.to - $0.from) }
                 let priced = covered.allSatisfy { key in
                     cells[key].map { $0.unpricedTotals.isEmpty || rates.price(model: key.model, totals: $0.unpricedTotals) != nil } ?? true
                 }
                 var activity = local.map { keys in keys.reduce(0) { $0 + (priced ? price($1) : Double(cells[$1]?.totals.total ?? 0)) } }
-                if !(activity.reduce(0, +) > 0) { activity = hours }
-                let textCuts = cuts(activity), hourCuts = cuts(hours)
+                let traced = activity.reduce(0, +) > 0
+                if !traced { activity = duration }
+                let textCuts = cuts(activity), timeCuts = cuts(duration)
                 replaced.formUnion(covered)
                 ids.insert(account)
                 let rows = workspaceRows(day: day, snapshot: snapshot, account: account, credits: credits, cost: cost, models: models)
-                for (index, piece) in pieces.enumerated() where piece.day >= from && piece.day < to {
-                    var pieceRows: [Bucket] = rows.compactMap { row in
-                        let (lower, upper) = row.totals.total > 0 || row.model == unattributed ? textCuts[index] : hourCuts[index]
-                        guard upper > lower else { return nil }
+                for (index, slice) in slices.enumerated() where slice.from >= fromMs && slice.from < toMs {
+                    var sliceRows: [Bucket] = rows.compactMap { row in
+                        let followsUsage = row.totals.total > 0 || row.model == unattributed
+                        let (lower, upper) = followsUsage ? textCuts[index] : timeCuts[index]
+                        // Zero-credit days add nothing to draw.
+                        guard upper > lower, row.costUsd != 0 || row.totals.total > 0 else { return nil }
                         var row = row
-                        row.periodStart = piece.day
+                        row.periodStart = slice.period
                         row.costUsd *= upper - lower
                         row.totals = row.totals.share(from: lower, to: upper)
+                        if !(followsUsage && traced) { row.costSource = .workspaceBaseline }
                         return row
                     }
                     // Sessions and cache savings describe the local usage replaced here,
-                    // even when no share of the reading lands on this day.
-                    guard !local[index].isEmpty else { projected += pieceRows; continue }
-                    if pieceRows.isEmpty {
-                        pieceRows = [Bucket(periodStart: piece.day, accountId: account, model: "Workspace usage", totals: .zero,
-                                            costUsd: 0, cacheSavingsUsd: 0, costSource: .workspaceCredits, records: 0, sessions: 0)]
+                    // even when no share of the reading lands in this period.
+                    guard !local[index].isEmpty else { projected += sliceRows; continue }
+                    if !sliceRows.contains(where: { $0.costSource == .workspaceCredits }) {
+                        sliceRows.append(Bucket(periodStart: slice.period, accountId: account, model: "Workspace usage", totals: .zero,
+                                                costUsd: 0, cacheSavingsUsd: 0, costSource: .workspaceCredits, records: 0, sessions: 0))
                     }
-                    let top = pieceRows.indices.max { pieceRows[$0].costUsd == pieceRows[$1].costUsd ? pieceRows[$0].model > pieceRows[$1].model : pieceRows[$0].costUsd < pieceRows[$1].costUsd }!
-                    pieceRows[top].sessions = Set(local[index].flatMap { cells[$0]?.sessionIds ?? [] }).count
-                    pieceRows[top].records = local[index].reduce(0) { $0 + (cells[$1]?.records ?? 0) }
-                    pieceRows[top].cacheSavingsUsd = local[index].reduce(0) { $0 + rates.cacheSavings(model: $1.model, totals: cells[$1]?.totals ?? .zero) }
-                    projected += pieceRows
+                    let top = sliceRows.indices.filter { sliceRows[$0].costSource == .workspaceCredits }.max {
+                        sliceRows[$0].costUsd == sliceRows[$1].costUsd ? sliceRows[$0].model > sliceRows[$1].model : sliceRows[$0].costUsd < sliceRows[$1].costUsd
+                    }!
+                    sliceRows[top].sessionIds = Set(local[index].flatMap { cells[$0]?.sessionIds ?? [] })
+                    sliceRows[top].sessions = sliceRows[top].sessionIds.count
+                    sliceRows[top].records = local[index].reduce(0) { $0 + (cells[$1]?.records ?? 0) }
+                    sliceRows[top].cacheSavingsUsd = local[index].reduce(0) { $0 + rates.cacheSavings(model: $1.model, totals: cells[$1]?.totals ?? .zero) }
+                    projected += sliceRows
                 }
             }
         }
@@ -106,6 +120,42 @@ public enum UsageProjection {
             return $0.costSource.rawValue < $1.costSource.rawValue
         }, workspaceAccountIds: ids)
     }
+
+    /// `[start, end)` split into the resolution's periods (local days, or UTC-aligned
+    /// steps) and at any `cuts`, so no slice straddles a window edge.
+    static func slices(start: Int64, end: Int64, resolution: Resolution, calendar: Calendar, cuts: [Int64] = []) -> [(period: Date, from: Int64, to: Int64)] {
+        var slices: [(period: Date, from: Int64, to: Int64)]
+        if let step = resolution.stepMs {
+            slices = []
+            var cursor = start
+            while cursor < end {
+                let period = milliseconds(resolution.periodStart(forMs: cursor, calendar: calendar))
+                let stop = min(end, period + step)
+                slices.append((Date(timeIntervalSince1970: TimeInterval(period) / 1000), cursor, stop))
+                cursor = stop
+            }
+        } else {
+            slices = localPieces(start: start, end: end, calendar: calendar).map { ($0.day, $0.from, $0.to) }
+        }
+        for cut in cuts where cut > start && cut < end {
+            guard let index = slices.firstIndex(where: { $0.from < cut && cut < $0.to }) else { continue }
+            let slice = slices[index]
+            slices.replaceSubrange(index...index, with: [(slice.period, slice.from, cut), (slice.period, cut, slice.to)])
+        }
+        return slices
+    }
+
+    /// Index of the slice containing `ms`; slices are contiguous and sorted.
+    private static func slice(containing ms: Int64, in slices: [(period: Date, from: Int64, to: Int64)]) -> Int {
+        var low = 0, high = slices.count - 1
+        while low < high {
+            let middle = (low + high + 1) / 2
+            if slices[middle].from <= ms { low = middle } else { high = middle - 1 }
+        }
+        return low
+    }
+
+    private static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
 
     /// The whole day's cost when the provider gave no model breakdown; it follows local usage.
     private static let unattributed = "Workspace credits (model unavailable)"

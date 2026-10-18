@@ -7,17 +7,23 @@ final class UsageDrilldownTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let first = UsageScope.account("first")
         let second = UsageScope.account("second")
+        let end = date.addingTimeInterval(3600)
         let points = [
-            ChartPoint(period: date, scope: first, value: 10),
-            ChartPoint(period: date, scope: .account("zero"), value: 0, lowerBound: 10),
-            ChartPoint(period: date, scope: second, value: 20, lowerBound: 10),
+            ChartPoint(period: date, end: end, scope: first, value: 10),
+            ChartPoint(period: date, end: end, scope: .account("zero"), value: 0, lowerBound: 10),
+            ChartPoint(period: date, end: end, scope: second, value: 20, lowerBound: 10),
         ]
-        XCTAssertEqual(ChartPoint.selected(in: points, date: date, value: 5, resolution: .hour), first)
-        XCTAssertEqual(ChartPoint.selected(in: points, date: date, value: 10, resolution: .hour), second)
-        XCTAssertEqual(ChartPoint.selected(in: points, date: date, value: 29, resolution: .hour), second)
-        XCTAssertNil(ChartPoint.selected(in: points, date: date, value: 31, resolution: .hour))
-        XCTAssertNil(ChartPoint.selected(in: points, date: date, value: -1, resolution: .hour))
-        XCTAssertNil(ChartPoint.selected(in: points, date: date.addingTimeInterval(3600), value: 5, resolution: .hour))
+        XCTAssertEqual(ChartPoint.selected(in: points, date: date, value: 5), first)
+        XCTAssertEqual(ChartPoint.selected(in: points, date: date.addingTimeInterval(1800), value: 10), second)
+        XCTAssertEqual(ChartPoint.selected(in: points, date: date, value: 29), second)
+        XCTAssertNil(ChartPoint.selected(in: points, date: date, value: 31))
+        XCTAssertNil(ChartPoint.selected(in: points, date: date, value: -1))
+        XCTAssertNil(ChartPoint.selected(in: points, date: end, value: 5))
+        // Minute buckets select by their own one-minute span.
+        let minute = [ChartPoint(period: date, end: date.addingTimeInterval(60), scope: first, value: 1, baseline: true)]
+        XCTAssertEqual(ChartPoint.selected(in: minute, date: date.addingTimeInterval(59), value: 0.5), first)
+        XCTAssertNil(ChartPoint.selected(in: minute, date: date.addingTimeInterval(61), value: 0.5))
+        XCTAssertNotEqual(minute[0].series, first.id)
     }
 
     @MainActor

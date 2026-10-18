@@ -97,7 +97,7 @@ Task {
                 "id": a.id, "name": a.displayName, "provider": a.provider.rawValue, "email": a.email ?? "",
                 "plan": a.planLabel ?? "", "group": a.suggestedGroup.rawValue, "accent": a.accentColorHex ?? "",
                 "costUsd": agg.costUsd, "tokens": agg.totals.total, "sessions": agg.sessions, "cacheSavingsUsd": agg.cacheSavingsUsd,
-                "usageSource": buckets.contains { $0.accountId == a.id && $0.costSource == .workspaceCredits } ? "Dated workspace credits with local fallback" : "Local transcripts",
+                "usageSource": buckets.contains { $0.accountId == a.id && $0.costSource.isWorkspace } ? "Dated workspace credits with local fallback" : "Local transcripts",
             ]
         }
         out["sources"] = output.sources.map { ["provider": $0.provider.rawValue, "path": $0.path, "status": $0.status.rawValue, "parsed": $0.scannedFiles, "cached": $0.reusedFiles, "message": $0.message ?? ""] }
