@@ -43,8 +43,9 @@ public enum UsageProjection {
             guard let cell = cells[key] else { return 0 }
             return cell.reportedCostUsd + (rates.price(model: key.model, totals: cell.unpricedTotals) ?? 0)
         }
-        // A partial first bucket still belongs to the window at fixed steps.
-        let windowStart = resolution.stepMs == nil ? from : resolution.periodStart(forMs: milliseconds(from), calendar: calendar)
+        // Slices are split at the window's edges, so a partial first or last bucket
+        // gets only the share of the reading inside the window, like local cells.
+        let fromMs = milliseconds(from), toMs = milliseconds(to)
 
         var replaced: Set<CellKey> = []
         var projected: [Bucket] = []
@@ -59,9 +60,9 @@ public enum UsageProjection {
                 guard let start = utcStartMs(day.date), let credits = day.credits,
                       let cost = snapshot.estimatedCost(credits: credits), let models = day.textModels else { continue }
                 let end = min(start + dayMs, freshness ?? start + dayMs)
-                guard end > start, milliseconds(windowStart) < end, start < milliseconds(to) else { continue }
-                let slices = self.slices(start: start, end: end, resolution: resolution, calendar: calendar)
-                guard slices.contains(where: { $0.period >= windowStart && $0.period < to }) else { continue }
+                guard end > start, fromMs < end, start < toMs else { continue }
+                let slices = self.slices(start: start, end: end, resolution: resolution, calendar: calendar, cuts: [fromMs, toMs])
+                guard slices.contains(where: { $0.from >= fromMs && $0.from < toMs }) else { continue }
                 let covered = (cellsByDay[DayKey(account: account, startMs: start)] ?? []).filter { $0.startMs < end }
                 var local = Array(repeating: [CellKey](), count: slices.count)
                 for key in covered { local[slice(containing: key.startMs, in: slices)].append(key) }
@@ -79,11 +80,12 @@ public enum UsageProjection {
                 replaced.formUnion(covered)
                 ids.insert(account)
                 let rows = workspaceRows(day: day, snapshot: snapshot, account: account, credits: credits, cost: cost, models: models)
-                for (index, slice) in slices.enumerated() where slice.period >= windowStart && slice.period < to {
+                for (index, slice) in slices.enumerated() where slice.from >= fromMs && slice.from < toMs {
                     var sliceRows: [Bucket] = rows.compactMap { row in
                         let followsUsage = row.totals.total > 0 || row.model == unattributed
                         let (lower, upper) = followsUsage ? textCuts[index] : timeCuts[index]
-                        guard upper > lower else { return nil }
+                        // Zero-credit days add nothing to draw.
+                        guard upper > lower, row.costUsd != 0 || row.totals.total > 0 else { return nil }
                         var row = row
                         row.periodStart = slice.period
                         row.costUsd *= upper - lower
@@ -119,18 +121,26 @@ public enum UsageProjection {
         }, workspaceAccountIds: ids)
     }
 
-    /// `[start, end)` split into the resolution's periods: local days, or UTC-aligned steps.
-    static func slices(start: Int64, end: Int64, resolution: Resolution, calendar: Calendar) -> [(period: Date, from: Int64, to: Int64)] {
-        guard let step = resolution.stepMs else {
-            return localPieces(start: start, end: end, calendar: calendar).map { ($0.day, $0.from, $0.to) }
+    /// `[start, end)` split into the resolution's periods (local days, or UTC-aligned
+    /// steps) and at any `cuts`, so no slice straddles a window edge.
+    static func slices(start: Int64, end: Int64, resolution: Resolution, calendar: Calendar, cuts: [Int64] = []) -> [(period: Date, from: Int64, to: Int64)] {
+        var slices: [(period: Date, from: Int64, to: Int64)]
+        if let step = resolution.stepMs {
+            slices = []
+            var cursor = start
+            while cursor < end {
+                let period = milliseconds(resolution.periodStart(forMs: cursor, calendar: calendar))
+                let stop = min(end, period + step)
+                slices.append((Date(timeIntervalSince1970: TimeInterval(period) / 1000), cursor, stop))
+                cursor = stop
+            }
+        } else {
+            slices = localPieces(start: start, end: end, calendar: calendar).map { ($0.day, $0.from, $0.to) }
         }
-        var slices: [(period: Date, from: Int64, to: Int64)] = []
-        var cursor = start
-        while cursor < end {
-            let period = milliseconds(resolution.periodStart(forMs: cursor, calendar: calendar))
-            let stop = min(end, period + step)
-            slices.append((Date(timeIntervalSince1970: TimeInterval(period) / 1000), cursor, stop))
-            cursor = stop
+        for cut in cuts where cut > start && cut < end {
+            guard let index = slices.firstIndex(where: { $0.from < cut && cut < $0.to }) else { continue }
+            let slice = slices[index]
+            slices.replaceSubrange(index...index, with: [(slice.period, slice.from, cut), (slice.period, cut, slice.to)])
         }
         return slices
     }

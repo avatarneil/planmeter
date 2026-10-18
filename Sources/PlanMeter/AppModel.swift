@@ -113,17 +113,29 @@ final class AppModel {
     var range: TimeRange = .today { didSet { recompute() } }
     var metric: Metric = .cost
     var discovery = Discovery()
-    var cells: [CellKey: Cell] = [:] { didSet { hourCells = Aggregation.rollup(cells, stepMs: 3_600_000) } }
+    var cells: [CellKey: Cell] = [:] {
+        didSet {
+            hourCells = Aggregation.rollup(cells, stepMs: 3_600_000)
+            cellAccountIds = Set(hourCells.keys.map(\.accountId))
+            mixedCells = nil
+        }
+    }
     /// Minute cells merged by hour: hour and day views don't need minute detail,
     /// and the smaller set keeps frequent refreshes cheap.
     @ObservationIgnored private(set) var hourCells: [CellKey: Cell] = [:]
+    /// Accounts seen in the scan, kept so `accounts` doesn't walk every minute cell.
+    @ObservationIgnored private var cellAccountIds: Set<String> = []
+    /// Hour cells, with minute cells for workspace accounts; see `projectionCells`.
+    @ObservationIgnored private var mixedCells: [CellKey: Cell]?
     /// The chosen chart granularity per range, persisted.
     var granularities: [String: Resolution] = AppModel.loadGranularities() {
-        didSet { UserDefaults.standard.set(granularities.mapValues(\.rawValue), forKey: AppModel.granularitiesKey) }
+        didSet { if persistsGranularities { UserDefaults.standard.set(granularities.mapValues(\.rawValue), forKey: AppModel.granularitiesKey) } }
     }
+    /// Snapshot runs choose a granularity without changing saved preferences.
+    @ObservationIgnored var persistsGranularities = true
     var threadCells: [ThreadCellEntry] = []
     var accountUsage: [AccountUsageSnapshot] = []
-    var dailyUsage: [CodexDailyUsageSnapshot] = []
+    var dailyUsage: [CodexDailyUsageSnapshot] = [] { didSet { mixedCells = nil } }
     var cloudUsage: [CodexCloudUsageSnapshot] = []
     var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
@@ -352,9 +364,22 @@ final class AppModel {
     }
 
     func projectedUsage(from: Date, to: Date, resolution: Resolution) -> UsageProjection.Result {
-        let source = (resolution.stepMs ?? .max) >= 3_600_000 ? hourCells : cells
-        return UsageProjection.buckets(cells: source, rates: rates, snapshots: dailyUsage, accounts: accounts,
-                                       from: from, to: to, resolution: resolution)
+        UsageProjection.buckets(cells: projectionCells(for: resolution), rates: rates, snapshots: dailyUsage, accounts: accounts,
+                                from: from, to: to, resolution: resolution)
+    }
+
+    /// Hour cells suffice for hour and day views, except where a boundary can fall
+    /// inside an hour: a workspace reading's freshness, or a half-hour time zone's
+    /// midnight. Those keep minute cells, so every granularity has the same totals.
+    func projectionCells(for resolution: Resolution) -> [CellKey: Cell] {
+        guard (resolution.stepMs ?? .max) >= 3_600_000, TimeZone.current.secondsFromGMT() % 3600 == 0 else { return cells }
+        let workspace = Set(dailyUsage.compactMap(\.target.localAccountId))
+        guard !workspace.isEmpty else { return hourCells }
+        if let mixedCells { return mixedCells }
+        var mixed = hourCells.filter { !workspace.contains($0.key.accountId) }
+        for (key, cell) in cells where workspace.contains(key.accountId) { mixed[key] = cell }
+        mixedCells = mixed
+        return mixed
     }
 
     static let granularitiesKey = "chartGranularities"
@@ -380,8 +405,7 @@ final class AppModel {
     var accounts: [Account] {
         var known = discovery.accounts
         let ids = Set(known.map(\.id))
-        let seen = Set(cells.keys.map(\.accountId))
-        for id in seen.subtracting(ids).sorted() {
+        for id in cellAccountIds.subtracting(ids).sorted() {
             known.append(Account.placeholder(id: id))
         }
         return known

@@ -85,6 +85,7 @@ struct UsageChartCard: View {
                     .frame(maxWidth: .infinity, minHeight: 160)
             } else {
                 let multiDay = model.range.dayCount > 1
+                let titles = Dictionary(scopes.map { ($0.id, model.title(for: $0)) }, uniquingKeysWith: { first, _ in first })
                 Chart(points) { point in
                     RectangleMark(
                         xStart: .value("Start", point.period),
@@ -93,7 +94,7 @@ struct UsageChartCard: View {
                         yEnd: .value(model.metric.rawValue, point.upperBound)
                     )
                     .foregroundStyle(by: .value("Series", point.series))
-                    .accessibilityLabel(model.title(for: point.scope) + (point.baseline ? ", even baseline" : ""))
+                    .accessibilityLabel((titles[point.scope.id] ?? "") + (point.baseline ? ", even baseline" : ""))
                     .accessibilityValue(model.metric == .cost ? Format.usd(point.value) : Format.tokens(Int(point.value)))
                 }
                 .chartForegroundStyleScale(domain: scopes.flatMap { [$0.id, "\($0.id)|baseline"] },

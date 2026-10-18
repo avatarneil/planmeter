@@ -72,9 +72,9 @@ public enum Report {
         return (from, to)
     }
 
-    /// The last `minutes`, ending at the next five-minute boundary.
-    public static func window(minutes: Int, now: Date = Date()) -> (from: Date, to: Date) {
-        let end = (floor(now.timeIntervalSince1970 / 300) + 1) * 300
+    /// The last `minutes`, ending at the next boundary of `step` (five minutes by default).
+    public static func window(minutes: Int, step: TimeInterval = 300, now: Date = Date()) -> (from: Date, to: Date) {
+        let end = (floor(now.timeIntervalSince1970 / step) + 1) * step
         return (Date(timeIntervalSince1970: end - TimeInterval(minutes * 60)), Date(timeIntervalSince1970: end))
     }
 
@@ -270,9 +270,11 @@ public enum Report {
 
     /// `minutes` selects a window shorter than a day; otherwise `days` local calendar days.
     public static func timeline(_ ctx: ReportContext, days: Int, resolution: Resolution, minutes: Int? = nil) -> [String: Any] {
-        let w = minutes.map { window(minutes: $0) } ?? window(days: days)
-        // A sub-day window is aligned to five minutes; day buckets need local midnights.
-        let resolution = bounded(minutes != nil && (resolution.stepMs ?? .max) > 300_000 ? .fiveMinutes : resolution, from: w.from, to: w.to)
+        // Day buckets need local midnights, so a sub-day window uses hours at most.
+        let requested = minutes != nil && resolution == .day ? Resolution.hour : resolution
+        let span = minutes.map { TimeInterval($0 * 60) } ?? TimeInterval(days * 86_400)
+        let resolution = bounded(requested, from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: span))
+        let w = minutes.map { window(minutes: $0, step: TimeInterval(resolution.stepMs ?? 300_000) / 1000) } ?? window(days: days)
         let buckets = self.buckets(ctx, from: w.from, to: w.to, resolution: resolution)
         var periods: [Date: [String: Aggregate]] = [:]
         var baselines: [Date: [String: Double]] = [:]

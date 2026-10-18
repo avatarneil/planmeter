@@ -132,6 +132,7 @@ enum SnapshotMode {
             model.range = range
         }
         if let i = args.firstIndex(of: "--granularity"), i + 1 < args.count, let resolution = Resolution(rawValue: args[i + 1]) {
+            model.persistsGranularities = false
             model.granularity = resolution
         }
     }

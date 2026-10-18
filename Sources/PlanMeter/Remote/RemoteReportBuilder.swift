@@ -30,11 +30,11 @@ enum RemoteReportBuilder {
     }
 
     /// Remote clients label one day as "24h": the Mac's current hour plus the
-    /// preceding 23. Sub-day windows end at the next five-minute boundary.
-    static func window(days: Int, minutes: Int?, now: Date) -> (from: Date, to: Date, coarsest: Resolution) {
+    /// preceding 23. Sub-day windows end at the next boundary of their bucket size.
+    static func window(days: Int, minutes: Int?, step: Int64? = nil, now: Date) -> (from: Date, to: Date, coarsest: Resolution) {
         if let minutes {
-            let end = (floor(now.timeIntervalSince1970 / 300) + 1) * 300
-            return (Date(timeIntervalSince1970: end - TimeInterval(minutes * 60)), Date(timeIntervalSince1970: end), .fiveMinutes)
+            let w = Report.window(minutes: minutes, step: TimeInterval(step ?? 300_000) / 1000, now: now)
+            return (w.from, w.to, .hour)
         }
         if days == 1 {
             let w = TimeRange.day.window(now: now)
@@ -57,8 +57,9 @@ enum RemoteReportBuilder {
     }
 
     static func buckets(model: AppModel, days: Int, minutes: Int? = nil, resolution: Resolution? = nil, now: Date = Date()) -> (buckets: [Bucket], from: Date, to: Date, resolution: Resolution) {
-        let w = window(days: days, minutes: minutes, now: now)
-        let resolution = self.resolution(resolution ?? w.coarsest, from: w.from, to: w.to, coarsest: w.coarsest)
+        var w = window(days: days, minutes: minutes, now: now)
+        let resolution = self.resolution(resolution ?? (minutes != nil ? .fiveMinutes : w.coarsest), from: w.from, to: w.to, coarsest: w.coarsest)
+        if minutes != nil { w = window(days: days, minutes: minutes, step: resolution.stepMs, now: now) }
         return (model.projectedUsage(from: w.from, to: w.to, resolution: resolution).buckets, w.from, w.to, resolution)
     }
 

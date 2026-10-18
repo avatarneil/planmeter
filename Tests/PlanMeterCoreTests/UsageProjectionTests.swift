@@ -240,6 +240,40 @@ final class UsageProjectionTests: XCTestCase {
         for total in totals { XCTAssertEqual(total, 1.6875 + 5, accuracy: 0.0000001) }
     }
 
+    func testWindowsThatCutABucketCountOnlyTheirShareAtEveryResolution() throws {
+        // A reading with no local trace spreads evenly; a window starting at 13:25
+        // must not pick up credit from 13:00–13:25 in its first hourly bucket.
+        let windowStart = from.addingTimeInterval(13 * 3600 + 25 * 60)
+        for zone in ["UTC", "Asia/Kolkata", "America/St_Johns"] {
+            var calendar = UsageCoverage.utcCalendar
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            for resolution in Resolution.allCases where resolution != .day {
+                let result = UsageProjection.buckets(cells: [:], rates: rates, snapshots: [try fixture.snapshot()], accounts: [account],
+                                                     from: windowStart, to: windowStart.addingTimeInterval(3600), resolution: resolution, calendar: calendar)
+                XCTAssertEqual(Aggregation.total(result.buckets).costUsd, 1.6875 / 24, accuracy: 0.0000001, "\(zone) \(resolution)")
+            }
+        }
+    }
+
+    func testZeroCreditDaysDrawNoEmptyBuckets() throws {
+        var zero = try fixture.snapshot()
+        zero.days[0].products = [DailyCreditValue(key: "codex", label: "Codex", credits: 0)]
+        zero.days[0].modelCredits = []
+        zero.days[0].textModels = []
+        let result = UsageProjection.buckets(cells: [:], rates: rates, snapshots: [zero], accounts: [account], from: from, to: to,
+                                             resolution: .minute, calendar: UsageCoverage.utcCalendar)
+        XCTAssertTrue(result.buckets.isEmpty)
+        XCTAssertEqual(result.workspaceAccountIds, [account.id])
+    }
+
+    func testSubDayReportWindowsHonorCoarserBuckets() {
+        XCTAssertEqual(Report.bounded(.hour, from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: 86_400)), .hour)
+        XCTAssertEqual(Report.bounded(.minute, from: Date(timeIntervalSince1970: 0), to: Date(timeIntervalSince1970: 7 * 86_400)), .fifteenMinutes)
+        let w = Report.window(minutes: 1440, step: 3600, now: Date(timeIntervalSince1970: 1_790_000_123))
+        XCTAssertEqual(w.to.timeIntervalSince1970.truncatingRemainder(dividingBy: 3600), 0)
+        XCTAssertEqual(w.to.timeIntervalSince(w.from), 86_400)
+    }
+
     func testASessionSpanningManyMinuteBucketsCountsOnce() {
         let cells = Dictionary((0..<3).map { cell(at: from.addingTimeInterval(TimeInterval($0) * 60), cost: 1, session: "same") }, uniquingKeysWith: { $1 })
         let buckets = Aggregation.buckets(cells: cells, rates: rates, from: from, to: to, resolution: .minute, calendar: UsageCoverage.utcCalendar)

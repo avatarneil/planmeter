@@ -119,10 +119,20 @@ final class WorkspaceUsageTests: XCTestCase {
         XCTAssertEqual(minutes.minutes, 60)
         XCTAssertEqual(minutes.periods.count, 60)
         XCTAssertEqual(RemoteReportBuilder.models(model: model, days: 1, filter: nil, now: now).reduce(0) { $0 + $1.totals.costUsd }, 1)
+        // Every granularity agrees, including mid-hour freshness on hour cells.
+        var midHour = model.dailyUsage[0]
+        midHour.creditsFreshness = ISO8601DateFormatter().string(from: now.addingTimeInterval(-60))
+        model.dailyUsage = [midHour]
+        model.cells[CellKey(startMs: Int64(now.timeIntervalSince1970 * 1000) - 60_000 - 1_000 * 60 * 5, accountId: account.id, model: "test")] = Cell(reportedCostUsd: 2)
+        model.cells[CellKey(startMs: Int64(now.timeIntervalSince1970 * 1000) + 60_000 * 3, accountId: account.id, model: "test")] = Cell(reportedCostUsd: 4)
+        let day = Report.window(days: 1, now: now)
+        let totals = Resolution.allCases.map { Aggregation.total(model.projectedUsage(from: day.from, to: day.to, resolution: $0).buckets).costUsd }
+        for total in totals { XCTAssertEqual(total, totals[0], accuracy: 0.0000001) }
+        model.dailyUsage = [midHour]
         model.range = .day
         model.recompute(now: now)
         XCTAssertEqual(model.chartResolution, .hour)
-        XCTAssertEqual(model.total.costUsd, 1, accuracy: 0.0000001) // The rolling 24 hours now use workspace readings too.
+        XCTAssertGreaterThan(model.total.costUsd, 1) // Usage after the provider's freshness stays local.
         XCTAssertTrue(model.usageNote.contains("baseline"))
     }
 }
