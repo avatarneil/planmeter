@@ -62,9 +62,31 @@ button:disabled { opacity: 0.5; }
 .pair-code-row input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .error { background: var(--card); color: var(--warn); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
 
-.segmented { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--track); border-radius: 12px; padding: 3px; margin-bottom: 12px; }
-.segmented button { border: 0; background: transparent; border-radius: 9px; padding: 8px 0; font-size: 14px; color: var(--muted); }
+.range-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; flex: 1; min-width: 0; background: var(--track); border-radius: 12px; padding: 3px; }
+.segmented button { min-width: 0; border: 0; background: transparent; border-radius: 9px; padding: 8px 0; font-size: 14px; color: var(--muted); }
 .segmented button.active { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+.select-wrap { position: relative; display: flex; flex: none; }
+.select-wrap::after {
+  content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px; margin-top: -5px;
+  border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); pointer-events: none;
+}
+/* 16px keeps iOS Safari from zooming the page when the picker opens. */
+.select-wrap select {
+  -webkit-appearance: none; appearance: none; font: inherit; font-size: 16px; color: var(--text);
+  background: var(--track); border: 0; border-radius: 12px; padding: 0 28px 0 12px; min-height: 40px; cursor: pointer;
+  width: 6em; /* fixed, so the range tabs don't shift as the options change */
+}
+.select-wrap select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.select-wrap select:disabled { color: var(--muted); cursor: default; }
+.select-wrap:has(select:disabled)::after { opacity: 0.4; }
+/* Room for five tabs, including an older Mac's "Today", on 320px screens. */
+@media (max-width: 359px) {
+  .range-row { gap: 6px; }
+  .segmented button { font-size: 13px; letter-spacing: -0.01em; }
+  .select-wrap::after { right: 10px; }
+  .select-wrap select { width: 5.25em; padding: 0 22px 0 10px; }
+}
 
 .group-head { display: flex; align-items: center; gap: 8px; }
 .group-head .name { font-weight: 600; font-size: 17px; }
@@ -88,6 +110,7 @@ button:disabled { opacity: 0.5; }
 #chart svg { width: 100%; height: 220px; display: block; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 
 .limit { margin-bottom: 10px; }
 .limit .row { display: flex; align-items: center; gap: 8px; }

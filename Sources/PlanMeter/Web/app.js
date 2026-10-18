@@ -152,8 +152,95 @@
     return openResponse(await res.json(), resKey);
   }
 
+  // ---------- ranges and chart granularity ----------
+  // `minutes` asks for a window shorter than a day; Macs that predate it
+  // ignore the field, so `days` always rides along.
+  const RANGES = {
+    "1h": { days: 1, minutes: 60, resolutions: ["minute", "5m"], fallback: "minute" },
+    "24h": { days: 1, resolutions: ["minute", "5m", "15m", "hour"], fallback: "hour" },
+    "7d": { days: 7, resolutions: ["15m", "hour", "day"], fallback: "day" },
+    "30d": { days: 30, resolutions: ["hour", "day"], fallback: "day" },
+    "90d": { days: 90, resolutions: ["day"], fallback: "day" },
+  };
+  const RESOLUTION_LABELS = { minute: "1 min", "5m": "5 min", "15m": "15 min", hour: "1 hour", day: "1 day" };
+  const RESOLUTION_MINUTES = { minute: 1, "5m": 5, "15m": 15, hour: 60, day: 1440 };
+  const RESOLUTIONS_KEY = "planmeter.resolutions";
+  // Candidate x-label spacings in minutes; 43200 means the first of each month.
+  const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080, 20160, 43200];
+  // Bar lengths, in minutes, that neighbouring periods merge into when bars
+  // would otherwise be thinner than MIN_BAR_PX.
+  const MERGE_STEPS = [2, 5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 720, 1440];
+  const MIN_BAR_PX = 1.5;
+  const spanLabel = (min) => min % 1440 === 0 ? `${min / 1440} day${min === 1440 ? "" : "s"}`
+    : min % 60 === 0 ? `${min / 60} hour${min === 60 ? "" : "s"}` : `${min} min`;
+  const FMT = {
+    time: new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" }),
+    hour: new Intl.DateTimeFormat([], { hour: "numeric" }),
+    weekday: new Intl.DateTimeFormat([], { weekday: "short" }),
+    weekdayHour: new Intl.DateTimeFormat([], { weekday: "short", hour: "numeric" }),
+    weekdayTime: new Intl.DateTimeFormat([], { weekday: "short", hour: "numeric", minute: "2-digit" }),
+    day: new Intl.DateTimeFormat([], { month: "short", day: "numeric" }),
+    dayTime: new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }),
+  };
+
   // ---------- state ----------
-  const state = { server: null, keyPair: null, days: 30, summary: null, timeline: null, limits: null, models: [], loading: false, timer: null };
+  // `legacy` marks a Mac that only answers hourly or daily timelines and has
+  // no sub-day windows. It is forgotten when the page becomes visible again
+  // and after an hour, so updating the Mac brings the finer views back.
+  // `resolutions` holds the per-range bucket sizes; localStorage only mirrors it.
+  const state = { server: null, keyPair: null, range: "30d", resolutions: loadResolutions(), legacy: false, legacySince: 0, summary: null, timeline: null, limits: null, models: [], loading: false, again: false, timer: null };
+
+  /// Stored choices, keeping only known ranges with sizes they offer.
+  function loadResolutions() {
+    const out = {};
+    let parsed = null;
+    try { parsed = JSON.parse(localStorage.getItem(RESOLUTIONS_KEY)); } catch (_) {}
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return out;
+    for (const range of Object.keys(RANGES)) {
+      const value = Object.prototype.hasOwnProperty.call(parsed, range) ? parsed[range] : null;
+      if (typeof value === "string" && RANGES[range].resolutions.includes(value)) out[range] = value;
+    }
+    return out;
+  }
+
+  function saveResolution(range, value) {
+    if (!RANGES[range] || !RANGES[range].resolutions.includes(value)) return;
+    state.resolutions[range] = value;
+    try { localStorage.setItem(RESOLUTIONS_KEY, JSON.stringify(state.resolutions)); } catch (_) {}
+  }
+
+  function resolutionOptions(range) {
+    const all = RANGES[range].resolutions;
+    return state.legacy ? all.filter((r) => r === "hour" || r === "day") : all;
+  }
+
+  function selectedResolution(range) {
+    const options = resolutionOptions(range);
+    const saved = state.resolutions[range];
+    if (options.includes(saved)) return saved;
+    return options.includes(RANGES[range].fallback) ? RANGES[range].fallback : options[options.length - 1] || "day";
+  }
+
+  function forgetLegacy() {
+    if (!state.legacy) return;
+    state.legacy = false;
+    state.legacySince = 0;
+    syncControls();
+  }
+
+  function syncControls() {
+    for (const b of $("range").querySelectorAll("button")) {
+      const on = b.dataset.range === state.range;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      if (RANGES[b.dataset.range].minutes) b.classList.toggle("hidden", state.legacy);
+    }
+    const select = $("granularity");
+    const options = resolutionOptions(state.range);
+    select.replaceChildren(...options.map((r) => { const o = el("option", "", RESOLUTION_LABELS[r]); o.value = r; return o; }));
+    select.value = selectedResolution(state.range);
+    select.disabled = options.length < 2;
+  }
 
   function accountColor(id) {
     const accounts = (state.timeline && state.timeline.accounts) || (state.summary ? state.summary.groups.flatMap((g) => g.accounts.map((a) => a.account)) : []);
@@ -208,10 +295,11 @@
       await kvSet("server", server);
       state.server = server;
       state.keyPair = keyPair;
+      forgetLegacy();
       history.replaceState(null, "", location.pathname);
       showDashboard();
       await refresh();
-      state.timer = state.timer || setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 60000);
+      state.timer = state.timer || setInterval(poll, 60000);
     } catch (err) {
       setStatus(err.message || String(err), true);
     }
@@ -392,19 +480,39 @@
     return reply;
   }
 
-  async function refresh() {
-    if (!state.server || state.loading) return;
+  /// Timer and visibility refreshes are `background`: one already in flight
+  /// covers them. A user's range or bucket change made mid-flight runs again
+  /// once the current request finishes.
+  async function refresh(background) {
+    if (!state.server) return;
+    if (state.loading) { if (!background) state.again = true; return; }
     state.loading = true;
+    state.again = false;
     $("refresh").disabled = true;
     $("subtitle").textContent = "Refreshing…";
     try {
-      const days = state.days;
+      const rangeKey = state.range;
+      const range = RANGES[rangeKey];
+      const resolution = selectedResolution(rangeKey);
+      const query = range.minutes ? { days: 1, minutes: range.minutes } : { days: range.days };
       const [s, t, l, m] = await Promise.all([
-        call("summary", { days }),
-        call("timeline", { days, resolution: days === 1 ? "hour" : "day" }),
+        call("summary", query),
+        call("timeline", Object.assign({ resolution }, query)),
         call("limits"),
-        call("models", { days }),
+        call("models", query),
       ]);
+      if (rangeKey !== state.range || resolution !== selectedResolution(state.range)) { state.again = true; return; }
+      // Older Macs ignore `minutes` and answer anything but "hour" with days.
+      // Offer them only what they can draw and ask again.
+      const fine = resolution !== "hour" && resolution !== "day";
+      if (!state.legacy && ((range.minutes && s.summary.minutes == null) || (fine && t.timeline.resolution === "day"))) {
+        state.legacy = true;
+        state.legacySince = Date.now();
+        if (RANGES[state.range].minutes) state.range = "24h";
+        syncControls();
+        state.again = true;
+        return;
+      }
       state.summary = s.summary; state.timeline = t.timeline; state.limits = l.limits; state.models = m.models || [];
       $("error").classList.add("hidden");
       render();
@@ -416,13 +524,20 @@
     } finally {
       state.loading = false;
       $("refresh").disabled = false;
+      if (state.again) refresh();
     }
+  }
+
+  function poll() {
+    if (document.visibilityState !== "visible") return;
+    if (state.legacy && Date.now() - state.legacySince > 3600000) forgetLegacy();
+    refresh(true);
   }
 
   // ---------- rendering ----------
   function render() {
     const s = state.summary;
-    document.querySelector('[data-days="1"]').textContent = s.usesProviderDates ? "Today" : "24h";
+    document.querySelector('[data-range="24h"]').textContent = s.usesProviderDates ? "Today" : "24h";
     const groups = $("groups");
     groups.replaceChildren();
     for (const g of s.groups) {
@@ -454,11 +569,15 @@
     $("foot").textContent = `From ${s.serverName} · data as of ${rel(s.generatedAt)} · API-equivalent token prices, not subscription charges.`;
   }
 
+  let chartWidth = 0;
   function renderChart() {
     const t = state.timeline;
-    const chart = $("chart"); const legend = $("legend");
-    chart.replaceChildren(); legend.replaceChildren();
-    if (!t || !t.points.length) { chart.append(el("p", "muted", "No usage in this range.")); return; }
+    const chart = $("chart"); const legend = $("legend"); const notes = $("chart-notes");
+    chart.replaceChildren(); legend.replaceChildren(); notes.replaceChildren();
+    chartWidth = chart.clientWidth;
+    const note = (text) => notes.append(el("p", "chart-note", text));
+    const legacyNote = () => { if (state.legacy) note("This Mac's PlanMeter draws hourly and daily bars only. Update it for the last hour and minute bars."); };
+    if (!t || !t.points.length) { chart.append(el("p", "muted", "No usage in this range.")); legacyNote(); return; }
     const periods = t.periods.map((p) => new Date(p).getTime());
     const byPeriod = new Map(periods.map((p) => [p, []]));
     for (const pt of t.points) {
@@ -467,14 +586,49 @@
       byPeriod.get(k).push(pt);
     }
     const keys = [...byPeriod.keys()].sort((a, b) => a - b);
-    const totals = keys.map((k) => byPeriod.get(k).reduce((n, p) => n + p.costUsd, 0));
+    const n = keys.length;
+    const resMin = RESOLUTION_MINUTES[t.resolution] || (n > 1 ? Math.max(1, Math.round((keys[1] - keys[0]) / 60000)) : 1440);
+    // Draw at the container's pixel width so text keeps its shape and x labels
+    // can be spaced by their width.
+    const W = Math.max(160, Math.round(chartWidth || 640)), H = 220, padL = 44, padB = 22, padT = 8;
+    const plotW = W - padL - 6, plotH = H - padB - padT;
+    const slot = plotW / n;
+    // Bars thinner than MIN_BAR_PX lose their spikes, so neighbouring periods
+    // merge for drawing into local-time spans (or runs of days). Costs and
+    // baselines add up; the axis keeps the true time span.
+    let barMin = resMin, groupOf = (i) => i;
+    if (slot < MIN_BAR_PX) {
+      const need = MIN_BAR_PX / slot;
+      const span = resMin < 1440 && MERGE_STEPS.find((m) => m % resMin === 0 && m / resMin >= need);
+      if (span) {
+        barMin = span;
+        groupOf = (i) => Math.floor((keys[i] - new Date(keys[i]).getTimezoneOffset() * 60000) / (span * 60000));
+      } else {
+        const f = Math.ceil(need);
+        barMin = resMin * f;
+        groupOf = (i) => Math.floor(i / f);
+      }
+    }
+    const bars = [];
+    keys.forEach((k, i) => {
+      const g = groupOf(i);
+      let bar = bars[bars.length - 1];
+      if (!bar || bar.g !== g) { bar = { g, from: i, to: i, total: 0, accounts: new Map() }; bars.push(bar); }
+      bar.to = i;
+      for (const p of byPeriod.get(k)) {
+        const a = bar.accounts.get(p.accountId) || { cost: 0, base: 0 };
+        a.cost += p.costUsd;
+        a.base += Math.min(p.costUsd, Math.max(0, p.baselineCostUsd || 0));
+        bar.accounts.set(p.accountId, a);
+        bar.total += p.costUsd;
+      }
+    });
+    const totals = bars.map((b) => b.total);
     // Round the axis top up to a 1/2/5 × 10^n step so tick labels read cleanly.
     const rawMax = Math.max(0.01, ...totals);
     const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
     const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s * 4 >= rawMax) || 10 * mag;
     const max = step * 4;
-    const W = 640, H = 220, padL = 44, padB = 22, padT = 8;
-    const plotW = W - padL - 6, plotH = H - padB - padT;
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("preserveAspectRatio", "none");
@@ -488,31 +642,93 @@
       label.textContent = usd((max * i) / ticks);
       svg.append(label);
     }
-    const n = keys.length;
-    const slot = plotW / n; const bw = Math.max(2, slot * 0.7);
     const order = t.accounts.map((a) => a.id);
-    keys.forEach((k, i) => {
+    // One path per account and shade keeps ~1,440 periods cheap to draw.
+    const shapes = new Map();
+    const shape = (id, light) => {
+      const key = `${light ? "b" : "f"}:${id}`;
+      if (!shapes.has(key)) shapes.set(key, { id, light, d: [] });
+      return shapes.get(key).d;
+    };
+    for (const bar of bars) {
+      const span = (bar.to - bar.from + 1) * slot;
+      // Gaps once bars are wide enough to show them; dense bars touch.
+      const bw = span >= 4 ? span * 0.7 : span >= 2 ? span - 1 : span;
+      const x = (padL + bar.from * slot + (span - bw) / 2).toFixed(2);
       let y = padT + plotH;
-      const pts = byPeriod.get(k).slice().sort((a, b) => order.indexOf(a.accountId) - order.indexOf(b.accountId));
-      for (const p of pts) {
-        const h = (p.costUsd / max) * plotH;
-        y -= h;
-        svg.append(mk("rect", { x: padL + i * slot + (slot - bw) / 2, y, width: bw, height: Math.max(0, h), rx: 2, fill: accountColor(p.accountId) }));
+      const accounts = [...bar.accounts].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+      for (const [id, a] of accounts) {
+        // Workspace credits without timing sit at the bottom of the account's
+        // bar, lighter; the rest of its cost stacks on top in full color.
+        for (const [part, light] of [[a.base, true], [a.cost - a.base, false]]) {
+          const h = (part / max) * plotH;
+          if (!(h > 0)) continue;
+          y -= h;
+          shape(id, light).push(`M${x} ${y.toFixed(2)}h${bw.toFixed(2)}v${h.toFixed(2)}h${(-bw).toFixed(2)}z`);
+        }
       }
-    });
-    // x labels
-    const every = Math.max(1, Math.ceil(n / 6));
-    keys.forEach((k, i) => {
-      if (i % every !== 0) return;
+    }
+    for (const s of shapes.values()) {
+      const attrs = { d: s.d.join(""), fill: accountColor(s.id) };
+      if (s.light) attrs["fill-opacity"] = "0.35";
+      svg.append(mk("path", attrs));
+    }
+    // x labels: the finest local-time spacing whose labels do not collide.
+    const multiDay = n > 1 && keys[n - 1] - keys[0] >= 36 * 3600 * 1000;
+    const info = keys.map((k) => {
       const d = new Date(k);
-      const label = mk("text", { x: padL + i * slot + slot / 2, y: H - 6, "text-anchor": "middle", "font-size": "11", fill: "currentColor", "fill-opacity": "0.6" });
-      label.textContent = t.resolution === "hour" ? d.toLocaleTimeString([], { hour: "numeric" }) : d.toLocaleDateString([], { month: "short", day: "numeric" });
-      svg.append(label);
+      return { d, min: d.getHours() * 60 + d.getMinutes(), day: Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000 };
     });
+    // A period carries step `s`'s label when it holds a local multiple of `s`
+    // (a midnight for whole days; weekly steps land on Mondays).
+    const isTick = (p, s) => {
+      if (s < 1440) return p.min % s < resMin;
+      if (p.min >= resMin) return false;
+      if (s === 43200) return p.d.getDate() === 1;
+      return (s % 10080 === 0 ? p.day + 3 : p.day) % (s / 1440) === 0;
+    };
+    const labelFor = (p, s) => {
+      if (resMin >= 1440) return FMT.day.format(p.d);
+      if (!multiDay) return resMin < 15 || p.d.getMinutes() ? FMT.time.format(p.d) : FMT.hour.format(p.d);
+      if (s >= 1440) return s === 1440 ? FMT.weekday.format(p.d) : FMT.day.format(p.d);
+      return p.d.getMinutes() ? FMT.weekdayTime.format(p.d) : FMT.weekdayHour.format(p.d);
+    };
+    let xTicks = [], fits = false;
+    for (const s of TICK_STEPS) {
+      if (s < resMin) continue;
+      const candidate = [];
+      info.forEach((p, i) => {
+        if (!isTick(p, s)) return;
+        const text = labelFor(p, s);
+        const w = text.length * 6.2; // ~11px system font
+        candidate.push({ text, w, x: Math.min(Math.max(padL + i * slot + slot / 2, w / 2 + 2), W - w / 2 - 2) });
+      });
+      if (!candidate.length) continue;
+      xTicks = candidate;
+      fits = candidate.every((c, j) => j === 0 || c.x - candidate[j - 1].x >= (c.w + candidate[j - 1].w) / 2 + 10);
+      if (fits) break;
+    }
+    for (const c of fits ? xTicks : xTicks.slice(0, 1)) {
+      const label = mk("text", { x: c.x.toFixed(1), y: H - 6, "text-anchor": "middle", "font-size": "11", fill: "currentColor", "fill-opacity": "0.6" });
+      label.textContent = c.text;
+      svg.append(label);
+    }
+    const longSpan = n > 1 && keys[n - 1] - keys[0] >= 7 * 86400 * 1000;
+    const describe = (k) => {
+      const d = new Date(k);
+      return resMin >= 1440 ? FMT.day.format(d) : longSpan ? FMT.dayTime.format(d) : multiDay ? FMT.weekdayTime.format(d) : FMT.time.format(d);
+    };
+    const peak = bars[totals.indexOf(Math.max(...totals))];
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `Cost per ${spanLabel(barMin)}, ${describe(keys[0])} to ${describe(keys[n - 1])}. Highest ${usd(peak.total)} at ${describe(keys[peak.from])}.`);
     chart.append(svg);
     for (const a of t.accounts) {
       const span = el("span"); const d = el("i", "dot sm"); d.style.background = accountColor(a.id); span.append(d, document.createTextNode(a.name)); legend.append(span);
     }
+    if (barMin !== resMin) note(`Each bar covers ${spanLabel(barMin)} to fit this width.`);
+    else if (t.resolution !== selectedResolution(state.range)) note(`Each bar covers ${spanLabel(resMin)}, the finest this Mac offers for this range.`);
+    if (t.points.some((p) => p.baselineCostUsd > 0)) note("Lighter bars: workspace credits without timing, spread evenly over the hours the provider reported.");
+    legacyNote();
   }
 
   function renderLimits() {
@@ -586,17 +802,27 @@
   $("unpair").onclick = async () => {
     if (!confirm("Unpair this browser from the Mac? Revoke it on the Mac too to block the key for good.")) return;
     await kvDel("server");
-    state.server = null; state.summary = null;
+    state.server = null; state.summary = null; state.timeline = null;
+    forgetLegacy();
     showPairing("Unpaired. Scan a new pairing code to reconnect.");
   };
   for (const b of $("range").querySelectorAll("button")) {
     b.onclick = () => {
-      for (const o of $("range").querySelectorAll("button")) { o.classList.remove("active"); o.removeAttribute("aria-selected"); }
-      b.classList.add("active"); b.setAttribute("aria-selected", "true");
-      state.days = Number(b.dataset.days);
+      state.range = b.dataset.range;
+      syncControls();
       refresh();
     };
   }
+  $("granularity").onchange = (e) => {
+    saveResolution(state.range, e.target.value);
+    refresh();
+  };
+  syncControls();
+  // The chart draws at its pixel width: redraw on rotation, resize, or when
+  // it first becomes visible.
+  const redrawChart = () => { const w = $("chart").clientWidth; if (state.timeline && w && w !== chartWidth) renderChart(); };
+  if (window.ResizeObserver) new ResizeObserver(redrawChart).observe($("chart"));
+  else window.addEventListener("resize", redrawChart);
   $("scan-start").onclick = () => startScanner();
   $("scan-stop").onclick = () => stopScanner();
   $("photo").onchange = (e) => { decodePhoto(e.target.files && e.target.files[0]); e.target.value = ""; };
@@ -609,7 +835,7 @@
   $("paste-link").addEventListener("keydown", (e) => { if (e.key === "Enter") $("paste-pair").click(); });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") stopScanner();
-    else if (state.server) refresh();
+    else if (state.server) { forgetLegacy(); refresh(true); }
   });
 
   (async function main() {
@@ -629,7 +855,7 @@
       state.keyPair = await deviceKey();
       showDashboard();
       await refresh();
-      state.timer = state.timer || setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 60000);
+      state.timer = state.timer || setInterval(poll, 60000);
     } else {
       showPairing();
     }
