@@ -1,0 +1,49 @@
+# Local Flatpak build of the PlanMeter GTK app (not published).
+#
+#   flatpak-builder --user --install --force-clean build-dir flatpak/com.neilgoldader.PlanMeter.yml
+#
+# planmeterd stays on the host as a systemd user service; the sandboxed app
+# reaches it through the control socket in $XDG_RUNTIME_DIR/planmeter.
+# Any GNOME runtime from 46 on has GTK >= 4.14 and libadwaita >= 1.5.
+id: com.neilgoldader.PlanMeter
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: planmeter
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # planmeterd's control socket.
+  - --filesystem=xdg-run/planmeter
+  # "Start Service" runs `systemctl --user start planmeterd` on the host.
+  - --talk-name=org.freedesktop.Flatpak
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/planmeter/cargo
+modules:
+  - name: planmeter
+    buildsystem: simple
+    build-options:
+      # Local builds download crates. A Flathub submission would vendor them
+      # with flatpak-cargo-generator (cargo-sources.json) and drop this.
+      build-args:
+        - --share=network
+    build-commands:
+      - cargo build --release --locked --bin planmeter
+      - install -Dm755 target/release/planmeter -t /app/bin
+      - install -Dm644 data/com.neilgoldader.PlanMeter.desktop -t /app/share/applications
+      - install -Dm644 data/com.neilgoldader.PlanMeter.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 data/icons/hicolor/scalable/apps/com.neilgoldader.PlanMeter.svg -t /app/share/icons/hicolor/scalable/apps
+      - install -Dm644 data/icons/hicolor/symbolic/apps/com.neilgoldader.PlanMeter-symbolic.svg -t /app/share/icons/hicolor/symbolic/apps
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - target
+          - build-dir
+          - .flatpak-builder
