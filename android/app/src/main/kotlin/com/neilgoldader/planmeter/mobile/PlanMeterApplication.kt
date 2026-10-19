@@ -6,21 +6,25 @@ import android.os.Build
 import android.provider.Settings
 import com.neilgoldader.planmeter.mobile.data.AppStore
 import com.neilgoldader.planmeter.mobile.data.KeystoreSigner
+import com.neilgoldader.planmeter.mobile.data.SigningIdentity
 import com.neilgoldader.planmeter.protocol.HostPolicy
 import com.neilgoldader.planmeter.protocol.HttpSettings
 import com.neilgoldader.planmeter.protocol.PairedServer
 import com.neilgoldader.planmeter.protocol.RemoteClient
 
-class PlanMeterApplication : Application() {
-    val graph: AppGraph by lazy { AppGraph(this) }
+open class PlanMeterApplication : Application() {
+    open val graph: AppGraph by lazy { AppGraph(this) }
 }
 
-/** The app's few singletons. */
-class AppGraph(private val context: Context) {
+/** The app's few singletons. Tests swap the signer, which needs the Android Keystore. */
+class AppGraph(
+    private val context: Context,
+    signerFactory: (Context) -> SigningIdentity = KeystoreSigner::loadOrCreate,
+) {
     val store = AppStore(context)
 
     /** Created on first use: generating a StrongBox key can take a moment. */
-    val signer: KeystoreSigner by lazy { KeystoreSigner.loadOrCreate(context) }
+    val signer: SigningIdentity by lazy { signerFactory(context) }
 
     /**
      * Requests go only to Tailscale addresses (see network_security_config.xml);

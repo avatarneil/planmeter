@@ -90,16 +90,7 @@ class LogicTest {
         assertNull((result as LoadResult.Loaded).data.accounts)
     }
 
-    private fun reply(request: RemoteRequest): RemoteReply {
-        val range = MobileRange.entries.first { it.days == (request.days ?: 30) && it.minutes == request.minutes }
-        return when (request.method) {
-            RemoteMethod.SUMMARY -> RemoteReply(summary = FakeData.summary(range))
-            RemoteMethod.TIMELINE -> RemoteReply(timeline = FakeData.timeline(range, request.resolution ?: "day"))
-            RemoteMethod.LIMITS -> RemoteReply(limits = FakeData.limits)
-            RemoteMethod.MODELS -> RemoteReply(models = FakeData.models)
-            RemoteMethod.ACCOUNTS -> RemoteReply(accounts = FakeData.accountsReply)
-        }
-    }
+    private fun reply(request: RemoteRequest): RemoteReply = FakeData.reply(request)
 
     @Test
     fun widgetSnapshotStaleness() {

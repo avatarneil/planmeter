@@ -179,6 +179,18 @@ object FakeData {
         scannedAt = now.minusSeconds(90),
     )
 
+    /** Answers an RPC the way a host would, from the fake data. */
+    fun reply(request: com.neilgoldader.planmeter.protocol.RemoteRequest): com.neilgoldader.planmeter.protocol.RemoteReply {
+        val range = MobileRange.entries.firstOrNull { it.days == (request.days ?: 30) && it.minutes == request.minutes } ?: MobileRange.MONTH
+        return when (request.method) {
+            com.neilgoldader.planmeter.protocol.RemoteMethod.SUMMARY -> com.neilgoldader.planmeter.protocol.RemoteReply(summary = summary(range))
+            com.neilgoldader.planmeter.protocol.RemoteMethod.TIMELINE -> com.neilgoldader.planmeter.protocol.RemoteReply(timeline = timeline(range, request.resolution ?: "day"))
+            com.neilgoldader.planmeter.protocol.RemoteMethod.LIMITS -> com.neilgoldader.planmeter.protocol.RemoteReply(limits = limits)
+            com.neilgoldader.planmeter.protocol.RemoteMethod.MODELS -> com.neilgoldader.planmeter.protocol.RemoteReply(models = models)
+            com.neilgoldader.planmeter.protocol.RemoteMethod.ACCOUNTS -> com.neilgoldader.planmeter.protocol.RemoteReply(accounts = accountsReply)
+        }
+    }
+
     fun data(range: MobileRange = MobileRange.MONTH, granularity: String = range.defaultGranularity) = DashboardData(
         summary = summary(range),
         timeline = timeline(range, granularity),

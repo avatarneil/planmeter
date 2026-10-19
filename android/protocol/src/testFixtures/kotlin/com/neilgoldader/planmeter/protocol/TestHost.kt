@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * of [RemoteClient] on the JVM. Not used by the app.
  */
 class TestHost(
-    private val reply: (RemoteRequest) -> RemoteReply = { RemoteReply(error = "no data") },
+    var reply: (RemoteRequest) -> RemoteReply = { RemoteReply(error = "no data") },
 ) : AutoCloseable {
     private val keyPair = P256.generateKeyPair()
     val publicKeyRaw: ByteArray = P256.x963(keyPair.public as ECPublicKey)
@@ -21,7 +21,7 @@ class TestHost(
     var inviteActive = true
     val devices = ConcurrentHashMap<String, ByteArray>()
     private val seen = ConcurrentHashMap.newKeySet<String>()
-    val requests = mutableListOf<RemoteRequest>()
+    val requests: MutableList<RemoteRequest> = java.util.Collections.synchronizedList(mutableListOf())
 
     private val server: HttpServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { exchange ->

@@ -126,10 +126,14 @@ Protocol notes:
 
 Tests:
 
-- `:protocol:test` covers the channel (RFC 5869 and RFC 8439 vectors,
-  tampering, DER edge cases), pairing links, JSON, an end-to-end client against
-  a Kotlin port of the host's handlers, and Swift-generated vectors.
-- `:app:testDebugUnitTest` runs Robolectric tests for request selection,
+- `:protocol:test` checks the shared golden fixtures in `protocol/fixtures`
+  (every intermediate for both ciphers, negative vectors, invites, device ids,
+  replies), the channel itself (RFC 5869 and RFC 8439 vectors, tampering, DER
+  edge cases), pairing links, JSON, Swift-generated vectors, and an end-to-end
+  client against `TestHost`, a Kotlin port of the host's handlers.
+- `:app:testDebugUnitTest` runs Robolectric tests: the view model paired with
+  `TestHost` over real HTTP (pairing, requests, the older-host fallback,
+  persistence, revocation, unpairing, and pairing errors), request selection,
   widget staleness, chart axes, formatting, and every screen.
 - `:app:recordRoborazziDebug` writes screenshots of the dashboard (phone and
   tablet, light and dark), pairing, settings, lock screen, and widget to
