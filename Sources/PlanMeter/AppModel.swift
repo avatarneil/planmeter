@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PlanMeterCore
+import PlanMeterHost
 import PlanMeterRemote
 import SwiftUI
 
@@ -82,8 +83,7 @@ enum TimeRange: String, CaseIterable, Identifiable {
         case .today:
             return (calendar.startOfDay(for: now), now)
         case .day:
-            let hour = Date(timeIntervalSince1970: floor(now.timeIntervalSince1970 / 3600) * 3600)
-            return (hour.addingTimeInterval(-23 * 3600), hour.addingTimeInterval(3600))
+            return ReportWindow.rollingDay(now: now)
         default:
             let today = calendar.startOfDay(for: now)
             let to = calendar.date(byAdding: .day, value: 1, to: today) ?? today
@@ -510,4 +510,10 @@ final class AppModel {
         return Palette.series[index % Palette.series.count]
     }
 
+}
+
+/// The remote report builder reads the dashboard's own state, so phones see
+/// exactly what the Mac shows.
+extension AppModel: RemoteReportSource {
+    var reportServerName: String { remote.serverName }
 }

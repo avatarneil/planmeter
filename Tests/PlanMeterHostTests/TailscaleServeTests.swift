@@ -1,5 +1,5 @@
 import XCTest
-@testable import PlanMeter
+@testable import PlanMeterHost
 
 final class TailscaleServeTests: XCTestCase {
     func testCertificateDomainSurvivesCLIWarning() {
@@ -42,12 +42,15 @@ final class TailscaleServeTests: XCTestCase {
     }
 
     func testMissingCertificateDomainHasSpecificDiagnostic() {
+        #if os(macOS)
+        XCTAssertEqual(TailscaleServe.machineNoun, "this Mac", "the Mac app's wording is unchanged")
+        #endif
         for domains in ["null", "[]", "[\"\"]"] {
             let status = TailscaleServe.certificateStatus(from: .init(
                 ok: true, standardOutput: "{\"BackendState\":\"Running\",\"CertDomains\":\(domains)}"
             ))
             XCTAssertNil(status.domain)
-            XCTAssertEqual(status.message, "Tailscale reports no HTTPS certificate domain for this Mac. Check MagicDNS and HTTPS in the Tailscale admin console.")
+            XCTAssertEqual(status.message, "Tailscale reports no HTTPS certificate domain for \(TailscaleServe.machineNoun). Check MagicDNS and HTTPS in the Tailscale admin console.")
         }
     }
 

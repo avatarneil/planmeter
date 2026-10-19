@@ -3,7 +3,7 @@ import PackageDescription
 
 // Apple hosts build every target, exactly as before. Other hosts (Linux now,
 // Windows later) build only the platform-neutral pieces: the core, the remote
-// protocol, the watch payload, the CLI, and the MCP server.
+// protocol, the watch payload, the CLI, the MCP server, and the host library.
 //
 // Keep the Apple branch's dependency list unchanged. Xcode Cloud builds the iOS
 // app with automatic package resolution disabled, so any dependency change seen
@@ -44,6 +44,7 @@ let portableProducts: [Product] = [
     .library(name: "PlanMeterCore", targets: ["PlanMeterCore"]),
     .library(name: "PlanMeterRemote", targets: ["PlanMeterRemote"]),
     .library(name: "PlanMeterWatchShared", targets: ["PlanMeterWatchShared"]),
+    .library(name: "PlanMeterHost", targets: ["PlanMeterHost"]),
 ]
 
 let portableTargets: [Target] = [
@@ -63,6 +64,14 @@ let portableTargets: [Target] = [
     // The compact summary the iPhone relays to the watch; Foundation only.
     .target(
         name: "PlanMeterWatchShared",
+        swiftSettings: swift5
+    ),
+    // The host side of remote access, shared beyond the Mac app: report
+    // builder, pairing and RPC handling, HTTP framing, Tailscale helpers.
+    // Portable: no Network.framework, AppKit, SwiftUI, or Observation.
+    .target(
+        name: "PlanMeterHost",
+        dependencies: ["PlanMeterCore", "PlanMeterRemote"],
         swiftSettings: swift5
     ),
     .executableTarget(
@@ -88,6 +97,11 @@ let portableTargets: [Target] = [
         dependencies: ["PlanMeterRemote"] + cryptoDependencies,
         swiftSettings: swift5
     ),
+    .testTarget(
+        name: "PlanMeterHostTests",
+        dependencies: ["PlanMeterHost", "PlanMeterCore", "PlanMeterRemote"],
+        swiftSettings: swift5
+    ),
 ]
 
 // MARK: - Apple-only targets (SwiftUI, Charts, CloudKit, Sparkle)
@@ -109,6 +123,7 @@ let appleTargets: [Target] = [
             "PlanMeterDesktopShared",
             "PlanMeterCore",
             "PlanMeterRemote",
+            "PlanMeterHost",
             .product(name: "Sparkle", package: "Sparkle"),
         ],
         // The web client is copied into the .app by scripts/bundle.sh and
@@ -125,7 +140,7 @@ let appleTargets: [Target] = [
     .testTarget(name: "PlanMeterDesktopSharedTests", dependencies: ["PlanMeterDesktopShared"], swiftSettings: swift5),
     .testTarget(
         name: "PlanMeterTests",
-        dependencies: ["PlanMeter"],
+        dependencies: ["PlanMeter", "PlanMeterHost"],
         swiftSettings: swift5
     ),
 ]

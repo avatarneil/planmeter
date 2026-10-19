@@ -1,5 +1,6 @@
 import XCTest
 @testable import PlanMeterCore
+import PlanMeterHost
 import PlanMeterRemote
 @testable import PlanMeter
 
