@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -73,7 +71,7 @@ fun AppRoot(viewModel: AppViewModel, biometricsAvailable: Boolean, onUnlockReque
         else -> PairedNavigation(viewModel, state, biometricsAvailable)
     }
 
-    state.pairing.pendingInvite?.let { invite ->
+    state.pairing.pendingInvite?.takeIf { !state.isLocked }?.let { invite ->
         AlertDialog(
             onDismissRequest = viewModel::dismissPendingInvite,
             title = { Text("Pair with ${invite.serverName}?") },
@@ -139,7 +137,7 @@ fun LockScreen(onUnlockRequest: () -> Unit) {
     Surface(Modifier.fillMaxSize(), color = Surfaces.screen) {
         Box(contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(AppIcons.Lock, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("PlanMeter is locked", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(4.dp))
                 Button(onClick = onUnlockRequest) { Text("Unlock") }

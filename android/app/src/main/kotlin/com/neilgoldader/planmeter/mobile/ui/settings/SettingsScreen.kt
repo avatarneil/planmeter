@@ -1,5 +1,6 @@
 package com.neilgoldader.planmeter.mobile.ui.settings
 
+import com.neilgoldader.planmeter.mobile.ui.AppIcons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,18 +17,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.LinkOff
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -94,7 +83,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onBack) { Icon(AppIcons.ArrowBack, contentDescription = "Back") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surfaces.screen, scrolledContainerColor = Surfaces.screen),
             )
@@ -109,26 +98,26 @@ fun SettingsScreen(
             state.server?.let { server ->
                 item {
                     Section("Host") {
-                        InfoRow(Icons.Outlined.Dns, "Name", server.serverName)
+                        InfoRow(AppIcons.Dns, "Name", server.serverName)
                         Divider()
                         InfoRow(null, "Address", "${server.host}:${server.port}")
                         Divider()
                         InfoRow(null, "Paired", DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).format(server.pairedAt.atZone(zone)))
                         Divider()
-                        InfoRow(Icons.Outlined.Key, "Server key", server.serverKeyFingerprint, monospace = true)
+                        InfoRow(AppIcons.Key, "Server key", server.serverKeyFingerprint, monospace = true)
                     }
                 }
             }
             item {
                 Section("This device", footer = if (!state.biometricsAvailable) "Set a screen lock on this phone to use the app lock." else null) {
-                    InfoRow(Icons.Outlined.Smartphone, "Device ID", state.deviceId, monospace = true)
+                    InfoRow(AppIcons.Smartphone, "Device ID", state.deviceId, monospace = true)
                     Divider()
-                    InfoRow(Icons.Outlined.Lock, "Key storage", state.keyStorage.label)
+                    InfoRow(AppIcons.Lock, "Key storage", state.keyStorage.label)
                     Divider()
                     ListItem(
                         headlineContent = { Text("Require fingerprint, face, or screen lock") },
                         supportingContent = { Text("Locks PlanMeter when you leave it. Background widget updates pause while this is on.") },
-                        leadingContent = { Icon(Icons.Outlined.Fingerprint, contentDescription = null) },
+                        leadingContent = { Icon(AppIcons.Fingerprint, contentDescription = null) },
                         trailingContent = {
                             Switch(
                                 checked = state.requireBiometrics,
@@ -142,13 +131,13 @@ fun SettingsScreen(
             }
             item {
                 Section("Automatic refresh") {
-                    InfoRow(Icons.Outlined.Schedule, "While open", "Every 30 seconds")
+                    InfoRow(AppIcons.Schedule, "While open", "Every 30 seconds")
                     Divider()
-                    InfoRow(Icons.Outlined.Widgets, "Home-screen widget", "About every 15 minutes")
+                    InfoRow(AppIcons.Widgets, "Home-screen widget", "About every 15 minutes")
                     Divider()
                     ListItem(
                         headlineContent = { Text("Refresh now") },
-                        leadingContent = { Icon(Icons.Outlined.Refresh, contentDescription = null) },
+                        leadingContent = { Icon(AppIcons.Refresh, contentDescription = null) },
                         modifier = Modifier.clickableRow(onRefresh),
                         colors = ListItemDefaults.colors(containerColor = Surfaces.card),
                     )
@@ -162,7 +151,7 @@ fun SettingsScreen(
                     ) {
                         ListItem(
                             headlineContent = { Text("Unpair from ${state.server.serverName}", color = MaterialTheme.colorScheme.error) },
-                            leadingContent = { Icon(Icons.Outlined.LinkOff, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            leadingContent = { Icon(AppIcons.LinkOff, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                             modifier = Modifier.clickableRow { confirmUnpair = true },
                             colors = ListItemDefaults.colors(containerColor = Surfaces.card),
                         )
@@ -181,7 +170,7 @@ fun SettingsScreen(
             }
             item {
                 Section("About") {
-                    InfoRow(Icons.Outlined.Info, "Version", "${state.versionName} (${state.versionCode})")
+                    InfoRow(AppIcons.Info, "Version", "${state.versionName} (${state.versionCode})")
                     Divider()
                     InfoRow(null, "Protocol", "planmeter-remote-v${SecureChannel.PROTOCOL_VERSION}")
                 }
@@ -193,7 +182,7 @@ fun SettingsScreen(
     if (confirmUnpair && state.server != null) {
         AlertDialog(
             onDismissRequest = { confirmUnpair = false },
-            icon = { Icon(Icons.Outlined.LinkOff, contentDescription = null) },
+            icon = { Icon(AppIcons.LinkOff, contentDescription = null) },
             title = { Text("Unpair from ${state.server.serverName}?") },
             text = { Text("This phone will stop showing usage. Revoke it on your computer too: PlanMeter → Remote → Paired devices.") },
             confirmButton = {
