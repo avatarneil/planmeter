@@ -196,7 +196,6 @@ impl DashboardPage {
             .tooltip_text("Bucket size")
             .build();
         granularity_button.add_css_class("flat");
-        granularity_button.update_property(&[gtk::accessible::Property::Label("Bucket size")]);
         chart_head.append(&granularity_button);
         chart_card.append(&chart_head);
         let chart = ChartView::new();
