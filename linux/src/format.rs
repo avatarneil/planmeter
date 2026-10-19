@@ -269,7 +269,10 @@ pub fn period_label(
                 clock24,
                 resolution == Resolution::FifteenMinutes && date.minute() != 0,
             );
-            if multi_day {
+            if multi_day && date.hour() == 0 && date.minute() == 0 {
+                // Midnight ticks name the day instead of the time.
+                date.format("%a %-d").to_string()
+            } else if multi_day {
                 format!("{} {time}", date.format("%a"))
             } else {
                 time
@@ -416,6 +419,11 @@ mod tests {
         let h = Local.with_ymd_and_hms(2026, 10, 19, 14, 0, 0).unwrap();
         assert_eq!(period_label(h, Resolution::Hour, false, false), "2 PM");
         assert_eq!(period_label(h, Resolution::Hour, true, true), "Mon 14:00");
+        let midnight = Local.with_ymd_and_hms(2026, 10, 19, 0, 0, 0).unwrap();
+        assert_eq!(
+            period_label(midnight, Resolution::Hour, true, true),
+            "Mon 19"
+        );
         assert_eq!(period_label(h, Resolution::Day, true, true), "Oct 19");
         assert_eq!(web_code("12345678"), "1234 5678");
         assert_eq!(web_code("123"), "123");
