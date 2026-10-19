@@ -107,7 +107,6 @@ impl MainWindow {
             .menu_model(&range_menu)
             .tooltip_text("Range")
             .build();
-        range_button.update_property(&[gtk::accessible::Property::Label("Range")]);
         header.pack_start(&range_button);
 
         let view_stack = adw::ViewStack::new();
@@ -801,22 +800,19 @@ impl MainWindow {
         }
     }
 
+    /// Saves spend settings. Errors show in the dialog while it is open, or
+    /// in the window after a debounced save outlives it.
     pub fn save_spend(
         self: &Rc<Self>,
         groups: Option<Vec<String>>,
         thresholds: Option<BTreeMap<String, SpendThreshold>>,
-        dialog: &adw::PreferencesDialog,
+        dialog: glib::WeakRef<adw::PreferencesDialog>,
     ) {
-        let dialog = dialog.downgrade();
         self.spawn(
             move |client| client.set_spend(groups, thresholds),
             move |win, result| match result {
                 Ok(settings) => win.settings_saved(settings, false),
-                Err(e) => {
-                    if let Some(d) = dialog.upgrade() {
-                        d.add_toast(adw::Toast::new(&format!("Couldn’t save: {e}")));
-                    }
-                }
+                Err(e) => win.save_failed(&e, &dialog),
             },
         );
     }
@@ -825,20 +821,23 @@ impl MainWindow {
         self: &Rc<Self>,
         account: String,
         group: Option<PlanGroup>,
-        dialog: &adw::PreferencesDialog,
+        dialog: glib::WeakRef<adw::PreferencesDialog>,
     ) {
-        let dialog = dialog.downgrade();
         self.spawn(
             move |client| client.set_group(&account, group),
             move |win, result| match result {
                 Ok(settings) => win.settings_saved(settings, true),
-                Err(e) => {
-                    if let Some(d) = dialog.upgrade() {
-                        d.add_toast(adw::Toast::new(&format!("Couldn’t save: {e}")));
-                    }
-                }
+                Err(e) => win.save_failed(&e, &dialog),
             },
         );
+    }
+
+    fn save_failed(&self, error: &ClientError, dialog: &glib::WeakRef<adw::PreferencesDialog>) {
+        let text = format!("Couldn’t save: {error}");
+        match dialog.upgrade() {
+            Some(d) => d.add_toast(adw::Toast::new(&text)),
+            None => self.toast(&text),
+        }
     }
 
     // MARK: Remote access

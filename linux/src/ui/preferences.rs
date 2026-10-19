@@ -54,7 +54,6 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
         .description("Plan groups that count toward the spend total, its limits, and alerts. The dashboard still shows every group.")
         .build();
     let groups = Rc::new(RefCell::new(data.settings.effective_spend_groups()));
-    let switches: Rc<RefCell<Vec<(PlanGroup, adw::SwitchRow)>>> = Rc::new(RefCell::new(Vec::new()));
     let reverting = Rc::new(Cell::new(false));
     for plan in PlanGroup::ALL {
         let row = adw::SwitchRow::builder()
@@ -98,10 +97,9 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
                 .filter(|g| selected.contains(g))
                 .collect();
             *groups.borrow_mut() = ordered.clone();
-            win.save_spend(Some(ordered), None, &dialog);
+            win.save_spend(Some(ordered), None, dialog.downgrade());
         });
         total_group.add(&row);
-        switches.borrow_mut().push((plan, row));
     }
     spending.add(&total_group);
 
@@ -137,9 +135,8 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
             );
             let run = move || {
                 debounce2.borrow_mut().take();
-                if let Some(dialog) = dialog_weak.upgrade() {
-                    win.save_spend(None, Some(thresholds.borrow().clone()), &dialog);
-                }
+                // Runs even if the dialog closed during the debounce.
+                win.save_spend(None, Some(thresholds.borrow().clone()), dialog_weak.clone());
             };
             if delay {
                 let id = glib::timeout_add_local_once(std::time::Duration::from_millis(700), run);
@@ -316,7 +313,7 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
                 _ => None,
             };
             if let Some(dialog) = dialog_weak.upgrade() {
-                win.save_group(id.clone(), group, &dialog);
+                win.save_group(id.clone(), group, dialog.downgrade());
             }
         });
         plan_group.add(&combo);
@@ -339,7 +336,7 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
         for (id, combo) in combos.iter() {
             combo.set_selected(0);
             if overridden.contains(id) {
-                w.save_group(id.clone(), None, &dialog);
+                w.save_group(id.clone(), None, dialog.downgrade());
             }
         }
         resetting.set(false);
