@@ -1,0 +1,165 @@
+{
+  "description" : "How the host parses a request and frames every response: one request per connection, Content-Length bodies only, 16 KiB head, 1 MiB body. `head` is the exact response head, CRLF-terminated lines without the blank line.",
+  "requests" : [
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "query-string-ignored",
+      "parsed" : {
+        "bodyLength" : 0,
+        "method" : "GET",
+        "path" : "/v1/info"
+      },
+      "request" : "GET /v1/info?x=1 HTTP/1.1\\r\\nHost: h\\r\\n\\r\\n"
+    },
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "body-by-content-length",
+      "parsed" : {
+        "bodyLength" : 2,
+        "method" : "POST",
+        "path" : "/v1/rpc"
+      },
+      "request" : "POST /v1/rpc HTTP/1.1\\r\\nContent-Length: 2\\r\\n\\r\\n{}"
+    },
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "head-too-large",
+      "request" : "GET / HTTP/1.1\\r\\nX-Big: <16384 × a>\\r\\n\\r\\n",
+      "response" : {
+        "body" : {
+          "error" : "headers too large"
+        },
+        "head" : [
+          "HTTP/1.1 431 Request Header Fields Too Large",
+          "Content-Type: application/json",
+          "Content-Length: 29",
+          "Cache-Control: no-store",
+          "X-Content-Type-Options: nosniff",
+          "Connection: close"
+        ],
+        "status" : 431
+      }
+    },
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "body-too-large",
+      "request" : "POST /v1/rpc HTTP/1.1\\r\\nContent-Length: 1048577\\r\\n\\r\\n",
+      "response" : {
+        "body" : {
+          "error" : "body too large"
+        },
+        "head" : [
+          "HTTP/1.1 413 Payload Too Large",
+          "Content-Type: application/json",
+          "Content-Length: 26",
+          "Cache-Control: no-store",
+          "X-Content-Type-Options: nosniff",
+          "Connection: close"
+        ],
+        "status" : 413
+      }
+    },
+    {
+      "connectionClosedAfterSending" : true,
+      "name" : "truncated-body",
+      "request" : "POST /v1/rpc HTTP/1.1\\r\\nContent-Length: 10\\r\\n\\r\\n{}",
+      "response" : {
+        "body" : {
+          "error" : "truncated body"
+        },
+        "head" : [
+          "HTTP/1.1 400 Bad Request",
+          "Content-Type: application/json",
+          "Content-Length: 26",
+          "Cache-Control: no-store",
+          "X-Content-Type-Options: nosniff",
+          "Connection: close"
+        ],
+        "status" : 400
+      }
+    },
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "negative-content-length",
+      "request" : "POST /v1/rpc HTTP/1.1\\r\\nContent-Length: -1\\r\\n\\r\\n",
+      "response" : {
+        "body" : {
+          "error" : "bad request"
+        },
+        "head" : [
+          "HTTP/1.1 400 Bad Request",
+          "Content-Type: application/json",
+          "Content-Length: 23",
+          "Cache-Control: no-store",
+          "X-Content-Type-Options: nosniff",
+          "Connection: close"
+        ],
+        "status" : 400
+      }
+    },
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "malformed-request-line",
+      "request" : "HELLO\\r\\n\\r\\n",
+      "response" : {
+        "body" : {
+          "error" : "bad request"
+        },
+        "head" : [
+          "HTTP/1.1 400 Bad Request",
+          "Content-Type: application/json",
+          "Content-Length: 23",
+          "Cache-Control: no-store",
+          "X-Content-Type-Options: nosniff",
+          "Connection: close"
+        ],
+        "status" : 400
+      }
+    },
+    {
+      "connectionClosedAfterSending" : true,
+      "name" : "closed-before-head",
+      "request" : "GET / HTTP/1.1\\r\\n",
+      "result" : "the host closes the connection without a reply"
+    },
+    {
+      "connectionClosedAfterSending" : false,
+      "name" : "incomplete-head",
+      "request" : "GET / HTTP/1.1\\r\\n",
+      "result" : "the host waits for more bytes, up to 20 seconds from accepting the connection"
+    }
+  ],
+  "responses" : [
+    {
+      "head" : [
+        "HTTP/1.1 200 OK",
+        "Content-Type: application/json",
+        "Content-Length: 92",
+        "Cache-Control: no-store",
+        "X-Content-Type-Options: nosniff",
+        "Connection: close"
+      ],
+      "name" : "api-json",
+      "request" : "GET /v1/info",
+      "status" : 200
+    },
+    {
+      "head" : [
+        "HTTP/1.1 200 OK",
+        "Content-Type: text/html; charset=utf-8",
+        "Content-Length: 15",
+        "Cache-Control: no-store",
+        "X-Content-Type-Options: nosniff",
+        "Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "Cross-Origin-Opener-Policy: same-origin",
+        "Permissions-Policy: camera=(self), microphone=(), geolocation=()",
+        "Referrer-Policy: no-referrer",
+        "X-Frame-Options: DENY",
+        "Connection: close"
+      ],
+      "name" : "static-file",
+      "request" : "GET / (a 15-byte index.html)",
+      "status" : 200
+    }
+  ]
+}

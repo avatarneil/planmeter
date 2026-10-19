@@ -14,8 +14,7 @@ import PlanMeterRemote
 /// manifest cannot mix main-actor synchronous and asynchronous tests.
 @MainActor
 final class ControlFixtureTests: XCTestCase {
-    static let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("protocol/fixtures/control", isDirectory: true)
+    static let directory = ProtocolFixtures.root.appendingPathComponent("control", isDirectory: true)
 
     struct Example {
         var name: String
@@ -43,56 +42,27 @@ final class ControlFixtureTests: XCTestCase {
     ]
 
     func testControlFixtures() async throws {
-        let regenerate = ProcessInfo.processInfo.environment["PLANMETER_REGENERATE_FIXTURES"] == "1"
         let h = try await ControlHarness.make()
         defer { h.cleanUp() }
         let deviceId = try XCTUnwrap(h.service.devices.first?.id)
-        if regenerate { try FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true) }
-
         var mismatches: [String] = []
         for example in Self.examples {
             let path = example.path.replacingOccurrences(of: "{deviceId}", with: deviceId)
             let response = await h.call(example.method, path, json: example.body)
             let document: [String: Any] = [
-                "request": [
-                    "method": example.method,
-                    "path": path,
-                    "body": example.body.map { try! JSONSerialization.jsonObject(with: Data($0.utf8)) } ?? NSNull(),
-                ] as [String: Any],
-                "response": [
-                    "status": response.status,
-                    "body": try JSONSerialization.jsonObject(with: response.body),
-                ] as [String: Any],
+                "request": ["method": example.method, "path": path, "body": ProtocolFixtures.body(Data((example.body ?? "").utf8))] as [String: Any],
+                "response": ["status": response.status, "body": ProtocolFixtures.body(response.body)] as [String: Any],
             ]
-            let data = try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) + Data("\n".utf8)
-            let file = Self.directory.appendingPathComponent("\(example.name).json")
-            if regenerate {
-                try data.write(to: file, options: .atomic)
-                continue
-            }
-            guard let committed = FileManager.default.contents(atPath: file.path) else {
-                mismatches.append("\(example.name): missing \(file.path)")
-                continue
-            }
-            if try Self.canonical(committed) != Self.canonical(data) {
-                mismatches.append("\(example.name): generated output differs from \(file.lastPathComponent)\n\(String(decoding: data, as: UTF8.self))")
-            }
+            if let mismatch = try ProtocolFixtures.check("control/\(example.name).json", document) { mismatches.append(mismatch) }
         }
-        XCTAssertTrue(mismatches.isEmpty, "Control fixtures are out of date. If the change is intended, run with PLANMETER_REGENERATE_FIXTURES=1.\n" + mismatches.joined(separator: "\n"))
+        XCTAssertTrue(mismatches.isEmpty, "Control fixtures are out of date. \(ProtocolFixtures.hint)\n" + mismatches.joined(separator: "\n"))
     }
 
     /// The directory holds exactly one file per example, so a renamed or
     /// removed endpoint cannot leave a stale fixture behind.
     func testFixtureManifest() async throws {
-        guard ProcessInfo.processInfo.environment["PLANMETER_REGENERATE_FIXTURES"] != "1" else { return }
-        let found = try FileManager.default.contentsOfDirectory(atPath: Self.directory.path).filter { !$0.hasPrefix(".") }
-        XCTAssertEqual(Set(found), Set(Self.examples.map { "\($0.name).json" }))
-    }
-
-    /// Key order, whitespace, and number formatting vary by platform; compare
-    /// documents after one round trip through the same serializer.
-    static func canonical(_ data: Data) throws -> Data {
-        try JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: data), options: [.sortedKeys])
+        guard !ProtocolFixtures.regenerating else { return }
+        XCTAssertEqual(try ProtocolFixtures.files(in: "control"), Set(Self.examples.map { "\($0.name).json" }))
     }
 
     /// Every fixture decodes into the public wire types.

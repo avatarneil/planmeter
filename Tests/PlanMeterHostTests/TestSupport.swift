@@ -282,3 +282,46 @@ extension HTTPResponse {
     var errorMessage: String? { object?["error"] as? String }
     func decoded<T: Decodable>(_ type: T.Type) throws -> T { try RemoteJSON.decoder.decode(type, from: body) }
 }
+
+/// `protocol/fixtures`, shared with ProtocolFixtureTests: the same
+/// PLANMETER_REGENERATE_FIXTURES switch, pretty sorted JSON on disk, and a
+/// semantic comparison that works on macOS and Linux alike.
+enum ProtocolFixtures {
+    static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("protocol/fixtures", isDirectory: true)
+    static var regenerating: Bool { ProcessInfo.processInfo.environment["PLANMETER_REGENERATE_FIXTURES"] == "1" }
+
+    /// Writes `document` when regenerating; otherwise returns a description
+    /// of how it differs from the committed file, or nil when it matches.
+    static func check(_ path: String, _ document: Any) throws -> String? {
+        let url = root.appendingPathComponent(path)
+        let data = try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) + Data("\n".utf8)
+        if regenerating {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+            return nil
+        }
+        guard let committed = FileManager.default.contents(atPath: url.path) else { return "\(path): missing" }
+        // Key order, whitespace, and number formatting vary by platform;
+        // compare after one round trip through the same serializer.
+        func canonical(_ data: Data) throws -> Data {
+            try JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: data), options: [.sortedKeys])
+        }
+        return try canonical(committed) == canonical(data) ? nil : "\(path) differs from the implementation:\n\(String(decoding: data, as: UTF8.self))"
+    }
+
+    /// The fixture files directly in `directory`.
+    static func files(in directory: String) throws -> Set<String> {
+        Set(try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent(directory).path).filter { !$0.hasPrefix(".") })
+    }
+
+    static let hint = "If the change is intended, run `PLANMETER_REGENERATE_FIXTURES=1 swift test --filter PlanMeterHostTests` on a Mac and review the diff."
+
+    /// A JSON value for a request or response body: parsed JSON when it is
+    /// JSON, otherwise the text.
+    static func body(_ data: Data) -> Any {
+        if data.isEmpty { return NSNull() }
+        if let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) { return object }
+        return String(decoding: data, as: UTF8.self)
+    }
+}

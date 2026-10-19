@@ -1,0 +1,399 @@
+{
+  "cases" : [
+    {
+      "name" : "info",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/v1/info",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "app" : "planmeter",
+          "protocolVersion" : 1,
+          "serverName" : "Ada’s MacBook Pro",
+          "version" : "0.3.6"
+        },
+        "status" : 200
+      }
+    },
+    {
+      "name" : "non-tailnet-peer",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/v1/info",
+        "peer" : "203.0.113.5"
+      },
+      "response" : {
+        "body" : {
+          "error" : "tailnet peers only"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "forwarded-tailnet-peer",
+      "note" : "From loopback, the first X-Forwarded-For entry (Tailscale Serve) is the peer.",
+      "request" : {
+        "body" : null,
+        "headers" : {
+          "X-Forwarded-For" : "100.64.0.9"
+        },
+        "method" : "GET",
+        "path" : "/v1/info",
+        "peer" : "127.0.0.1"
+      },
+      "response" : {
+        "body" : {
+          "app" : "planmeter",
+          "protocolVersion" : 1,
+          "serverName" : "Ada’s MacBook Pro",
+          "version" : "0.3.6"
+        },
+        "status" : 200
+      }
+    },
+    {
+      "name" : "forwarded-outside-peer",
+      "request" : {
+        "body" : null,
+        "headers" : {
+          "X-Forwarded-For" : "203.0.113.5, 127.0.0.1"
+        },
+        "method" : "GET",
+        "path" : "/v1/info",
+        "peer" : "127.0.0.1"
+      },
+      "response" : {
+        "body" : {
+          "error" : "tailnet peers only"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "forwarded-header-from-remote-peer",
+      "note" : "X-Forwarded-For is ignored unless the connection comes from loopback.",
+      "request" : {
+        "body" : null,
+        "headers" : {
+          "X-Forwarded-For" : "127.0.0.1"
+        },
+        "method" : "GET",
+        "path" : "/v1/info",
+        "peer" : "203.0.113.5"
+      },
+      "response" : {
+        "body" : {
+          "error" : "tailnet peers only"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "wrong-method-info",
+      "request" : {
+        "body" : null,
+        "method" : "POST",
+        "path" : "/v1/info",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "method not allowed"
+        },
+        "status" : 405
+      }
+    },
+    {
+      "name" : "wrong-method-pair",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "method not allowed"
+        },
+        "status" : 405
+      }
+    },
+    {
+      "name" : "wrong-method-rpc",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "method not allowed"
+        },
+        "status" : 405
+      }
+    },
+    {
+      "name" : "wrong-method-web-pairing-invite",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/v1/web-pairing-invite",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "method not allowed"
+        },
+        "status" : 405
+      }
+    },
+    {
+      "name" : "unknown-path",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/v1/nope",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "not found"
+        },
+        "status" : 404
+      }
+    },
+    {
+      "name" : "static-file-not-bundled",
+      "note" : "A host built without the web client.",
+      "request" : {
+        "body" : null,
+        "method" : "GET",
+        "path" : "/app.js",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "web client not bundled"
+        },
+        "status" : 404
+      }
+    },
+    {
+      "name" : "pair-undecodable",
+      "request" : {
+        "body" : {
+
+        },
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "bad pairing request"
+        },
+        "status" : 400
+      }
+    },
+    {
+      "name" : "pair-not-pairing-device",
+      "request" : {
+        "body" : "a SealedRequest for /v1/pair whose deviceId is not \"pairing\"",
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "bad pairing request"
+        },
+        "status" : 400
+      }
+    },
+    {
+      "name" : "pair-no-invite",
+      "request" : {
+        "body" : "a valid pairing SealedRequest while no invite is active",
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "no active pairing code"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "pair-wrong-token",
+      "note" : "Counts toward the failure budget of 5.",
+      "request" : {
+        "body" : "a pairing SealedRequest carrying the wrong token",
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "pair-wrong-signer",
+      "request" : {
+        "body" : "a pairing SealedRequest signed by a key other than devicePublicKey",
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "pair",
+      "note" : "Registers the device and consumes the invite.",
+      "request" : {
+        "body" : "a valid pairing SealedRequest (see secure-channel/chacha20poly1305-pair-request.json)",
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : "a SealedResponse (see secure-channel/*-response.json)",
+        "status" : 200
+      }
+    },
+    {
+      "name" : "pair-replayed",
+      "note" : "The invite is gone, which is checked before the replay cache.",
+      "request" : {
+        "body" : "the same pairing SealedRequest again",
+        "method" : "POST",
+        "path" : "/v1/pair",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "no active pairing code"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "name" : "rpc-undecodable",
+      "request" : {
+        "body" : "not json",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "bad request"
+        },
+        "status" : 400
+      }
+    },
+    {
+      "name" : "rpc-stale",
+      "request" : {
+        "body" : "an RPC SealedRequest timestamped 121 seconds before the host clock",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "bad request"
+        },
+        "status" : 400
+      }
+    },
+    {
+      "name" : "rpc-unknown-device",
+      "request" : {
+        "body" : "an RPC SealedRequest from a device that is not paired",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "unknown device"
+        },
+        "status" : 401
+      }
+    },
+    {
+      "name" : "rpc-bad-signature",
+      "request" : {
+        "body" : "an RPC SealedRequest for the paired device, signed by another key",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "signature failed"
+        },
+        "status" : 401
+      }
+    },
+    {
+      "name" : "rpc-undecryptable",
+      "request" : {
+        "body" : "an RPC SealedRequest correctly signed but encrypted to a different host key",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "undecryptable request"
+        },
+        "status" : 400
+      }
+    },
+    {
+      "name" : "rpc",
+      "request" : {
+        "body" : "a valid RPC SealedRequest from the paired device",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : "a SealedResponse (see secure-channel/*-response.json)",
+        "status" : 200
+      }
+    },
+    {
+      "name" : "rpc-replayed",
+      "request" : {
+        "body" : "the same RPC SealedRequest again",
+        "method" : "POST",
+        "path" : "/v1/rpc",
+        "peer" : "100.64.0.9"
+      },
+      "response" : {
+        "body" : {
+          "error" : "replay"
+        },
+        "status" : 409
+      }
+    }
+  ],
+  "description" : "Remote API responses for each condition in protocol/README.md (Errors and status codes), in order against one host with the clock at 1792500000. `peer` is the connection's address. Sealed bodies are described, not embedded, because signatures are randomized."
+}

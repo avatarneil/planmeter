@@ -1,0 +1,14 @@
+{
+  "description" : "The browser pairing link: the invite's server key (base64url), token, expiry (Unix seconds), and server name in the URL fragment, on the HTTPS origin when Tailscale Serve is on, else loopback. Same invite as `inviteUrl`.",
+  "inviteUrl" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&n=Ada%E2%80%99s%20MacBook%20Pro&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300",
+  "links" : [
+    {
+      "origin" : "https://ada-mbp.tail1234.ts.net/",
+      "url" : "https://ada-mbp.tail1234.ts.net/#k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300&n=Ada%E2%80%99s%20MacBook%20Pro"
+    },
+    {
+      "origin" : "http://127.0.0.1:7787/",
+      "url" : "http://127.0.0.1:7787/#k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300&n=Ada%E2%80%99s%20MacBook%20Pro"
+    }
+  ]
+}

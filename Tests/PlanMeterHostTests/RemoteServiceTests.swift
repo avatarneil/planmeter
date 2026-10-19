@@ -119,6 +119,8 @@ final class RemoteServiceTests: XCTestCase {
         XCTAssertEqual(forwardedTailnet.status, 200)
         let spoofed = await service.handle(HTTPRequest(method: "GET", path: RemoteClient.infoPath, headers: ["x-forwarded-for": "127.0.0.1"], remoteHost: "203.0.113.5"))
         XCTAssertEqual(spoofed.status, 403, "a remote peer cannot claim to be loopback")
+        let capitalized = await service.handle(HTTPRequest(method: "GET", path: RemoteClient.infoPath, headers: ["X-Forwarded-For": "203.0.113.5"], remoteHost: "127.0.0.1"))
+        XCTAssertEqual(capitalized.status, 403, "header names are case-insensitive")
     }
 
     func testRoutingAndMethods() async {

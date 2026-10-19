@@ -14,10 +14,11 @@ public struct HTTPRequest: Sendable {
     /// Numeric peer address for TCP, or "unix" for a Unix domain socket.
     public var remoteHost: String
 
+    /// Header names are lowercased, as the parser delivers them.
     public init(method: String, path: String, headers: [String: String] = [:], body: Data = Data(), remoteHost: String) {
         self.method = method
         self.path = path
-        self.headers = headers
+        self.headers = Dictionary(headers.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { _, last in last })
         self.body = body
         self.remoteHost = remoteHost
     }

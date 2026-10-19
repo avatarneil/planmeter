@@ -1,0 +1,245 @@
+{
+  "cases" : [
+    {
+      "after" : {
+        "inviteActive" : false,
+        "pairFailures" : 0
+      },
+      "name" : "no-invite",
+      "note" : "No unexpired invite.",
+      "request" : {
+        "body" : {
+          "code" : "12345678"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "no active pairing code"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 0
+      },
+      "name" : "exact-code",
+      "note" : "The offer: standard base64 key, the invite token, integer Unix expiry. Claiming does not consume the invite.",
+      "request" : {
+        "body" : {
+          "code" : "12345678"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "expiresAt" : 1792500300,
+          "serverName" : "Ada’s MacBook Pro",
+          "serverPublicKey" : "BIXc/xHxf7Pu7LIgjiAFH3cfSP+ht0rsbdrmIcoMXAj90RsLyfpuBqH+rOYoCYrdM8XC1k9UdvaNI5woRxONL4g=",
+          "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+        },
+        "status" : 200
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 0
+      },
+      "name" : "spaced-code",
+      "note" : "Non-digits are stripped.",
+      "request" : {
+        "body" : {
+          "code" : "1234 5678"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "expiresAt" : 1792500300,
+          "serverName" : "Ada’s MacBook Pro",
+          "serverPublicKey" : "BIXc/xHxf7Pu7LIgjiAFH3cfSP+ht0rsbdrmIcoMXAj90RsLyfpuBqH+rOYoCYrdM8XC1k9UdvaNI5woRxONL4g=",
+          "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+        },
+        "status" : 200
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 0
+      },
+      "name" : "dashed-code",
+      "note" : "Non-digits are stripped.",
+      "request" : {
+        "body" : {
+          "code" : "1234-5678"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "expiresAt" : 1792500300,
+          "serverName" : "Ada’s MacBook Pro",
+          "serverPublicKey" : "BIXc/xHxf7Pu7LIgjiAFH3cfSP+ht0rsbdrmIcoMXAj90RsLyfpuBqH+rOYoCYrdM8XC1k9UdvaNI5woRxONL4g=",
+          "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+        },
+        "status" : 200
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 1
+      },
+      "name" : "wrong-code",
+      "note" : "Counts toward the invite's failure budget of 5.",
+      "request" : {
+        "body" : {
+          "code" : "87654321"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 2
+      },
+      "name" : "seven-digits",
+      "note" : "Exactly 8 digits are required.",
+      "request" : {
+        "body" : {
+          "code" : "1234567"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 3
+      },
+      "name" : "invalid-json",
+      "note" : "Counts as a failure.",
+      "request" : {
+        "body" : "not json",
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : true,
+        "pairFailures" : 4
+      },
+      "name" : "missing-code",
+      "note" : "Counts as a failure.",
+      "request" : {
+        "body" : {
+
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : false,
+        "pairFailures" : 5
+      },
+      "name" : "fifth-failure",
+      "note" : "The fifth failure cancels the invite and its code.",
+      "request" : {
+        "body" : {
+          "code" : "00000000"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "pairing rejected"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : false,
+        "pairFailures" : 5
+      },
+      "name" : "after-cancel",
+      "note" : "The right code no longer works.",
+      "request" : {
+        "body" : {
+          "code" : "12345678"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "no active pairing code"
+        },
+        "status" : 403
+      }
+    },
+    {
+      "after" : {
+        "inviteActive" : false,
+        "pairFailures" : 0
+      },
+      "name" : "expired",
+      "note" : "Invites expire 300 seconds after they are issued.",
+      "request" : {
+        "body" : {
+          "code" : "12345678"
+        },
+        "method" : "POST",
+        "path" : "/v1/web-pairing-invite"
+      },
+      "response" : {
+        "body" : {
+          "error" : "no active pairing code"
+        },
+        "status" : 403
+      }
+    }
+  ],
+  "description" : "POST /v1/web-pairing-invite, in order against one host with the clock at 1792500000; the web code is 12345678 and the invite expires at 1792500300. `after` is the host state following each request.",
+  "serverPublicKey" : "BIXc/xHxf7Pu7LIgjiAFH3cfSP+ht0rsbdrmIcoMXAj90RsLyfpuBqH+rOYoCYrdM8XC1k9UdvaNI5woRxONL4g=",
+  "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+}
