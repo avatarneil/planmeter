@@ -1,0 +1,166 @@
+# PlanMeter for Android
+
+A native Android companion for PlanMeter, written in Kotlin with Jetpack
+Compose and Material 3. It reads AI coding-agent usage from PlanMeter on your
+Mac (or a Linux host running `planmeterd`) over Tailscale, using the same
+end-to-end encrypted protocol as the iPhone app. There is no iCloud mode.
+
+- Dashboard: range picker (1h, Today/24h, 7d, 30d, 90d), spend and today's
+  spend, tokens, cached share and cache savings, Personal/Work/Other cards with
+  accounts, a stacked per-account cost chart with bucket sizes and
+  tap-to-inspect, models, Codex limits, and accounts and sources.
+- Refreshes every 30 seconds while open, plus pull to refresh.
+- A home-screen widget with today's spend and the Personal/Work split.
+- Optional fingerprint, face, or screen-lock protection.
+- Two-pane layout on tablets and foldables, dynamic color on Android 12+,
+  light and dark themes.
+
+Requires Android 9 (API 28) or later, because the protocol's
+ChaCha20-Poly1305 cipher is a platform API from API 28.
+
+## Build
+
+Everything builds in Docker; the host needs no JDK or Android SDK.
+
+```sh
+android/scripts/docker-gradle.sh                    # tests, lint, and the debug APK
+android/scripts/docker-gradle.sh :app:assembleDebug # just the APK
+```
+
+The script runs `eclipse-temurin:21-jdk-noble` as `linux/amd64` (Android's
+`aapt2` has no linux-arm64 build, so Apple silicon runs it under Rosetta or
+QEMU). The Android SDK goes in the `planmeter-android-sdk` volume, the Gradle
+cache in `planmeter-android-gradle`, and `~/.android` (with the debug signing
+key, so rebuilt APKs install over earlier ones) in `planmeter-android-home`.
+Only the first run downloads anything. `scripts/ensure-android-sdk.sh` installs the command-line tools, accepts
+the licenses, and installs the platform and build tools.
+
+With a local JDK 21 and Android SDK (as in CI), run Gradle directly:
+
+```sh
+cd android
+ANDROID_HOME=… scripts/ensure-android-sdk.sh
+./gradlew :protocol:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. CI uploads it
+as the `planmeter-android-debug` artifact.
+
+## Install (sideload)
+
+Two APKs, both signed with the local debug key (there is no Play Store listing):
+
+| Task | APK | Size |
+| --- | --- | --- |
+| `:app:assembleRelease` | `android/app/build/outputs/apk/release/app-release.apk` | about 6 MB, R8-minified |
+| `:app:assembleDebug` | `android/app/build/outputs/apk/debug/app-debug.apk` | about 50 MB, debuggable |
+
+- With USB debugging: `adb install -r <apk>`
+- Without a computer: copy the APK to the phone and open it. Android asks you to
+  allow installs from that app (Files, Drive, a browser) the first time.
+
+Debug builds also allow loopback and the emulator's `10.0.2.2` host alias (see
+Security); release builds talk only to tailnet addresses.
+
+The release APK is signed with the debug key for personal sideloading only. That
+key has a well-known password and sits in the `planmeter-android-home` volume (or
+`~/.android`), and anyone holding it could ship an update that inherits the app's
+identity, including its Keystore device key. Give `release` its own signing
+config and key before distributing a build to anyone else.
+
+## Pair
+
+1. Install [Tailscale](https://tailscale.com/download/android) on the phone and
+   sign in to the same tailnet as your computer.
+2. On the computer, open PlanMeter → Remote, turn on remote access, and create
+   a pairing code.
+3. In the app, scan the QR code. You can also open the `planmeter://pair?…`
+   link on the phone, or paste it into the app.
+
+Codes are single use and expire after five minutes. If pairing fails, the app
+says why: an expired or used code, a host that rejected the code, or a host it
+could not reach (usually Tailscale is off on one side, or the computer is
+asleep).
+
+To unpair, use Settings → Unpair, then revoke the phone on the computer
+(PlanMeter → Remote → Paired devices) so its key can never reconnect.
+
+## Widget and background refresh
+
+The AI spend widget shows today's spend, the Personal/Work split, and when it
+was last updated. After 15 minutes, or after midnight, it asks you to open the
+app instead of showing an old total as today's. It refreshes after every fetch
+in the app and from a WorkManager job every 15 minutes (the platform minimum;
+Android may defer it). The job only runs while a widget is placed. Because that
+job can be deferred for hours, a non-waking alarm redraws the widget when its
+total expires (or as soon as the phone is next awake), and a clock or time-zone
+change redraws it too. As on the iPhone, background refresh pauses while the app
+lock is on.
+
+## Security
+
+- The device key is a P-256 signing key in the Android Keystore, in StrongBox
+  when the phone has a secure element and in the TEE otherwise. It never leaves
+  the keystore. Settings shows where it lives.
+- Each request uses a fresh ephemeral ECDH key, is sealed with
+  ChaCha20-Poly1305 to the host key pinned at pairing, and is signed by the
+  device key.
+- The pairing record (host, port, name, pinned server key, device id) is in
+  DataStore. Nothing is backed up or moved to a new phone
+  (`allowBackup="false"`, `dataExtractionRules`), because the Keystore key
+  cannot move either.
+- Cleartext HTTP. The host listens on its tailnet address with plain HTTP
+  (port 7787 by default); the transport is WireGuard and every payload is
+  encrypted end to end. A network security config can match host names but
+  not IP ranges, and pairing links may carry a raw `100.x.y.z` address, so
+  cleartext cannot be limited to the tailnet in
+  `res/xml/network_security_config.xml`. It is narrowed in code instead:
+  `HostPolicy.tailnetOnly` refuses any host that does not resolve into
+  100.64.0.0/10 or fd7a:115c:a1e0::/48 before sending a request, and any
+  host that is not a plain host name or IP literal. Debug builds also allow
+  loopback and `10.0.2.2`, for the emulator. The app has no other HTTP client,
+  no WebView, and no third-party SDKs.
+- A `planmeter://pair` link opened from outside the app always asks first,
+  showing the host's address and key fingerprint, and waits until the app is
+  unlocked. Codes scanned or pasted on the pairing screen pair directly.
+- With the app lock on, the app is hidden from the recents thumbnail
+  (`FLAG_SECURE` before Android 13, which also blocks screenshots).
+
+## Development
+
+| Module | Contents |
+| --- | --- |
+| `protocol` | Pure Kotlin/JVM: wire models (kotlinx.serialization), pairing links, `SecureChannel`, and an `HttpURLConnection` `RemoteClient`. Platform JCA only. |
+| `app` | Compose UI, Keystore signer, DataStore, Glance widget, WorkManager job. |
+| `interop` | A SwiftPM harness that checks the Kotlin protocol against `Sources/PlanMeterRemote`. See [interop/README.md](interop/README.md). |
+
+Protocol notes:
+
+- Signatures are raw `r || s` (64 bytes) on the wire, as CryptoKit produces;
+  JCA and the Keystore use DER, so `EcdsaSignature` converts both ways.
+- The cipher is `ChaCha20/Poly1305/NoPadding` on Android and
+  `ChaCha20-Poly1305` on desktop JVMs; `Aead` tries both, so the protocol tests
+  run on the JVM.
+- JSON follows Swift's `JSONEncoder` as `RemoteJSON` configures it: standard
+  padded base64 for `Data`, ISO-8601 dates without fractional seconds (decoding
+  also accepts fractions and offsets), nil optionals omitted, sorted keys.
+  Swift's `Int` is 64-bit, so token counts are `Long`.
+
+Tests:
+
+- `:protocol:test` checks the shared golden fixtures in `protocol/fixtures`
+  (every intermediate for both ciphers, negative vectors, invites, device ids,
+  replies), the channel itself (RFC 5869 and RFC 8439 vectors, tampering, DER
+  edge cases), pairing links, JSON, Swift-generated vectors, and an end-to-end
+  client against `TestHost`, a Kotlin port of the host's handlers.
+- `:app:testDebugUnitTest` runs Robolectric tests: the view model paired with
+  `TestHost` over real HTTP (pairing, requests, the older-host fallback,
+  persistence, revocation, unpairing, and pairing errors), request selection,
+  widget staleness, chart axes, formatting, and every screen.
+- `:app:recordRoborazziDebug` writes screenshots of the dashboard (phone and
+  tablet, light and dark), pairing, settings, lock screen, and widget to
+  `app/build/outputs/roborazzi`.
+
+To try the app in the emulator against a Mac on the same machine: PlanMeter
+also listens on `127.0.0.1`, which the emulator reaches as `10.0.2.2`. Replace
+`h=…` in the pairing link with `h=10.0.2.2` and paste it into a debug build.

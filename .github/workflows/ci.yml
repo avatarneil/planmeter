@@ -101,3 +101,37 @@ jobs:
         run: >-
           desktop-file-validate data/com.neilgoldader.PlanMeter.desktop &&
           appstreamcli validate --no-net data/com.neilgoldader.PlanMeter.metainfo.xml
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: scripts/ensure-android-sdk.sh
+
+      - name: Test, lint, and build the Android app
+        run: ./gradlew --console=plain :protocol:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: planmeter-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
