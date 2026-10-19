@@ -2,6 +2,7 @@
 //! same Unix socket with synthetic usage, so the GTK app can run anywhere.
 //!
 //!     mock-planmeterd [--socket PATH] [--delay-ms N] [--auto-pair SECS] [--rpc-error TEXT]
+//!                     [--remote-message TEXT]
 
 use planmeter::client::default_socket_path;
 use planmeter::mock::{serve, MockDaemon};
@@ -12,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 fn usage() -> ! {
-    eprintln!("usage: mock-planmeterd [--socket PATH] [--delay-ms N] [--auto-pair SECS] [--rpc-error TEXT]");
+    eprintln!("usage: mock-planmeterd [--socket PATH] [--delay-ms N] [--auto-pair SECS] [--rpc-error TEXT] [--remote-message TEXT]");
     std::process::exit(2)
 }
 
@@ -21,6 +22,7 @@ fn main() {
     let mut delay = Duration::ZERO;
     let mut auto_pair = None;
     let mut rpc_error = None;
+    let mut remote_message = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = || args.next().unwrap_or_else(|| usage());
@@ -31,6 +33,7 @@ fn main() {
             }
             "--auto-pair" => auto_pair = Some(value().parse().unwrap_or_else(|_| usage())),
             "--rpc-error" => rpc_error = Some(value()),
+            "--remote-message" => remote_message = Some(value()),
             "-h" | "--help" => usage(),
             _ => usage(),
         }
@@ -62,6 +65,7 @@ fn main() {
     let mut daemon = MockDaemon::new(chrono::Utc::now());
     daemon.auto_pair_after = auto_pair;
     daemon.rpc_error = rpc_error;
+    daemon.remote.message = remote_message;
     eprintln!("mock-planmeterd: listening on {}", socket.display());
     serve(listener, Arc::new(Mutex::new(daemon)), delay);
 }

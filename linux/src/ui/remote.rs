@@ -244,7 +244,7 @@ impl RemotePage {
                     let last = p.last.borrow();
                     let Some(r) = last.as_ref() else { return };
                     match which {
-                        0 => r.tailscale.address.clone(),
+                        0 => r.tailnet_address(),
                         1 => r.tailscale.dns_name.clone(),
                         _ => r.https.url.clone(),
                     }
@@ -270,7 +270,7 @@ impl RemotePage {
         self.updating.set(true);
 
         self.enabled_row.set_active(r.enabled);
-        self.enabled_row.set_subtitle(&r.status);
+        self.enabled_row.set_subtitle(&r.summary());
         set_class(
             &self.status_dot,
             &["ok", "warning"],
@@ -283,15 +283,17 @@ impl RemotePage {
             },
         );
         self.tailscale_row.set_visible(!r.tailscale.available);
-        let address = r
-            .tailscale
-            .address
-            .clone()
-            .or_else(|| r.bind_addresses.first().cloned());
+        let address = r.tailnet_address();
         self.address_row.set_visible(address.is_some());
         self.address_row.set_subtitle(
             &address
-                .map(|a| format!("{a}:{}", r.port))
+                .map(|a| {
+                    if a.contains(':') {
+                        format!("[{a}]:{}", r.port)
+                    } else {
+                        format!("{a}:{}", r.port)
+                    }
+                })
                 .unwrap_or_default(),
         );
         self.dns_row.set_visible(r.tailscale.dns_name.is_some());

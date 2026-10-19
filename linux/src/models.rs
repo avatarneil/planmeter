@@ -752,7 +752,10 @@ impl Default for RemoteInvite {
 pub struct RemoteStatus {
     pub enabled: bool,
     pub port: i64,
+    /// `off`, `listening`, `unavailable` (no tailnet address), or `error`.
     pub status: String,
+    /// Why, for anything but a plain `off` or `listening`.
+    pub message: Option<String>,
     pub bind_addresses: Vec<String>,
     pub tailscale: TailscaleStatus,
     pub https: HttpsStatus,
@@ -766,7 +769,8 @@ impl Default for RemoteStatus {
         Self {
             enabled: false,
             port: 7787,
-            status: "Off".into(),
+            status: "off".into(),
+            message: None,
             bind_addresses: Vec::new(),
             tailscale: TailscaleStatus::default(),
             https: HttpsStatus::default(),
@@ -781,6 +785,46 @@ impl RemoteStatus {
     /// Listening on the tailnet, so a pairing code can be issued.
     pub fn is_listening(&self) -> bool {
         self.enabled && !self.bind_addresses.is_empty()
+    }
+
+    /// One line for the Remote Access switch: the state, then the daemon's
+    /// explanation when it has one.
+    pub fn summary(&self) -> String {
+        let message = self
+            .message
+            .as_deref()
+            .map(str::trim)
+            .filter(|m| !m.is_empty());
+        let state = match self.status.as_str() {
+            "off" => "Off".to_string(),
+            "listening" => format!("Listening on port {}", self.port),
+            "unavailable" => "Unavailable".to_string(),
+            "error" => "Couldn’t start".to_string(),
+            "" if self.enabled => "On".to_string(),
+            "" => "Off".to_string(),
+            other => other.to_string(),
+        };
+        match message {
+            // The daemon's error message already says what failed.
+            Some(m) if self.status == "error" => m.to_string(),
+            Some(m) => format!("{state} · {m}"),
+            None => state,
+        }
+    }
+
+    /// The address to show as the tailnet address: Tailscale's own, else the
+    /// first bound address that is not loopback.
+    pub fn tailnet_address(&self) -> Option<String> {
+        self.tailscale.address.clone().or_else(|| {
+            self.bind_addresses
+                .iter()
+                .find(|a| {
+                    a.parse::<std::net::IpAddr>()
+                        .map(|ip| !ip.is_loopback())
+                        .unwrap_or(a.as_str() != "localhost")
+                })
+                .cloned()
+        })
     }
 }
 
@@ -924,6 +968,38 @@ mod tests {
         assert!(timeline.rebucketed("day").is_none());
         assert!(RemoteTimeline::coarsens("minute", "15m"));
         assert!(!RemoteTimeline::coarsens("hour", "15m"));
+    }
+
+    #[test]
+    fn remote_status_summary_and_address() {
+        let mut r = RemoteStatus {
+            enabled: true,
+            status: "listening".into(),
+            bind_addresses: vec!["127.0.0.1".into()],
+            ..Default::default()
+        };
+        assert_eq!(r.summary(), "Listening on port 7787");
+        // Loopback is never shown as the tailnet address.
+        assert_eq!(r.tailnet_address(), None);
+        r.bind_addresses = vec!["127.0.0.1".into(), "::1".into(), "100.64.0.7".into()];
+        assert_eq!(r.tailnet_address().as_deref(), Some("100.64.0.7"));
+        r.tailscale.address = Some("100.64.0.9".into());
+        assert_eq!(r.tailnet_address().as_deref(), Some("100.64.0.9"));
+
+        r.message = Some("Tailscale is not connected; listening on loopback only.".into());
+        assert_eq!(
+            r.summary(),
+            "Listening on port 7787 · Tailscale is not connected; listening on loopback only."
+        );
+        r.status = "error".into();
+        r.message = Some("Could not start: address in use".into());
+        assert_eq!(r.summary(), "Could not start: address in use");
+        r.message = Some("  ".into());
+        assert_eq!(r.summary(), "Couldn’t start");
+        r.status = "unavailable".into();
+        r.message = None;
+        assert_eq!(r.summary(), "Unavailable");
+        assert_eq!(RemoteStatus::default().summary(), "Off");
     }
 
     #[test]
