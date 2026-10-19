@@ -192,6 +192,7 @@ object FakeData {
     }
 
     fun data(range: MobileRange = MobileRange.MONTH, granularity: String = range.defaultGranularity) = DashboardData(
+        range = range,
         summary = summary(range),
         timeline = timeline(range, granularity),
         limits = limits,

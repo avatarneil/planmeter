@@ -213,7 +213,7 @@ private class DashboardSections(
             item { EmptyState(state, onRefresh) }
             return
         }
-        item(key = "hero") { HeroCard(data.summary, state.range) }
+        item(key = "hero") { HeroCard(data.summary, data.range) }
         for (group in data.summary.groups) {
             item(key = "group-${group.group}") { GroupCard(group, data.summary.total, colors) }
         }

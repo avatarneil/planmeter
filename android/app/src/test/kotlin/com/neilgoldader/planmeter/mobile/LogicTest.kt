@@ -153,7 +153,8 @@ class LogicTest {
         val (step, ticks) = model.xTicks(maxLabels = 5)
         assertEquals(360L, step)
         assertEquals(listOf(0, 6, 12, 18, 24).map { start.plusSeconds(it * 3600L) }, ticks)
-        assertEquals("6 AM", model.tickLabel(start.plusSeconds(6 * 3600), step, Locale.US))
+        // ICU separates the day period with a narrow no-break space on Android 14 and later.
+        assertEquals("6 AM", model.tickLabel(start.plusSeconds(6 * 3600), step, Locale.US).replace('\u202F', ' '))
         assertTrue(model.hasBaseline)
     }
 
