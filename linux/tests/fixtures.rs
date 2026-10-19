@@ -281,8 +281,20 @@ fn every_control_fixture_decodes() {
                 "settings"
             }
             ["v1", "remote", ..] => {
+                let message = body.get("message").cloned();
                 let r: RemoteStatus =
                     serde_json::from_value(body).unwrap_or_else(|e| panic!("{name}: {e}"));
+                assert!(message.is_some(), "{name}: remote status without message");
+                assert_eq!(
+                    r.message.as_deref(),
+                    message.as_ref().and_then(Value::as_str),
+                    "{name}: message"
+                );
+                assert!(
+                    ["off", "listening", "unavailable", "error"].contains(&r.status.as_str()),
+                    "{name}: status {}",
+                    r.status
+                );
                 if let Some(invite) = &r.invite {
                     assert!(
                         invite.url.starts_with("planmeter://pair?"),

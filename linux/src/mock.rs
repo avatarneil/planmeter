@@ -373,6 +373,7 @@ impl MockDaemon {
             enabled: true,
             port: 7787,
             status: String::new(),
+            message: None,
             bind_addresses: vec![],
             tailscale: TailscaleStatus {
                 available: true,
@@ -409,10 +410,10 @@ impl MockDaemon {
         let address = self.remote.tailscale.address.clone().unwrap_or_default();
         if self.remote.enabled {
             self.remote.bind_addresses = vec![address.clone()];
-            self.remote.status = format!("Listening on {address}:{}", self.remote.port);
+            self.remote.status = "listening".into();
         } else {
             self.remote.bind_addresses.clear();
-            self.remote.status = "Off".into();
+            self.remote.status = "off".into();
             self.remote.invite = None;
         }
         let dns = self.remote.tailscale.dns_name.clone().unwrap_or_default();
@@ -1227,7 +1228,7 @@ mod tests {
         d.route("POST", "/v1/remote/invite", b"", Utc::now());
         let (_, body) = d.route("PUT", "/v1/remote", br#"{"enabled":false}"#, Utc::now());
         let remote: RemoteStatus = serde_json::from_slice(&body).unwrap();
-        assert!(remote.invite.is_none() && remote.status == "Off");
+        assert!(remote.invite.is_none() && remote.status == "off");
         assert_eq!(d.route("POST", "/v1/remote/invite", b"", Utc::now()).0, 409);
     }
 
