@@ -1,3 +1,5 @@
+// CloudKit sync is Apple-only; other platforms compile this file out.
+#if canImport(CloudKit)
 import CloudKit
 import Foundation
 #if os(macOS)
@@ -109,3 +111,4 @@ public struct CloudSnapshotStore {
         catch let error as CKError where error.code == .unknownItem { return }
     }
 }
+#endif

@@ -45,3 +45,21 @@ jobs:
           -archivePath "$RUNNER_TEMP/PlanMeter.xcarchive"
           CODE_SIGNING_ALLOWED=NO
           archive
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container: swift:6.2-noble
+
+    steps:
+      - name: Install system libraries
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends libsqlite3-dev python3
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build portable targets
+        run: swift build
+
+      - name: Run Swift tests
+        run: swift test

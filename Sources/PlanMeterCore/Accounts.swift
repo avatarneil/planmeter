@@ -51,7 +51,7 @@ public struct Discovery: Sendable {
 public enum AccountDiscovery {
     public static func discover(settings: T3Settings?, environment: [String: String] = ProcessInfo.processInfo.environment) -> Discovery {
         var result = Discovery()
-        let home = NSHomeDirectory()
+        let home = PlanMeterPaths.homeDirectory(environment: environment)
         let instances = settings?.instances ?? []
         let usesT3Configuration = !instances.isEmpty
 

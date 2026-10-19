@@ -1,4 +1,4 @@
-.PHONY: build check-version test app signed-app release-macos run install install-mcp clean
+.PHONY: build check-version test linux-build linux-test app signed-app release-macos run install install-mcp clean
 
 build:
 	swift build
@@ -8,6 +8,14 @@ check-version:
 
 test: check-version
 	swift test
+
+# Portable targets on Linux, in Docker (swift:6.2-noble). Build products stay
+# in the planmeter-linux-build volume, separate from the macOS .build.
+linux-build:
+	./scripts/linux/run.sh build
+
+linux-test:
+	./scripts/linux/run.sh test
 
 app:
 	./scripts/bundle.sh

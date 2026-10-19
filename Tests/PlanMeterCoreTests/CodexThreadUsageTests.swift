@@ -78,7 +78,7 @@ final class CodexThreadUsageTests: XCTestCase {
     }
 
     func testLifetimeServiceUsageNeverChangesDailyReconciliationOrSpend() throws {
-        let old = AccountUsageTests()
+        let old = AccountUsageTests.fixture()
         var snapshot = old.snapshot()
         snapshot.serviceThreads = [try XCTUnwrap(CodexThreadUsage.decode(fixture(), reference: CodexThreadReference(id: dot, origin: "cloud")))]
         let row = UsageCoverage.reconcile([snapshot], entries: [old.entry()], rates: RateTable(), days: 1, now: old.now)[0]

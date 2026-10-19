@@ -40,7 +40,7 @@ public actor ScanCache {
     var dirty = false
     var lastSaved = Date.distantPast
 
-    public init(url: URL = AppPaths.supportDirectory().appendingPathComponent("scan-cache.json")) {
+    public init(url: URL = PlanMeterPaths.stateDirectory().appendingPathComponent("scan-cache.json")) {
         self.url = url
     }
 
