@@ -111,6 +111,8 @@ public final class HostEngine: RemoteReportSource {
     private let loader: Loader
     private let cache: ScanCache
     private var scanTask: Task<Void, Never>?
+    /// Whether `scanTask` reads account-wide usage afresh.
+    private var scanIsForced = false
     private var nextPricingRefresh = Date.distantPast
     private var loops: [Task<Void, Never>] = []
     private var started = false
@@ -165,14 +167,20 @@ public final class HostEngine: RemoteReportSource {
         if let running = scanTask {
             await running.value
             guard forceAccountUsage else { return }
-            // Another caller may have started the next pass meanwhile.
-            if let next = scanTask { await next.value; return }
+            // Another caller may have started the next pass meanwhile. Join
+            // it when it is forced too; otherwise wait it out and run ours.
+            while let next = scanTask {
+                let joinsForcedPass = scanIsForced
+                await next.value
+                if joinsForcedPass { return }
+            }
         }
         let task = Task {
             await self.performRefresh(forceAccountUsage: forceAccountUsage)
             self.scanTask = nil
         }
         scanTask = task
+        scanIsForced = forceAccountUsage
         await task.value
     }
 

@@ -61,11 +61,51 @@ final class HostEngineTests: XCTestCase {
         _ = await (a, b, c)
         XCTAssertEqual(gate.count, 1)
         XCTAssertFalse(engine.isScanning)
-        // Forcing account-wide readings runs one more pass after the current one.
-        async let d: Void = engine.refresh()
-        async let e: Void = engine.refresh(forceAccountUsage: true)
-        _ = await (d, e)
+        // Forcing account-wide readings runs one more pass after the current
+        // one. Start the unforced pass first: `async let` children may start
+        // in either order, and a forced pass that happens to go first
+        // satisfies the unforced call by itself.
+        let d = Task { await engine.refresh() }
+        while gate.count < 2 { try await Task.sleep(nanoseconds: 1_000_000) }
+        await engine.refresh(forceAccountUsage: true)
+        await d.value
         XCTAssertEqual(gate.count, 3)
+    }
+
+    /// A forced refresh may find that someone else (the 30-second loop, an
+    /// RPC) started the next pass first; joining it is only enough when it is
+    /// forced too.
+    func testForcedRefreshAlwaysGetsAForcedPass() async throws {
+        final class Passes: @unchecked Sendable {
+            private let lock = NSLock()
+            private var _forced = 0
+            var forced: Int { lock.lock(); defer { lock.unlock() }; return _forced }
+            func record(_ force: Bool) { lock.lock(); if force { _forced += 1 }; lock.unlock() }
+        }
+        let gate = ScanGate()
+        let passes = Passes()
+        let dir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var loader = HostEngine.Loader.fixed(discovery: Discovery(), scan: ScanOutput(scannedAt: Date()), rates: RateTable(source: "cached"))
+        loader.scan = { _, _, _ in
+            gate.hit()
+            try? await Task.sleep(nanoseconds: 5_000_000)
+            return ScanOutput(scannedAt: Date())
+        }
+        loader.accountUsage = { _, force in passes.record(force); return [] }
+        let engine = HostEngine(serverName: "box", scanCache: dir.appendingPathComponent("scan-cache.json"), loader: loader)
+        // Unforced refreshes back to back, so one is usually starting the
+        // moment the previous pass ends.
+        let background = Task { @MainActor in
+            while !Task.isCancelled { await engine.refresh() }
+        }
+        for round in 0..<10 {
+            let before = passes.forced
+            await engine.refresh(forceAccountUsage: true)
+            XCTAssertGreaterThan(passes.forced, before, "round \(round)")
+        }
+        background.cancel()
+        await background.value
     }
 
     func testRepliesWaitForTheFirstScan() async throws {
