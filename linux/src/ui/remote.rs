@@ -520,11 +520,7 @@ impl RemotePage {
 
     fn device_subtitle(device: &PairedDevice) -> String {
         let now = Utc::now();
-        let platform = if device.platform.eq_ignore_ascii_case("web") {
-            "Web browser".to_string()
-        } else {
-            device.platform.clone()
-        };
+        let platform = format::platform_name(&device.platform);
         match device.last_seen_at {
             Some(seen) => format!(
                 "{platform} · Last seen {} · {} {}",

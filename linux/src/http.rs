@@ -242,12 +242,13 @@ pub fn read_request(stream: impl Read) -> io::Result<Request> {
     })
 }
 
-/// Percent-encodes one path segment, keeping RFC 3986 `pchar`s like `:`.
+/// Percent-encodes one path segment, keeping only RFC 3986 unreserved
+/// characters, as `planmeterd` does (`codex:plan:work` → `codex%3Aplan%3Awork`).
 pub fn encode_segment(segment: &str) -> String {
     let mut out = String::with_capacity(segment.len());
     for b in segment.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b':' | b'@' => {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
                 out.push(b as char)
             }
             _ => out.push_str(&format!("%{b:02X}")),
@@ -337,7 +338,12 @@ mod tests {
 
     #[test]
     fn path_segments() {
-        assert_eq!(encode_segment("codex:plan:work"), "codex:plan:work");
+        assert_eq!(encode_segment("codex:plan:work"), "codex%3Aplan%3Awork");
+        assert_eq!(
+            encode_segment("claude:home:/home/dev/.claude"),
+            "claude%3Ahome%3A%2Fhome%2Fdev%2F.claude"
+        );
+        assert_eq!(decode_segment("codex%3Aplan%3Awork"), "codex:plan:work");
         assert_eq!(encode_segment("a b/c"), "a%20b%2Fc");
         assert_eq!(decode_segment("a%20b%2Fc"), "a b/c");
         assert_eq!(decode_segment("100%"), "100%");

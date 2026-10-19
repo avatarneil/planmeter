@@ -2,14 +2,22 @@
 //!
 //!     cargo test --test generate_fixtures -- --ignored
 //!
-//! They stand in for the canonical `protocol/fixtures/` until those exist.
+//! They follow the canonical `protocol/fixtures/` layout (a bare `RemoteReply`
+//! per method; a request/response exchange per control endpoint) and stand in
+//! for it in repositories that do not have it.
 
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
+use planmeter::http::encode_segment;
 use planmeter::mock::MockDaemon;
 use planmeter::models::*;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
-fn write(sub: &str, name: &str, value: &serde_json::Value) {
+fn now() -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(2026, 10, 19, 15, 2, 0).unwrap()
+}
+
+fn write(sub: &str, name: &str, value: &Value) {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(sub);
@@ -19,107 +27,161 @@ fn write(sub: &str, name: &str, value: &serde_json::Value) {
     std::fs::write(dir.join(format!("{name}.json")), text).unwrap();
 }
 
-fn route(d: &mut MockDaemon, method: &str, path: &str, body: &str) -> serde_json::Value {
-    let now = Utc.with_ymd_and_hms(2026, 10, 19, 15, 2, 0).unwrap();
-    let (status, bytes) = d.route(method, path, body.as_bytes(), now);
-    assert!(
-        status == 200 || path.contains("missing"),
-        "{method} {path}: {status}"
+/// Sends one request to the mock and records the exchange.
+fn exchange(
+    d: &mut MockDaemon,
+    name: &str,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+) -> Value {
+    let bytes = body
+        .as_ref()
+        .map(|b| serde_json::to_vec(b).unwrap())
+        .unwrap_or_default();
+    let (status, response) = d.route(method, path, &bytes, now());
+    let response: Value = serde_json::from_slice(&response).unwrap();
+    write(
+        "control",
+        name,
+        &json!({
+            "request": { "method": method, "path": path, "body": body },
+            "response": { "status": status, "body": response },
+        }),
     );
-    serde_json::from_slice(&bytes).unwrap()
+    response
+}
+
+fn reply(d: &mut MockDaemon, name: &str, request: RemoteRequest) {
+    let body = serde_json::to_vec(&request).unwrap();
+    let (status, response) = d.route("POST", "/v1/rpc", &body, now());
+    assert_eq!(status, 200, "{name}");
+    write("replies", name, &serde_json::from_slice(&response).unwrap());
+}
+
+fn request(
+    method: RemoteMethod,
+    days: Option<i64>,
+    resolution: Option<&str>,
+    minutes: Option<i64>,
+) -> RemoteRequest {
+    RemoteRequest {
+        method,
+        days,
+        resolution: resolution.map(Into::into),
+        account: None,
+        minutes,
+    }
 }
 
 #[test]
 #[ignore]
 fn regenerate_sample_fixtures() {
-    let now = Utc.with_ymd_and_hms(2026, 10, 19, 15, 2, 0).unwrap();
-    let mut d = MockDaemon::new(now);
-    let rpc = |d: &mut MockDaemon, req: RemoteRequest| {
-        route(d, "POST", "/v1/rpc", &serde_json::to_string(&req).unwrap())
-    };
-    let mut summary = RemoteRequest::new(RemoteMethod::Summary);
-    summary.days = Some(7);
-    write("replies", "summary", &rpc(&mut d, summary.clone()));
-    let mut hour = summary.clone();
-    hour.days = Some(1);
-    hour.minutes = Some(60);
-    write("replies", "summary-last-hour", &rpc(&mut d, hour));
-    let mut timeline = RemoteRequest::new(RemoteMethod::Timeline);
-    timeline.days = Some(1);
-    timeline.resolution = Some("hour".into());
-    write("replies", "timeline", &rpc(&mut d, timeline));
-    let mut weekly = RemoteRequest::new(RemoteMethod::Timeline);
-    weekly.days = Some(7);
-    weekly.resolution = Some("day".into());
-    write("replies", "timeline-week-day", &rpc(&mut d, weekly));
-    let mut models = RemoteRequest::new(RemoteMethod::Models);
-    models.days = Some(7);
-    write("replies", "models", &rpc(&mut d, models));
-    write(
-        "replies",
+    let mut d = MockDaemon::new(now());
+    reply(
+        &mut d,
+        "summary",
+        request(RemoteMethod::Summary, Some(7), None, None),
+    );
+    reply(
+        &mut d,
+        "summary-last-hour",
+        request(RemoteMethod::Summary, Some(1), None, Some(60)),
+    );
+    reply(
+        &mut d,
+        "timeline",
+        request(RemoteMethod::Timeline, Some(1), Some("hour"), None),
+    );
+    reply(
+        &mut d,
+        "timeline-week-day",
+        request(RemoteMethod::Timeline, Some(7), Some("day"), None),
+    );
+    reply(
+        &mut d,
+        "models",
+        request(RemoteMethod::Models, Some(7), None, None),
+    );
+    reply(
+        &mut d,
         "limits",
-        &rpc(&mut d, RemoteRequest::new(RemoteMethod::Limits)),
+        request(RemoteMethod::Limits, None, None, None),
     );
-    write(
-        "replies",
+    reply(
+        &mut d,
         "accounts",
-        &rpc(&mut d, RemoteRequest::new(RemoteMethod::Accounts)),
+        request(RemoteMethod::Accounts, None, None, None),
     );
-    write(
-        "replies",
-        "error",
-        &serde_json::to_value(RemoteReply {
-            error: Some("server not ready".into()),
-            ..Default::default()
-        })
-        .unwrap(),
-    );
+    write("replies", "error", &json!({ "error": "server not ready" }));
 
-    write("control", "status", &route(&mut d, "GET", "/v1/status", ""));
-    write(
-        "control",
-        "refresh",
-        &route(
-            &mut d,
-            "POST",
-            "/v1/refresh",
-            r#"{"forceAccountUsage":true}"#,
-        ),
+    exchange(&mut d, "get-status", "GET", "/v1/status", None);
+    exchange(
+        &mut d,
+        "post-refresh",
+        "POST",
+        "/v1/refresh",
+        Some(json!({ "forceAccountUsage": true })),
     );
-    write(
-        "control",
-        "settings",
-        &route(&mut d, "GET", "/v1/settings", ""),
+    exchange(
+        &mut d,
+        "post-rpc",
+        "POST",
+        "/v1/rpc",
+        Some(json!({ "method": "summary", "days": 1 })),
     );
-    write(
-        "control",
-        "settings-groups",
-        &route(
-            &mut d,
-            "PUT",
-            "/v1/settings/groups/opencode",
-            r#"{"group":"work"}"#,
-        ),
+    exchange(&mut d, "get-settings", "GET", "/v1/settings", None);
+    let groups = format!("/v1/settings/groups/{}", encode_segment("opencode"));
+    exchange(
+        &mut d,
+        "put-settings-groups",
+        "PUT",
+        &groups,
+        Some(json!({ "group": "work" })),
     );
-    write("control", "remote", &route(&mut d, "GET", "/v1/remote", ""));
-    write(
-        "control",
-        "remote-invite",
-        &route(&mut d, "POST", "/v1/remote/invite", ""),
+    exchange(
+        &mut d,
+        "put-settings-spend",
+        "PUT",
+        "/v1/settings/spend",
+        Some(json!({
+            "groups": ["personal", "work"],
+            "thresholds": { "today": { "limit": 60, "warningPercent": 80 }, "week": { "limit": 400, "warningPercent": 75 } },
+        })),
     );
-    write(
-        "control",
-        "remote-device-revoked",
-        &route(
-            &mut d,
-            "DELETE",
-            "/v1/remote/devices/wE9rT6yU3iO0pA7sD4fG1h",
-            "",
-        ),
+    exchange(&mut d, "get-remote", "GET", "/v1/remote", None);
+    exchange(
+        &mut d,
+        "put-remote",
+        "PUT",
+        "/v1/remote",
+        Some(json!({ "enabled": true, "httpsEnabled": true, "port": 7787 })),
     );
-    write(
-        "control",
-        "error-not-found",
-        &route(&mut d, "DELETE", "/v1/remote/devices/missing", ""),
+    exchange(
+        &mut d,
+        "post-remote-invite",
+        "POST",
+        "/v1/remote/invite",
+        None,
+    );
+    exchange(
+        &mut d,
+        "delete-remote-invite",
+        "DELETE",
+        "/v1/remote/invite",
+        None,
+    );
+    let device = format!(
+        "/v1/remote/devices/{}",
+        encode_segment("wE9rT6yU3iO0pA7sD4fG1h")
+    );
+    exchange(&mut d, "delete-remote-device", "DELETE", &device, None);
+    exchange(&mut d, "error-not-found", "GET", "/v1/unknown", None);
+    exchange(
+        &mut d,
+        "error-bad-request",
+        "PUT",
+        "/v1/settings/spend",
+        Some(json!({ "groups": [] })),
     );
 }
