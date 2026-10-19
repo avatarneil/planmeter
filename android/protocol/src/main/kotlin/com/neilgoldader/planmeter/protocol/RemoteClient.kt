@@ -138,7 +138,9 @@ class RemoteClient(
             val stub = PairedServer(invite.serverHost, invite.port, invite.serverName, invite.serverPublicKey, PAIRING_DEVICE_ID, now)
             val data = exchange(invite.serverHost, stub.baseUrl, PAIR_PATH, body, invite.serverPublicKey, PAIRING_DEVICE_ID, signer, settings)
             val response = decode(data) { RemoteJson.decode(PairResponse.serializer(), it) }
-            return PairedServer(invite.serverHost, invite.port, response.serverName, invite.serverPublicKey, response.deviceId, Instant.now())
+            // Whole seconds, as the record is persisted (ISO-8601 without fractions).
+            val pairedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+            return PairedServer(invite.serverHost, invite.port, response.serverName, invite.serverPublicKey, response.deviceId, pairedAt)
         }
 
         fun info(host: String, port: Int, settings: HttpSettings = HttpSettings()): ServerInfo {

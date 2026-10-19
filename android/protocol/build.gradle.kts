@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    // TestHost, a JVM port of the host's handlers, shared with the app's tests.
+    `java-test-fixtures`
 }
 
 kotlin {

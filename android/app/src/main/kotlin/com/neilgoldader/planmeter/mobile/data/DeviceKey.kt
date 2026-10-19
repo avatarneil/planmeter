@@ -25,6 +25,11 @@ enum class KeyStorage(val label: String) {
     UNKNOWN("Android Keystore"),
 }
 
+/** A device signing key and where it is stored. */
+interface SigningIdentity : DeviceSigner {
+    val storage: KeyStorage
+}
+
 /**
  * The phone's identity: a P-256 signing key in the Android Keystore, the
  * counterpart of the iPhone's Secure Enclave key. StrongBox-backed when the
@@ -35,8 +40,8 @@ enum class KeyStorage(val label: String) {
 class KeystoreSigner private constructor(
     private val privateKey: PrivateKey,
     override val publicKeyRaw: ByteArray,
-    val storage: KeyStorage,
-) : DeviceSigner {
+    override val storage: KeyStorage,
+) : SigningIdentity {
     override fun sign(message: ByteArray): ByteArray {
         val signature = Signature.getInstance("SHA256withECDSA")
         signature.initSign(privateKey)

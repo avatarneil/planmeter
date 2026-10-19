@@ -43,12 +43,15 @@ object SeriesPalette {
     }
 }
 
-/** Fallback scheme near the Mac/iOS accents (teal personal, violet work) for Android 11 and below. */
+/**
+ * Fallback scheme for Android 11 and below: a teal accent near the Mac/iOS Personal color, with
+ * neutral teal-grey selection so controls never read as the violet Work group.
+ */
 val PlanMeterLightColors: ColorScheme = lightColorScheme(
     primary = Color(0xFF0E7490), onPrimary = Color.White,
     primaryContainer = Color(0xFFCCF1F8), onPrimaryContainer = Color(0xFF053F4D),
-    secondary = Color(0xFF6D28D9), onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDE7FE), onSecondaryContainer = Color(0xFF2E1065),
+    secondary = Color(0xFF4A6268), onSecondary = Color.White,
+    secondaryContainer = Color(0xFFCDE7ED), onSecondaryContainer = Color(0xFF051F23),
     tertiary = Color(0xFFB45309), onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFDECD3), onTertiaryContainer = Color(0xFF4A2304),
     background = Color(0xFFF3F4F6), onBackground = Color(0xFF191C1F),
@@ -65,8 +68,8 @@ val PlanMeterLightColors: ColorScheme = lightColorScheme(
 val PlanMeterDarkColors: ColorScheme = darkColorScheme(
     primary = Color(0xFF67D4EC), onPrimary = Color(0xFF003641),
     primaryContainer = Color(0xFF0E5566), onPrimaryContainer = Color(0xFFCCF1F8),
-    secondary = Color(0xFFC4B5FD), onSecondary = Color(0xFF2E1065),
-    secondaryContainer = Color(0xFF4C1D95), onSecondaryContainer = Color(0xFFEDE7FE),
+    secondary = Color(0xFFB1CBD1), onSecondary = Color(0xFF1C3438),
+    secondaryContainer = Color(0xFF334B50), onSecondaryContainer = Color(0xFFCDE7ED),
     tertiary = Color(0xFFF6B66B), onTertiary = Color(0xFF4A2304),
     tertiaryContainer = Color(0xFF6B3A0A), onTertiaryContainer = Color(0xFFFDECD3),
     background = Color(0xFF111318), onBackground = Color(0xFFE2E3E6),
