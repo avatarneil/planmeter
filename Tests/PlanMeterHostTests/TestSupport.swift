@@ -164,8 +164,7 @@ extension RemoteController.Environment {
     static func fake(addresses: [String] = ["100.64.0.7"], dnsName: String? = "devbox.tail1234.ts.net",
                      certificateDomain: String? = "devbox.tail1234.ts.net") -> Self {
         Self(
-            tailnetAddresses: { addresses },
-            magicDNSName: { dnsName },
+            tailnet: { .init(addresses: addresses, dnsName: dnsName) },
             tailscaleAvailable: { true },
             certificateStatus: { .init(domain: certificateDomain, message: certificateDomain == nil ? "Tailscale is not connected (Stopped). Connect Tailscale and try again." : nil) },
             serveIsActive: { _ in false },

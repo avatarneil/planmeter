@@ -54,6 +54,37 @@ final class TailscaleServeTests: XCTestCase {
         }
     }
 
+    /// The listener binds what Tailscale reports for this node, not whatever
+    /// interface happens to carry a 100.64.0.0/10 address.
+    func testNodeAddressesComeFromTailscaleStatus() throws {
+        let running = """
+        {"BackendState":"Running","TailscaleIPs":["100.101.102.103"],
+         "Self":{"DNSName":"devbox.tail1234.ts.net.","TailscaleIPs":["fd7a:115c:a1e0::1234","100.101.102.103","10.0.0.4"]}}
+        """
+        let node = try XCTUnwrap(TailscaleInfo.node(fromStatus: .init(ok: true, standardOutput: running)))
+        XCTAssertEqual(node.addresses, ["100.101.102.103", "fd7a:115c:a1e0::1234"], "IPv4 first, tailnet ranges only")
+        XCTAssertEqual(node.dnsName, "devbox.tail1234.ts.net")
+
+        let topLevelOnly = #"{"BackendState":"Running","TailscaleIPs":["100.64.0.9"],"Self":{}}"#
+        XCTAssertEqual(TailscaleInfo.node(fromStatus: .init(ok: true, standardOutput: topLevelOnly))?.addresses, ["100.64.0.9"])
+
+        let stopped = #"{"BackendState":"Stopped","Self":{"DNSName":"devbox.tail1234.ts.net.","TailscaleIPs":["100.101.102.103"]}}"#
+        let down = try XCTUnwrap(TailscaleInfo.node(fromStatus: .init(ok: true, standardOutput: stopped)))
+        XCTAssertEqual(down.addresses, [], "a stopped client has no usable address")
+        XCTAssertEqual(down.dnsName, "devbox.tail1234.ts.net")
+
+        XCTAssertNil(TailscaleInfo.node(fromStatus: .init(ok: false, standardError: "failed to connect to local tailscaled")))
+        XCTAssertNil(TailscaleInfo.node(fromStatus: .init(ok: true, standardOutput: "{}")))
+    }
+
+    func testOnlyTailscaleInterfacesCount() {
+        XCTAssertTrue(TailscaleInfo.isTailscaleInterface("tailscale0"))
+        XCTAssertTrue(TailscaleInfo.isTailscaleInterface("utun4"))
+        XCTAssertFalse(TailscaleInfo.isTailscaleInterface("eth0"))
+        XCTAssertFalse(TailscaleInfo.isTailscaleInterface("en0"))
+        XCTAssertFalse(TailscaleInfo.isTailscaleInterface("cni0"))
+    }
+
     func testLargeDiagnosticsDoNotBlockStatusOutput() {
         let result = TailscaleServe.run([
             "-c", "head -c 262144 /dev/zero >&2; printf '%s' '{}'",

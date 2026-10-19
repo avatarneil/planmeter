@@ -116,8 +116,63 @@ final class POSIXHTTPServerTests: XCTestCase {
     func testStopClosesTheListener() throws {
         let (server, port) = try startTCP()
         server.stop()
-        Thread.sleep(forTimeInterval: 0.2)
+        // No sleep: stop() returns once the socket is closed.
         XCTAssertNil(RawHTTP.connect(.tcp("127.0.0.1", port)).map { fd -> Int32 in posixClose(fd); return fd })
+    }
+
+    /// The daemon rebinds the same address and port as soon as the previous
+    /// listener stops (new tailnet address, HTTPS turned on). That bind used
+    /// to race the accept thread's close and fail with EADDRINUSE.
+    func testStopThenRebindTheSamePortImmediately() throws {
+        let (first, port) = try startTCP()
+        first.stop()
+        for round in 0..<50 {
+            let endpoint = POSIXHTTPServer.Endpoint.tcp(host: "127.0.0.1", port: port)
+            let server = POSIXHTTPServer(endpoints: [endpoint], handler: Self.echo)
+            XCTAssertNoThrow(try server.start(), "round \(round)")
+            if round % 10 == 0 {
+                XCTAssertEqual(RawHTTP.exchange(.tcp("127.0.0.1", port), RawHTTP.request("GET", "/\(round)"))?.status, 200)
+            }
+            server.stop()
+        }
+    }
+
+    func testStoppingTwiceIsSafe() throws {
+        let (server, _) = try startTCP()
+        server.stop()
+        server.stop()
+        XCTAssertNil(server.boundPort(for: .tcp(host: "127.0.0.1", port: 0)))
+    }
+
+    func testOnePeerCannotHoldEveryConnection() throws {
+        var options = POSIXHTTPServer.Options()
+        options.maxConnectionsPerPeer = 2
+        options.peerCapExemptsLoopback = false
+        let (server, port) = try startTCP(options: options)
+        defer { server.stop() }
+        // Two connections that never finish their request hold both slots.
+        let held = try (0..<2).map { _ in try XCTUnwrap(RawHTTP.connect(.tcp("127.0.0.1", port))) }
+        for fd in held { Socket.writeAll(fd, Data("GET / HTTP/1.1\r\n".utf8), until: Date().addingTimeInterval(5)) }
+        XCTAssertNil(RawHTTP.exchange(.tcp("127.0.0.1", port), RawHTTP.request("GET", "/third"), timeout: 5), "the third is closed without a reply")
+        for fd in held { posixClose(fd) }
+        // The slots free up once those connections end.
+        let deadline = Date().addingTimeInterval(5)
+        var status: Int?
+        while status == nil, Date() < deadline {
+            status = RawHTTP.exchange(.tcp("127.0.0.1", port), RawHTTP.request("GET", "/again"), timeout: 5)?.status
+        }
+        XCTAssertEqual(status, 200)
+    }
+
+    func testLoopbackIsExemptFromThePerPeerCap() throws {
+        var options = POSIXHTTPServer.Options()
+        options.maxConnectionsPerPeer = 1
+        let (server, port) = try startTCP(options: options)
+        defer { server.stop() }
+        let held = try XCTUnwrap(RawHTTP.connect(.tcp("127.0.0.1", port)))
+        defer { posixClose(held) }
+        Socket.writeAll(held, Data("GET / HTTP/1.1\r\n".utf8), until: Date().addingTimeInterval(5))
+        XCTAssertEqual(RawHTTP.exchange(.tcp("127.0.0.1", port), RawHTTP.request("GET", "/proxied"))?.status, 200)
     }
 
     // MARK: Unix sockets
