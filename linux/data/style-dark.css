@@ -1,0 +1,11 @@
+/* Lighter text tints for dark backgrounds. */
+.tag.group-personal { color: #4fd0ee; }
+.tag.group-work { color: #b393ff; }
+
+label.spend-comfortable, image.spend-comfortable { color: #3fd6bf; }
+label.spend-approaching, image.spend-approaching { color: #f8b44f; }
+label.spend-reached, image.spend-reached { color: #ff7a86; }
+
+.limit-panel {
+  background-color: alpha(currentColor, 0.06);
+}

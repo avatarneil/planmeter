@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Neil Goldader -->
+<component type="desktop-application">
+  <id>com.neilgoldader.PlanMeter</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>PlanMeter</name>
+  <summary>See what your AI coding agents cost</summary>
+  <description>
+    <p>
+      PlanMeter shows spend, tokens, cache savings, and Codex rate limits for your Codex,
+      Claude Code, and OpenCode accounts, split into Personal and Work plans.
+    </p>
+    <ul>
+      <li>Totals for the last hour, today, or the last 24 hours, 7, 30, or 90 days</li>
+      <li>A stacked timeline per account, down to one-minute buckets</li>
+      <li>Spend limits, with a notification as you approach and reach them while PlanMeter is open</li>
+      <li>Usage by model, and Codex rate-limit windows with reset times</li>
+      <li>Pair a phone over Tailscale to check usage away from your desk</li>
+    </ul>
+    <p>
+      The app reads its numbers from planmeterd, the PlanMeter background service, which
+      scans transcripts on this computer. Prompts and transcripts never leave it.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.neilgoldader.PlanMeter.desktop</launchable>
+  <provides>
+    <binary>planmeter</binary>
+  </provides>
+
+  <developer id="com.neilgoldader">
+    <name>Neil Goldader</name>
+  </developer>
+  <url type="homepage">https://github.com/avatarneil/planmeter</url>
+  <url type="bugtracker">https://github.com/avatarneil/planmeter/issues</url>
+  <url type="vcs-browser">https://github.com/avatarneil/planmeter</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#9fe3f2</color>
+    <color type="primary" scheme_preference="dark">#24324a</color>
+  </branding>
+
+  <releases>
+    <release version="0.3.6" date="2026-10-19">
+      <description>
+        <p>The first Linux desktop version: a dashboard, remote pairing, and spend alerts.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -63,3 +63,41 @@ jobs:
 
       - name: Run Swift tests
         run: swift test
+
+  linux-app:
+    # The GTK app's runtime floor: GTK 4.14 and libadwaita 1.5.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: linux
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install GTK 4 and libadwaita
+        run: >-
+          sudo apt-get update &&
+          sudo apt-get install -y --no-install-recommends
+          libgtk-4-dev libadwaita-1-dev desktop-file-utils appstream
+
+      - name: Set up Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build release binaries
+        run: cargo build --locked --release
+
+      - name: Validate desktop entry and AppStream metadata
+        run: >-
+          desktop-file-validate data/com.neilgoldader.PlanMeter.desktop &&
+          appstreamcli validate --no-net data/com.neilgoldader.PlanMeter.metainfo.xml
