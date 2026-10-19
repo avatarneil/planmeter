@@ -1,0 +1,21 @@
+{
+  "request": {
+    "body": null,
+    "method": "GET",
+    "path": "/v1/status"
+  },
+  "response": {
+    "body": {
+      "accountCount": 5,
+      "apiVersion": 1,
+      "isScanning": false,
+      "lastError": null,
+      "lastScanAt": "2026-10-19T15:02:00Z",
+      "pricingError": null,
+      "pricingSource": "litellm",
+      "serverName": "devbox",
+      "version": "0.3.6"
+    },
+    "status": 200
+  }
+}

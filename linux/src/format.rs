@@ -170,6 +170,24 @@ pub fn group_list(groups: &[String]) -> String {
     }
 }
 
+/// A paired device's platform for display: `web` → `Web browser`,
+/// `android` → `Android`; descriptive names pass through.
+pub fn platform_name(raw: &str) -> String {
+    match raw.trim() {
+        "" => "Unknown device".into(),
+        p if p.eq_ignore_ascii_case("web") => "Web browser".into(),
+        p if p.eq_ignore_ascii_case("ios") => "iOS".into(),
+        p if p.chars().all(|c| c.is_ascii_lowercase()) => {
+            let mut chars = p.chars();
+            chars
+                .next()
+                .map(|c| c.to_ascii_uppercase().to_string() + chars.as_str())
+                .unwrap_or_default()
+        }
+        p => p.to_string(),
+    }
+}
+
 /// `12345678` → `1234 5678`, as the Mac shows the web pairing code.
 pub fn web_code(code: &str) -> String {
     if code.len() == 8 && code.is_ascii() {
@@ -426,6 +444,10 @@ mod tests {
         );
         assert_eq!(period_label(h, Resolution::Day, true, true), "Oct 19");
         assert_eq!(web_code("12345678"), "1234 5678");
+        assert_eq!(platform_name("android"), "Android");
+        assert_eq!(platform_name("web"), "Web browser");
+        assert_eq!(platform_name("iPhone · iOS 26.1"), "iPhone · iOS 26.1");
+        assert_eq!(platform_name(""), "Unknown device");
         assert_eq!(web_code("123"), "123");
         assert_eq!(countdown(272), "4:32");
         assert_eq!(

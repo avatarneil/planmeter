@@ -1,0 +1,31 @@
+{
+  "request": {
+    "body": null,
+    "method": "GET",
+    "path": "/v1/settings"
+  },
+  "response": {
+    "body": {
+      "groupOverrides": {},
+      "spendGroups": [
+        "personal",
+        "work"
+      ],
+      "spendThresholds": {
+        "month": {
+          "limit": 1500.0,
+          "warningPercent": 85.0
+        },
+        "today": {
+          "limit": 60.0,
+          "warningPercent": 80.0
+        },
+        "week": {
+          "limit": 400.0,
+          "warningPercent": 75.0
+        }
+      }
+    },
+    "status": 200
+  }
+}

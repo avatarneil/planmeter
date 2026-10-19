@@ -1,0 +1,59 @@
+{
+  "request": {
+    "body": null,
+    "method": "DELETE",
+    "path": "/v1/remote/devices/wE9rT6yU3iO0pA7sD4fG1h"
+  },
+  "response": {
+    "body": {
+      "bindAddresses": [
+        "100.101.102.103"
+      ],
+      "devices": [
+        {
+          "id": "Xk3fQ9vR2mLp8sT1uW4yZa",
+          "lastSeenAt": "2026-10-19T14:59:00Z",
+          "name": "Neil’s iPhone",
+          "pairedAt": "2026-09-08T15:02:00Z",
+          "platform": "iPhone · iOS 26.1",
+          "publicKey": "wc7tyloA1zZkyp0D/z4FB2MyRIzHCtZECdqKbHDO6gGoDVsbB7DsEkmViFPWB4UjWMtoSnZ1HEcx0jxnMeo1w7E=",
+          "requestCount": 12840
+        },
+        {
+          "id": "pQ7nB2cD5eF8gH1jK4mN6r",
+          "lastSeenAt": "2026-10-19T13:02:00Z",
+          "name": "Pixel 9 Pro",
+          "pairedAt": "2026-10-13T15:02:00Z",
+          "platform": "Android 16",
+          "publicKey": "zu3KWgDXNmTKnQP/PgUHYzJEjMcK1kQJ2opscM7qAagNWxsHsOwSSZWIU9YHhSNYy2hKdnUcRzHSPGcx6jXDsVk=",
+          "requestCount": 1204
+        }
+      ],
+      "enabled": true,
+      "https": {
+        "active": true,
+        "certificateStatus": "valid",
+        "enabled": true,
+        "url": "https://devbox.tail1234.ts.net/"
+      },
+      "invite": null,
+      "log": [
+        "15:02:00  revoked Safari",
+        "15:02:00  pairing code issued, expires in 5 min",
+        "15:02:00  tailscale serve on",
+        "15:02:00  remote access on",
+        "14:59:00  rpc summary from Neil’s iPhone",
+        "12:02:02  tailscale serve on: https://devbox.tail1234.ts.net/",
+        "12:02:00  100.101.102.103: listening"
+      ],
+      "port": 7787,
+      "status": "Listening on 100.101.102.103:7787",
+      "tailscale": {
+        "address": "100.101.102.103",
+        "available": true,
+        "dnsName": "devbox.tail1234.ts.net"
+      }
+    },
+    "status": 200
+  }
+}

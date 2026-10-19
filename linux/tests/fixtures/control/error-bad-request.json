@@ -1,0 +1,15 @@
+{
+  "request": {
+    "body": {
+      "groups": []
+    },
+    "method": "PUT",
+    "path": "/v1/settings/spend"
+  },
+  "response": {
+    "body": {
+      "error": "at least one plan group must count toward the total"
+    },
+    "status": 400
+  }
+}
