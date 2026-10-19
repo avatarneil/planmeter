@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PlanMeter talks to exactly one kind of host: the user's computer on their
+    Tailscale network, over plain HTTP (http://<tailnet address>:7787). That is
+    deliberate and safe:
+
+      * the transport is WireGuard (Tailscale), and
+      * every request and reply is end-to-end encrypted (per-request ECDH,
+        ChaCha20-Poly1305) to the host key pinned at pairing, and every request
+        is signed by this phone's Android Keystore key.
+
+    Pairing links name the host by its MagicDNS name (*.ts.net) or, when the
+    host has no Tailscale CLI, by its raw tailnet IP (100.64.0.0/10 or
+    fd7a:115c:a1e0::/48). A network security config can match host names but
+    not IP ranges, so it cannot express "the tailnet" here. Cleartext is
+    therefore permitted in base-config and narrowed in code instead:
+    HostPolicy.tailnetOnly (android/protocol) refuses any host that does not
+    resolve into the Tailscale ranges before a request is sent. The app has no
+    other HTTP client, no WebView, and no third-party SDKs. HTTPS, if ever used,
+    trusts only system CAs.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
