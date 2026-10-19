@@ -3,6 +3,7 @@ package com.neilgoldader.planmeter.mobile
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -41,11 +42,19 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        // Keep usage out of the recents thumbnail while the app lock is on.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            lifecycleScope.launch {
-                repeatOnLifecycle(Lifecycle.State.CREATED) {
-                    viewModel.state.map { it.requireBiometrics }.distinctUntilChanged().collect { setRecentsScreenshotEnabled(!it) }
+        // Keep usage out of the recents thumbnail while the app lock is on. The lock
+        // itself starts in onStop, after the thumbnail is taken. Before Android 13 the
+        // only way is FLAG_SECURE, which also blocks screenshots while the lock is on.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                viewModel.state.map { it.requireBiometrics }.distinctUntilChanged().collect { hide ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        setRecentsScreenshotEnabled(!hide)
+                    } else if (hide) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
                 }
             }
         }

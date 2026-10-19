@@ -52,10 +52,20 @@ fun interface HostPolicy {
          * Only Tailscale addresses: every address [host] resolves to must be in
          * 100.64.0.0/10 or fd7a:115c:a1e0::/48. [allowLoopback] additionally
          * admits loopback and the emulator's host alias 10.0.2.2, for development.
+         * [host] must be a plain host name or IP literal, since it is pasted
+         * into the request URL: anything else could make the URL point elsewhere.
          */
         fun tailnetOnly(allowLoopback: Boolean = false, resolver: (String) -> List<InetAddress> = { InetAddress.getAllByName(it).toList() }) =
             HostPolicy { host ->
-                val bare = host.removePrefix("[").removeSuffix("]")
+                val bracketed = host.startsWith("[") && host.endsWith("]")
+                val bare = if (bracketed) host.substring(1, host.length - 1) else host
+                val wellFormed = if (bracketed || bare.contains(':')) ipv6Literal.matches(bare) else hostName.matches(bare)
+                if (!wellFormed) {
+                    throw RemoteClientException.Transport(
+                        RemoteClientException.Transport.Kind.NOT_TAILNET,
+                        "$bare is not a Tailscale address.",
+                    )
+                }
                 val addresses = try {
                     resolver(bare)
                 } catch (e: UnknownHostException) {
@@ -73,6 +83,12 @@ fun interface HostPolicy {
             }
     }
 }
+
+/** Dot-separated letters, digits, and hyphens (which covers IPv4 literals), with an optional trailing dot. */
+private val hostName = Regex("^(?=.{1,253}\\.?$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$")
+
+/** Hex groups and colons, optionally ending in a dotted IPv4 part; no zone ids. */
+private val ipv6Literal = Regex("^[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*$")
 
 object Tailnet {
     /** 100.64.0.0/10 (Tailscale's CGNAT range) or fd7a:115c:a1e0::/48 (its IPv6 ULA). */

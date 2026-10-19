@@ -42,11 +42,17 @@ class KeystoreSigner private constructor(
     override val publicKeyRaw: ByteArray,
     override val storage: KeyStorage,
 ) : SigningIdentity {
-    override fun sign(message: ByteArray): ByteArray {
+    private val lock = Any()
+
+    /**
+     * One signature at a time: a dashboard refresh signs several requests at
+     * once, and some StrongBox secure elements reject concurrent operations.
+     */
+    override fun sign(message: ByteArray): ByteArray = synchronized(lock) {
         val signature = Signature.getInstance("SHA256withECDSA")
         signature.initSign(privateKey)
         signature.update(message)
-        return EcdsaSignature.derToRaw(signature.sign())
+        EcdsaSignature.derToRaw(signature.sign())
     }
 
     companion object {

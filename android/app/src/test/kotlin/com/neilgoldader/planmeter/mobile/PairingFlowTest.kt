@@ -51,7 +51,10 @@ class PairingFlowTest {
     @Before
     fun setUp() {
         WorkManagerTestInitHelper.initializeTestWorkManager(app)
-        io { app.graph.store.clearPairing() }
+        io {
+            app.graph.store.clearPairing()
+            app.graph.store.setRequireBiometrics(false)
+        }
     }
 
     /** Runs suspending storage calls off the main thread while the main looper keeps turning. */
@@ -122,6 +125,37 @@ class PairingFlowTest {
             vm.unpair()
             await("unpaired") { vm.state.value.dashboard.server == null }
             await("store cleared") { io { app.graph.store.current().server == null && app.graph.store.widgetSnapshot() == null } }
+        }
+    }
+
+    @Test
+    fun externalLinksWaitForConfirmationAndUnlock() {
+        TestHost(FakeData::reply).use { host ->
+            io { app.graph.store.setRequireBiometrics(true) }
+            // A cold start: the link arrives before settings have loaded.
+            val vm = AppViewModel(app)
+            vm.openPairingLink(host.invite().toUrl())
+            await("settings") { vm.state.value.ready }
+            assertTrue(vm.state.value.isLocked)
+            assertNotNull(vm.state.value.pairing.pendingInvite)
+
+            // Confirming does nothing until the app is unlocked.
+            vm.confirmPendingInvite()
+            assertTrue(host.devices.isEmpty())
+            assertNull(vm.state.value.dashboard.server)
+
+            vm.unlocked()
+            vm.confirmPendingInvite()
+            await("paired") { vm.state.value.dashboard.server != null }
+            assertNull(vm.state.value.pairing.pendingInvite)
+            assertEquals(1, host.devices.size)
+
+            // Already paired: another link still waits, and dismissing it keeps the pairing.
+            vm.openPairingLink(host.invite().toUrl())
+            assertNotNull(vm.state.value.pairing.pendingInvite)
+            vm.dismissPendingInvite()
+            assertNull(vm.state.value.pairing.pendingInvite)
+            assertEquals("Test Host", vm.state.value.dashboard.server?.serverName)
         }
     }
 

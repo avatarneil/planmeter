@@ -60,8 +60,13 @@ Two APKs, both signed with the local debug key (there is no Play Store listing):
   allow installs from that app (Files, Drive, a browser) the first time.
 
 Debug builds also allow loopback and the emulator's `10.0.2.2` host alias (see
-Security); release builds talk only to tailnet addresses. A distributed build
-would replace the debug signing config with a real key.
+Security); release builds talk only to tailnet addresses.
+
+The release APK is signed with the debug key for personal sideloading only. That
+key has a well-known password and sits in the `planmeter-android-home` volume (or
+`~/.android`), and anyone holding it could ship an update that inherits the app's
+identity, including its Keystore device key. Give `release` its own signing
+config and key before distributing a build to anyone else.
 
 ## Pair
 
@@ -111,9 +116,15 @@ lock is on.
   cleartext cannot be limited to the tailnet in
   `res/xml/network_security_config.xml`. It is narrowed in code instead:
   `HostPolicy.tailnetOnly` refuses any host that does not resolve into
-  100.64.0.0/10 or fd7a:115c:a1e0::/48 before sending a request. Debug builds
-  also allow loopback and `10.0.2.2`, for the emulator. The app has no other
-  HTTP client, no WebView, and no third-party SDKs.
+  100.64.0.0/10 or fd7a:115c:a1e0::/48 before sending a request, and any
+  host that is not a plain host name or IP literal. Debug builds also allow
+  loopback and `10.0.2.2`, for the emulator. The app has no other HTTP client,
+  no WebView, and no third-party SDKs.
+- A `planmeter://pair` link opened from outside the app always asks first,
+  showing the host's address and key fingerprint, and waits until the app is
+  unlocked. Codes scanned or pasted on the pairing screen pair directly.
+- With the app lock on, the app is hidden from the recents thumbnail
+  (`FLAG_SECURE` before Android 13, which also blocks screenshots).
 
 ## Development
 

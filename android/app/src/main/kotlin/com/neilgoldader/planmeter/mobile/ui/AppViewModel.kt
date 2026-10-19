@@ -52,7 +52,10 @@ data class DashboardUiState(
 data class PairingUiState(
     val isPairing: Boolean = false,
     val error: String? = null,
-    /** A link opened while already paired, waiting for the user to confirm replacing the host. */
+    /**
+     * A link opened from outside the app, waiting for the user to confirm it.
+     * Shown only once settings have loaded and the app is unlocked.
+     */
     val pendingInvite: PairingInvite? = null,
 )
 
@@ -198,22 +201,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         pair(invite)
     }
 
-    /** A `planmeter://pair` link from a QR scan elsewhere or another app. */
+    /**
+     * A `planmeter://pair` link from a QR scan elsewhere or another app. Any
+     * web page can open one, so it always waits for the user to confirm, even
+     * on a cold start before settings have loaded or while the app is locked.
+     */
     fun openPairingLink(link: String) {
         val invite = PairingInvite.parse(link)
         if (invite == null) {
             _state.update { it.copy(pairing = it.pairing.copy(error = UserMessages.unreadableLink(link))) }
             return
         }
-        if (_state.value.dashboard.server != null) {
-            _state.update { it.copy(pairing = it.pairing.copy(pendingInvite = invite)) }
-        } else {
-            pair(invite)
-        }
+        _state.update { it.copy(pairing = it.pairing.copy(pendingInvite = invite)) }
     }
 
     fun confirmPendingInvite() {
-        val invite = _state.value.pairing.pendingInvite ?: return
+        val current = _state.value
+        if (!current.ready || current.isLocked) return
+        val invite = current.pairing.pendingInvite ?: return
         _state.update { it.copy(pairing = it.pairing.copy(pendingInvite = null)) }
         pair(invite)
     }
