@@ -47,5 +47,6 @@ summary such as:
 [interop] summary: cipher-aes-256-gcm=20 cipher-chacha20poly1305=206 http-403=1 paired=1 rpc-accounts=1 rpc-limits=21 rpc-models=1 rpc-summary=201 rpc-timeline=1
 ```
 
-The shared golden fixtures in `protocol/fixtures` (repository root) will be read
-by `GoldenFixturesTest` once they land on this branch.
+The shared golden fixtures in `protocol/fixtures` (repository root, see
+`protocol/README.md`) are read by `GoldenFixturesTest`; this harness
+complements them with randomized, many-signature, and live-host checks.
