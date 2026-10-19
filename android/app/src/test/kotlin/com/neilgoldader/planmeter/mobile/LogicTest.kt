@@ -104,6 +104,13 @@ class LogicTest {
         val lateSnapshot = snapshot.copy(updatedAt = midnight.minusSeconds(60))
         assertFalse(lateSnapshot.isStale(midnight.minusSeconds(1), zone))
         assertTrue(lateSnapshot.isStale(midnight.plusSeconds(60), zone))
+        // The widget's expiry alarm: when isStale turns true, whichever comes first.
+        assertEquals(updated.plusSeconds(15 * 60), snapshot.expiresAt(zone))
+        assertEquals(midnight, lateSnapshot.expiresAt(zone))
+        for (s in listOf(snapshot, lateSnapshot)) {
+            assertFalse(s.isStale(s.expiresAt(zone).minusSeconds(1), zone))
+            assertTrue(s.isStale(s.expiresAt(zone), zone))
+        }
     }
 
     @Test

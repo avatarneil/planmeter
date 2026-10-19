@@ -1,6 +1,10 @@
 package com.neilgoldader.planmeter.mobile.widget
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
 import android.text.format.DateFormat
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -16,12 +20,14 @@ import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.action.actionStartActivity
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -48,6 +54,8 @@ import com.neilgoldader.planmeter.mobile.ui.Fmt
 import com.neilgoldader.planmeter.mobile.ui.theme.GroupColors
 import com.neilgoldader.planmeter.mobile.ui.theme.WidgetColors
 import com.neilgoldader.planmeter.mobile.work.RefreshWorker
+import com.neilgoldader.planmeter.mobile.work.WidgetUpkeepWorker
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,7 +83,8 @@ class SpendWidget : GlanceAppWidget() {
 class SpendWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = SpendWidget()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // A failed redraw must not take the whole process down with it.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, _ -> })
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
@@ -85,19 +94,69 @@ class SpendWidgetReceiver : GlanceAppWidgetReceiver() {
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
         RefreshWorker.cancel(context)
+        WidgetExpiry.cancel(context)
     }
 
     override fun onUpdate(context: Context, appWidgetManager: android.appwidget.AppWidgetManager, appWidgetIds: IntArray) {
+        // Glance's onUpdate already holds this broadcast's goAsync() while it redraws, and a
+        // second goAsync() returns null; the pairing-dependent checks run as work instead.
         super.onUpdate(context, appWidgetManager, appWidgetIds)
-        val pending = goAsync()
-        scope.launch {
-            try {
-                RefreshWorker.syncWithWidgets(context)
-            } finally {
-                pending.finish()
+        WidgetUpkeepWorker.enqueue(context)
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        when (intent.action) {
+            // Glance passes these through untouched, so this receiver owns the broadcast.
+            WidgetExpiry.ACTION_EXPIRED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                val pending: BroadcastReceiver.PendingResult? = goAsync()
+                scope.launch {
+                    try {
+                        WidgetExpiry.redraw(context)
+                    } finally {
+                        pending?.finish()
+                    }
+                }
             }
         }
     }
+}
+
+/**
+ * The widget's "today" expires 15 minutes after a sync or at midnight, like the
+ * iPhone widget's timeline entry. Background refreshes can be deferred for
+ * hours, so a non-waking alarm redraws it at that moment (or as soon as the
+ * phone is next awake) to switch it to its stale prompt.
+ */
+object WidgetExpiry {
+    const val ACTION_EXPIRED = "com.neilgoldader.planmeter.mobile.action.WIDGET_EXPIRED"
+
+    suspend fun redraw(context: Context) {
+        SpendWidget().updateAll(context)
+        schedule(context, AppGraph.from(context).store.widgetSnapshot())
+    }
+
+    /** Sets the alarm for [snapshot]'s expiry, or clears it when there is nothing left to expire. */
+    suspend fun schedule(context: Context, snapshot: WidgetSnapshot?, now: Instant = Instant.now()) {
+        val placed = GlanceAppWidgetManager(context).getGlanceIds(SpendWidget::class.java).isNotEmpty()
+        if (!placed || snapshot == null || snapshot.isStale(now)) {
+            cancel(context)
+            return
+        }
+        context.getSystemService(AlarmManager::class.java)
+            ?.set(AlarmManager.RTC, snapshot.expiresAt().toEpochMilli(), pendingIntent(context))
+    }
+
+    fun cancel(context: Context) {
+        context.getSystemService(AlarmManager::class.java)?.cancel(pendingIntent(context))
+    }
+
+    private fun pendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+        context,
+        0,
+        Intent(context, SpendWidgetReceiver::class.java).setAction(ACTION_EXPIRED),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 }
 
 /** Wallpaper-based dynamic colors on Android 12+, the PlanMeter palette before. */

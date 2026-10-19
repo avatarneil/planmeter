@@ -86,8 +86,11 @@ The AI spend widget shows today's spend, the Personal/Work split, and when it
 was last updated. After 15 minutes, or after midnight, it asks you to open the
 app instead of showing an old total as today's. It refreshes after every fetch
 in the app and from a WorkManager job every 15 minutes (the platform minimum;
-Android may defer it). The job only runs while a widget is placed. As on the
-iPhone, background refresh pauses while the app lock is on.
+Android may defer it). The job only runs while a widget is placed. Because that
+job can be deferred for hours, a non-waking alarm redraws the widget when its
+total expires (or as soon as the phone is next awake), and a clock or time-zone
+change redraws it too. As on the iPhone, background refresh pauses while the app
+lock is on.
 
 ## Security
 

@@ -13,6 +13,7 @@ import com.neilgoldader.planmeter.mobile.data.MobileRange
 import com.neilgoldader.planmeter.mobile.data.UserMessages
 import com.neilgoldader.planmeter.mobile.data.WidgetSnapshot
 import com.neilgoldader.planmeter.mobile.widget.SpendWidget
+import com.neilgoldader.planmeter.mobile.widget.WidgetExpiry
 import com.neilgoldader.planmeter.mobile.work.RefreshWorker
 import com.neilgoldader.planmeter.protocol.DeviceId
 import com.neilgoldader.planmeter.protocol.PairedServer
@@ -158,9 +159,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun publishWidget(data: DashboardData) {
         val summary = data.widgetSummary ?: return
-        store.saveWidgetSnapshot(WidgetSnapshot.from(summary, data.widgetTimeline))
+        val snapshot = WidgetSnapshot.from(summary, data.widgetTimeline)
+        store.saveWidgetSnapshot(snapshot)
         try {
             SpendWidget().updateAll(getApplication())
+            WidgetExpiry.schedule(getApplication(), snapshot)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // No widget placed, or the launcher is busy: nothing to update.
         }
@@ -256,6 +261,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             store.clearPairing()
             RefreshWorker.cancel(getApplication())
+            WidgetExpiry.cancel(getApplication())
             try {
                 SpendWidget().updateAll(getApplication())
             } catch (_: Exception) {
