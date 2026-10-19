@@ -129,4 +129,36 @@ final class HostSettingsTests: XCTestCase {
         FileManager.default.createFile(atPath: file.path, contents: Data())
         XCTAssertThrowsError(try HostPaths.prepareSocketDirectory(for: file.appendingPathComponent("c.sock").path, isDefault: true))
     }
+
+    /// Someone who plants a link where the socket directory goes (say
+    /// /tmp/planmeter-1000) must not get the daemon to use, or chmod, the
+    /// target.
+    func testSocketDirectoryRefusesSymbolicLinks() throws {
+        let dir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let target = dir.appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+        chmod(target.path, 0o755)
+        let link = dir.appendingPathComponent("planmeter")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        XCTAssertThrowsError(try HostPaths.prepareSocketDirectory(for: link.appendingPathComponent("control.sock").path, isDefault: true)) {
+            XCTAssertEqual($0 as? HostPaths.DirectoryError, .symbolicLink(link.path))
+        }
+        var st = stat()
+        stat(target.path, &st)
+        XCTAssertEqual(UInt32(st.st_mode) & 0o777, 0o755, "the link's target is left alone")
+        // Settings and state directories may be symlinked by dotfile managers.
+        XCTAssertNoThrow(try HostPaths.preparePrivateDirectory(link.path, tighten: false))
+    }
+
+    func testPrivateDirectoryCreatesMissingParents() throws {
+        let dir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let nested = dir.appendingPathComponent("a/b/remote").path
+        try HostPaths.preparePrivateDirectory(nested, tighten: true)
+        var st = stat()
+        XCTAssertEqual(lstat(nested, &st), 0)
+        XCTAssertEqual(UInt32(st.st_mode) & 0o777, 0o700)
+        XCTAssertNoThrow(try HostPaths.preparePrivateDirectory(nested, tighten: true), "an existing private directory is fine")
+    }
 }

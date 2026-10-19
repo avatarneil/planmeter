@@ -59,35 +59,62 @@ public struct HostPaths: Sendable, Equatable {
 
     public enum DirectoryError: Error, LocalizedError, Equatable {
         case notADirectory(String)
+        case symbolicLink(String)
         case foreignOwner(String)
+        case notPrivate(String)
         case create(String, String)
 
         public var errorDescription: String? {
             switch self {
             case .notADirectory(let p): return "\(p) exists and is not a directory"
+            case .symbolicLink(let p): return "\(p) is a symbolic link; refusing to use it"
             case .foreignOwner(let p): return "\(p) belongs to another user; refusing to use it"
+            case .notPrivate(let p): return "\(p) is accessible to other users and could not be made private"
             case .create(let p, let reason): return "Could not create \(p): \(reason)"
             }
         }
     }
 
     /// Creates a private (0700) directory, or checks an existing one belongs
-    /// to this user. `tighten` resets an existing directory's mode to 0700.
+    /// to this user.
+    ///
+    /// With `tighten` (the control socket and the secret store) the result
+    /// must be a real directory, not a symbolic link, owned by this user and
+    /// closed to everyone else; an existing one is reset to 0700. The
+    /// directory is made with `mkdir` and then inspected, never inspected
+    /// first, so another user cannot slip one in between (say in /tmp).
+    /// Without it (settings and state, where dotfile managers symlink
+    /// freely) an existing directory only has to be ours.
     public static func preparePrivateDirectory(_ path: String, tighten: Bool) throws {
-        var st = stat()
-        if stat(path, &st) != 0 {
-            do {
-                try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            } catch {
-                throw DirectoryError.create(path, error.localizedDescription)
+        if mkdir(path, 0o700) != 0 {
+            var code = errno
+            if code == ENOENT {
+                let parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+                do {
+                    try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+                } catch {
+                    throw DirectoryError.create(path, error.localizedDescription)
+                }
+                code = mkdir(path, 0o700) == 0 ? 0 : errno
             }
-            guard stat(path, &st) == 0 else { throw DirectoryError.create(path, "vanished after creation") }
-            chmod(path, 0o700)
-            return
+            guard code == 0 || code == EEXIST else { throw DirectoryError.create(path, String(cString: strerror(code))) }
         }
-        guard (UInt32(st.st_mode) & UInt32(S_IFMT)) == UInt32(S_IFDIR) else { throw DirectoryError.notADirectory(path) }
+        var st = stat()
+        guard (tighten ? lstat(path, &st) : stat(path, &st)) == 0 else { throw DirectoryError.create(path, "vanished after creation") }
+        if tighten && isType(st.st_mode, S_IFLNK) { throw DirectoryError.symbolicLink(path) }
+        guard isType(st.st_mode, S_IFDIR) else { throw DirectoryError.notADirectory(path) }
         guard st.st_uid == geteuid() else { throw DirectoryError.foreignOwner(path) }
-        if tighten && (UInt32(st.st_mode) & 0o077) != 0 { chmod(path, 0o700) }
+        guard tighten, (UInt32(st.st_mode) & 0o077) != 0 else { return }
+        // Ours and not a link, so nobody else can swap it out from under the
+        // chmod; check the result anyway.
+        guard chmod(path, 0o700) == 0, lstat(path, &st) == 0, isType(st.st_mode, S_IFDIR),
+              st.st_uid == geteuid(), (UInt32(st.st_mode) & 0o077) == 0 else {
+            throw DirectoryError.notPrivate(path)
+        }
+    }
+
+    private static func isType<T: BinaryInteger>(_ mode: mode_t, _ type: T) -> Bool {
+        (UInt32(mode) & UInt32(S_IFMT)) == UInt32(type)
     }
 
     /// Readies the directory holding the control socket. Default locations
