@@ -1,0 +1,18 @@
+# The runtime floor: Ubuntu 24.04 LTS ships GTK 4.14 and libadwaita 1.5.
+# Builds and tests the app against those, with Rust from rustup.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl build-essential pkg-config \
+      libgtk-4-dev libadwaita-1-dev \
+      xvfb xauth dbus dbus-x11 adwaita-icon-theme librsvg2-common \
+      libgl1-mesa-dri fonts-cantarell \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --component rustfmt,clippy
+
+RUN mkdir -p /etc/gtk-4.0 && printf '[Settings]\ngtk-font-name=Cantarell 11\n' > /etc/gtk-4.0/settings.ini
+WORKDIR /src/linux

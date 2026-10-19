@@ -1,0 +1,61 @@
+{
+  "limits": {
+    "accounts": [
+      {
+        "account": {
+          "accentColorHex": "#10a37f",
+          "email": "neil@example.com",
+          "group": "personal",
+          "id": "codex:plan:personal",
+          "name": "Codex",
+          "plan": "Plus",
+          "provider": "codex",
+          "providerName": "Codex"
+        },
+        "asOf": "2026-10-19T14:24:00Z",
+        "windows": [
+          {
+            "label": "5-hour",
+            "resetsAt": "2026-10-19T17:15:00Z",
+            "usedPercent": 42.0,
+            "windowMinutes": 300
+          },
+          {
+            "label": "Weekly",
+            "resetsAt": "2026-10-22T19:02:00Z",
+            "usedPercent": 61.0,
+            "windowMinutes": 10080
+          }
+        ]
+      },
+      {
+        "account": {
+          "accentColorHex": "#4f7cff",
+          "email": "neil@acme.dev",
+          "group": "work",
+          "id": "codex:plan:work",
+          "name": "Codex Work",
+          "plan": "Business",
+          "provider": "codex",
+          "providerName": "Codex"
+        },
+        "asOf": "2026-10-19T14:58:00Z",
+        "windows": [
+          {
+            "label": "5-hour",
+            "resetsAt": "2026-10-19T15:49:00Z",
+            "usedPercent": 76.0,
+            "windowMinutes": 300
+          },
+          {
+            "label": "Weekly",
+            "resetsAt": "2026-10-20T17:02:00Z",
+            "usedPercent": 93.0,
+            "windowMinutes": 10080
+          }
+        ]
+      }
+    ],
+    "note": "Codex windows come from the last session each account ran. Claude Code does not store limits locally."
+  }
+}

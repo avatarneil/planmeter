@@ -1,0 +1,166 @@
+{
+  "summary": {
+    "days": 7,
+    "from": "2026-10-13T00:00:00Z",
+    "generatedAt": "2026-10-19T15:02:00Z",
+    "groups": [
+      {
+        "accounts": [
+          {
+            "account": {
+              "accentColorHex": "#d97757",
+              "email": "neil@example.com",
+              "group": "personal",
+              "id": "claude:personal",
+              "name": "Claude",
+              "plan": "Max",
+              "provider": "claude",
+              "providerName": "Claude Code"
+            },
+            "totals": {
+              "cacheSavingsUsd": 17.352516499999986,
+              "cachedInputTokens": 15775015,
+              "costUsd": 58.98915199157651,
+              "inputTokens": 22219067,
+              "outputTokens": 1932630,
+              "sessions": 98,
+              "tokens": 24151697
+            }
+          },
+          {
+            "account": {
+              "accentColorHex": "#10a37f",
+              "email": "neil@example.com",
+              "group": "personal",
+              "id": "codex:plan:personal",
+              "name": "Codex",
+              "plan": "Plus",
+              "provider": "codex",
+              "providerName": "Codex"
+            },
+            "totals": {
+              "cacheSavingsUsd": 7.813100899999991,
+              "cachedInputTokens": 7102819,
+              "costUsd": 26.570549529886836,
+              "inputTokens": 10004691,
+              "outputTokens": 870517,
+              "sessions": 101,
+              "tokens": 10875208
+            }
+          }
+        ],
+        "group": "personal",
+        "totals": {
+          "cacheSavingsUsd": 25.165617399999977,
+          "cachedInputTokens": 22877834,
+          "costUsd": 85.55970152146335,
+          "inputTokens": 32223758,
+          "outputTokens": 2803147,
+          "sessions": 199,
+          "tokens": 35026905
+        }
+      },
+      {
+        "accounts": [
+          {
+            "account": {
+              "accentColorHex": "#c06ad9",
+              "email": "neil@acme.dev",
+              "group": "work",
+              "id": "claude:work",
+              "name": "Claude Work",
+              "plan": "Team",
+              "provider": "claude",
+              "providerName": "Claude Code"
+            },
+            "totals": {
+              "cacheSavingsUsd": 57.36808770000007,
+              "cachedInputTokens": 52152807,
+              "costUsd": 194.52240372974333,
+              "inputTokens": 73455369,
+              "outputTokens": 6387993,
+              "sessions": 92,
+              "tokens": 79843362
+            }
+          },
+          {
+            "account": {
+              "accentColorHex": "#4f7cff",
+              "email": "neil@acme.dev",
+              "group": "work",
+              "id": "codex:plan:work",
+              "name": "Codex Work",
+              "plan": "Business",
+              "provider": "codex",
+              "providerName": "Codex"
+            },
+            "totals": {
+              "cacheSavingsUsd": 42.16188239999992,
+              "cachedInputTokens": 38328984,
+              "costUsd": 171.80344289603914,
+              "inputTokens": 53985275,
+              "outputTokens": 4694958,
+              "sessions": 93,
+              "tokens": 58680233
+            }
+          }
+        ],
+        "group": "work",
+        "totals": {
+          "cacheSavingsUsd": 99.5299701,
+          "cachedInputTokens": 90481791,
+          "costUsd": 366.3258466257825,
+          "inputTokens": 127440644,
+          "outputTokens": 11082951,
+          "sessions": 185,
+          "tokens": 138523595
+        }
+      },
+      {
+        "accounts": [
+          {
+            "account": {
+              "group": "other",
+              "id": "opencode",
+              "name": "OpenCode",
+              "provider": "opencode",
+              "providerName": "OpenCode"
+            },
+            "totals": {
+              "cacheSavingsUsd": 1.7101182999999986,
+              "cachedInputTokens": 1554653,
+              "costUsd": 5.811810603634268,
+              "inputTokens": 2190213,
+              "outputTokens": 190855,
+              "sessions": 150,
+              "tokens": 2381068
+            }
+          }
+        ],
+        "group": "other",
+        "totals": {
+          "cacheSavingsUsd": 1.7101182999999986,
+          "cachedInputTokens": 1554653,
+          "costUsd": 5.811810603634268,
+          "inputTokens": 2190213,
+          "outputTokens": 190855,
+          "sessions": 150,
+          "tokens": 2381068
+        }
+      }
+    ],
+    "pricingSource": "litellm",
+    "serverName": "devbox",
+    "to": "2026-10-20T00:00:00Z",
+    "todayCostUsd": 49.46375788933601,
+    "total": {
+      "cacheSavingsUsd": 126.40570579999996,
+      "cachedInputTokens": 114914278,
+      "costUsd": 457.6973587508801,
+      "inputTokens": 161854615,
+      "outputTokens": 14076953,
+      "sessions": 534,
+      "tokens": 175931568
+    }
+  }
+}

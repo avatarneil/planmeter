@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/neilgoldader/PlanMeter">
+    <file>style.css</file>
+    <file>style-dark.css</file>
+    <file alias="icons/scalable/apps/com.neilgoldader.PlanMeter.svg">icons/hicolor/scalable/apps/com.neilgoldader.PlanMeter.svg</file>
+    <file alias="icons/scalable/apps/com.neilgoldader.PlanMeter-symbolic.svg">icons/hicolor/symbolic/apps/com.neilgoldader.PlanMeter-symbolic.svg</file>
+    <file alias="icons/scalable/actions/planmeter-dashboard-symbolic.svg">icons/planmeter-dashboard-symbolic.svg</file>
+    <file alias="icons/scalable/actions/planmeter-remote-symbolic.svg">icons/planmeter-remote-symbolic.svg</file>
+  </gresource>
+</gresources>
