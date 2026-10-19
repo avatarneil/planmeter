@@ -1,0 +1,51 @@
+# systemd user unit for planmeterd, PlanMeter's headless host.
+#
+#   install -Dm755 planmeterd ~/.local/bin/planmeterd
+#   install -Dm644 planmeterd.service ~/.config/systemd/user/planmeterd.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now planmeterd
+#
+# The control socket is $XDG_RUNTIME_DIR/planmeter/control.sock; settings live
+# in ~/.config/planmeter and state in ~/.local/state/planmeter. On a headless
+# machine, `loginctl enable-linger $USER` keeps the service running without a
+# login session.
+
+[Unit]
+Description=PlanMeter host (coding-agent usage over a local socket and Tailscale)
+Documentation=https://github.com/avatarneil/planmeter/blob/main/packaging/linux/README.md
+# User managers cannot order against system units such as tailscaled; the
+# daemon re-checks Tailscale every 30 seconds and starts listening when it is up.
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/planmeterd
+Restart=on-failure
+RestartSec=5
+# Shutdown writes the scan cache; give it time.
+TimeoutStopSec=30
+
+# Hardening. Everything here works in a user manager without user namespaces,
+# and still lets the daemon read ~/.codex, ~/.claude, ~/.t3, and
+# $XDG_DATA_HOME/opencode, run the tailscale and codex CLIs, and write its own
+# config and state.
+UMask=0077
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+# Unix for the control socket and tailscaled; IP for the tailnet listener and
+# HTTPS (pricing, Codex account-wide readings); netlink to list interfaces.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+# Stricter options need unprivileged user namespaces in a user manager; enable
+# them where those are available and you do not use the Codex CLI's
+# account-wide readings (the CLI writes under ~/.codex):
+#PrivateTmp=yes
+#ProtectSystem=strict
+#ProtectHome=read-only
+#ReadWritePaths=%h/.config/planmeter %h/.local/state/planmeter %t/planmeter
+
+[Install]
+WantedBy=default.target

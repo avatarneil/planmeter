@@ -1,0 +1,49 @@
+{
+  "request" : {
+    "body" : {
+      "enabled" : true,
+      "httpsEnabled" : false,
+      "port" : 7787
+    },
+    "method" : "PUT",
+    "path" : "/v1/remote"
+  },
+  "response" : {
+    "body" : {
+      "bindAddresses" : [
+        "100.64.0.7"
+      ],
+      "devices" : [
+        {
+          "id" : "h19j1EISlz4EvcHOszFl51",
+          "lastSeenAt" : "2026-10-19T12:28:00Z",
+          "name" : "Pixel 9",
+          "pairedAt" : "2026-10-18T12:30:00Z",
+          "platform" : "android",
+          "publicKey" : "BN3Np/8q6KtLDFfeYZbZIjnXqzuz1lxJYP20htj2FVaw3Y7VypzV3Ofy4MsdneHNYaxjg6bIRnTTXKHIkuAmC+U=",
+          "requestCount" : 42
+        }
+      ],
+      "enabled" : true,
+      "https" : {
+        "active" : false,
+        "certificateStatus" : null,
+        "enabled" : false,
+        "url" : null
+      },
+      "invite" : null,
+      "log" : [
+        "12:30:00  listening on 100.64.0.7 port 7787"
+      ],
+      "message" : null,
+      "port" : 7787,
+      "status" : "listening",
+      "tailscale" : {
+        "address" : "100.64.0.7",
+        "available" : true,
+        "dnsName" : "devbox.tail1234.ts.net"
+      }
+    },
+    "status" : 200
+  }
+}

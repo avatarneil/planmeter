@@ -1,0 +1,39 @@
+{
+  "request" : {
+    "body" : null,
+    "method" : "DELETE",
+    "path" : "/v1/remote/devices/h19j1EISlz4EvcHOszFl51"
+  },
+  "response" : {
+    "body" : {
+      "bindAddresses" : [
+        "100.64.0.7"
+      ],
+      "devices" : [
+
+      ],
+      "enabled" : true,
+      "https" : {
+        "active" : false,
+        "certificateStatus" : null,
+        "enabled" : false,
+        "url" : null
+      },
+      "invite" : null,
+      "log" : [
+        "12:30:00  revoked Pixel 9",
+        "12:30:00  pairing code issued, expires in 5 min",
+        "12:30:00  listening on 100.64.0.7 port 7787"
+      ],
+      "message" : null,
+      "port" : 7787,
+      "status" : "listening",
+      "tailscale" : {
+        "address" : "100.64.0.7",
+        "available" : true,
+        "dnsName" : "devbox.tail1234.ts.net"
+      }
+    },
+    "status" : 200
+  }
+}

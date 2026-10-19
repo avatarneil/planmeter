@@ -386,7 +386,10 @@ final class ProtocolFixtureTests: XCTestCase {
         var found: Set<String> = []
         while let path = enumerator.nextObject() as? String {
             var isDirectory: ObjCBool = false
-            if FileManager.default.fileExists(atPath: root + "/" + path, isDirectory: &isDirectory), !isDirectory.boolValue, !path.hasPrefix(".") {
+            // control/ holds the local control API examples, generated and
+            // checked by PlanMeterHostTests.ControlFixtureTests.
+            if FileManager.default.fileExists(atPath: root + "/" + path, isDirectory: &isDirectory), !isDirectory.boolValue, !path.hasPrefix("."),
+               !path.hasPrefix("control/") {
                 found.insert(path)
             }
         }

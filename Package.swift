@@ -3,7 +3,8 @@ import PackageDescription
 
 // Apple hosts build every target, exactly as before. Other hosts (Linux now,
 // Windows later) build only the platform-neutral pieces: the core, the remote
-// protocol, the watch payload, the CLI, the MCP server, and the host library.
+// protocol, the watch payload, the CLI, the MCP server, and the host library and
+// daemon (planmeterd).
 //
 // Keep the Apple branch's dependency list unchanged. Xcode Cloud builds the iOS
 // app with automatic package resolution disabled, so any dependency change seen
@@ -45,6 +46,7 @@ let portableProducts: [Product] = [
     .library(name: "PlanMeterRemote", targets: ["PlanMeterRemote"]),
     .library(name: "PlanMeterWatchShared", targets: ["PlanMeterWatchShared"]),
     .library(name: "PlanMeterHost", targets: ["PlanMeterHost"]),
+    .executable(name: "planmeterd", targets: ["planmeterd"]),
 ]
 
 let portableTargets: [Target] = [
@@ -66,12 +68,19 @@ let portableTargets: [Target] = [
         name: "PlanMeterWatchShared",
         swiftSettings: swift5
     ),
-    // The host side of remote access, shared beyond the Mac app: report
-    // builder, pairing and RPC handling, HTTP framing, Tailscale helpers.
-    // Portable: no Network.framework, AppKit, SwiftUI, or Observation.
+    // The host side shared by the Mac app and planmeterd: remote report
+    // builder, pairing and RPC handling, Tailscale helpers, a POSIX HTTP
+    // listener, and the headless engine and control API. Portable: no
+    // Network.framework, AppKit, SwiftUI, or Observation.
     .target(
         name: "PlanMeterHost",
         dependencies: ["PlanMeterCore", "PlanMeterRemote"],
+        swiftSettings: swift5
+    ),
+    // Headless host daemon for Linux (and macOS, for development).
+    .executableTarget(
+        name: "planmeterd",
+        dependencies: ["PlanMeterHost", "PlanMeterCore", "PlanMeterRemote"],
         swiftSettings: swift5
     ),
     .executableTarget(

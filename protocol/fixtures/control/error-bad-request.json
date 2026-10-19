@@ -1,0 +1,17 @@
+{
+  "request" : {
+    "body" : {
+      "groups" : [
+
+      ]
+    },
+    "method" : "PUT",
+    "path" : "/v1/settings/spend"
+  },
+  "response" : {
+    "body" : {
+      "error" : "spend groups cannot be empty"
+    },
+    "status" : 400
+  }
+}
