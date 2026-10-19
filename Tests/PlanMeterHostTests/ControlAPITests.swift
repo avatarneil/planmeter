@@ -187,6 +187,47 @@ final class ControlAPITests: XCTestCase {
         XCTAssertEqual(h.remote.boundAddresses, ["100.64.0.8", "fd7a:115c:a1e0::8"])
     }
 
+    /// Desktop clients percent-encode ids down to unreserved characters;
+    /// Claude account ids contain both "/" and ":".
+    func testPercentEncodedIdsWithSlashesAndColons() async throws {
+        let h = try await ControlHarness.make()
+        defer { h.cleanUp() }
+        var unreserved = CharacterSet.alphanumerics
+        unreserved.insert(charactersIn: "-._~")
+        let id = ControlHarness.personalId
+        let encoded = try XCTUnwrap(id.addingPercentEncoding(withAllowedCharacters: unreserved))
+        XCTAssertEqual(encoded, "claude%3Ahome%3A%2Fhome%2Fdev%2F.claude%2Fprojects")
+        let moved = try await h.call("PUT", "/v1/settings/groups/\(encoded)", json: #"{"group":"other"}"#).decoded(HostSettings.self)
+        XCTAssertEqual(moved.groupOverrides[id], .other)
+        XCTAssertEqual(h.engine.group(for: h.engine.account(for: id)), .other)
+
+        let device = try XCTUnwrap(h.service.devices.first)
+        let unknown = await h.call("DELETE", "/v1/remote/devices/\(device.id)%2Fx%3Ay")
+        XCTAssertEqual(unknown.status, 404)
+        let encodedDevice = try XCTUnwrap(device.id.addingPercentEncoding(withAllowedCharacters: unreserved))
+        let revoked = try await h.call("DELETE", "/v1/remote/devices/\(encodedDevice)").decoded(RemoteStatus.self)
+        XCTAssertTrue(revoked.devices.isEmpty)
+    }
+
+    /// The GTK client asks for "Today" as `minutes` since local midnight
+    /// (rounded up to five minutes), "1 hour" as 60, and "24h" as `days: 1`.
+    func testMinuteWindowsMatchTheMacBuilder() async throws {
+        let h = try await ControlHarness.make()
+        defer { h.cleanUp() }
+        for request in [RemoteRequest(method: .summary, minutes: 755), RemoteRequest(method: .models, minutes: 755),
+                        RemoteRequest(method: .timeline, resolution: "5m", minutes: 755), RemoteRequest(method: .summary, minutes: 60),
+                        RemoteRequest(method: .summary, days: 1)] {
+            let response = await h.call("POST", "/v1/rpc", json: String(decoding: try RemoteJSON.encoder.encode(request), as: UTF8.self))
+            let expected = RemoteReportBuilder.reply(for: request, model: h.engine, now: ControlHarness.now)
+            XCTAssertEqual(response.body, try RemoteJSON.encoder.encode(expected))
+        }
+        let todayReply = try await h.call("POST", "/v1/rpc", json: #"{"method":"summary","minutes":755}"#).decoded(RemoteReply.self)
+        let today = try XCTUnwrap(todayReply.summary)
+        XCTAssertEqual(today.minutes, 755)
+        XCTAssertEqual(today.to.timeIntervalSince(today.from), 755 * 60)
+        XCTAssertEqual(today.total.costUsd, 1.75)
+    }
+
     func testPartialBindDoesNotRestartTheListener() async throws {
         let h = try await ControlHarness.make()
         defer { h.cleanUp() }

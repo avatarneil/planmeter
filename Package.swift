@@ -108,7 +108,7 @@ let portableTargets: [Target] = [
     ),
     .testTarget(
         name: "PlanMeterHostTests",
-        dependencies: ["PlanMeterHost", "PlanMeterCore", "PlanMeterRemote"],
+        dependencies: ["PlanMeterHost", "PlanMeterCore", "PlanMeterRemote"] + cryptoDependencies,
         swiftSettings: swift5
     ),
 ]
