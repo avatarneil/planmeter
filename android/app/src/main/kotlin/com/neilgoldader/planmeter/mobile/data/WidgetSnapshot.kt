@@ -26,6 +26,10 @@ data class WidgetSnapshot(
     fun isStale(now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): Boolean =
         Duration.between(updatedAt, now) >= STALE_AFTER || updatedAt.atZone(zone).toLocalDate() != now.atZone(zone).toLocalDate()
 
+    /** When [isStale] turns true: [STALE_AFTER] past the sync, or the following midnight if that comes first. */
+    fun expiresAt(zone: ZoneId = ZoneId.systemDefault()): Instant =
+        minOf(updatedAt.plus(STALE_AFTER), updatedAt.atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant())
+
     /** Today's cost for one group, falling back to the one-day totals when there is no timeline. */
     fun today(group: String): Double = todayCostByGroup?.let { it[group] ?: 0.0 } ?: when (group) {
         "personal" -> personalCostUsd

@@ -2,9 +2,10 @@ package com.neilgoldader.planmeter.mobile.work
 
 import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -12,6 +13,7 @@ import com.neilgoldader.planmeter.mobile.AppGraph
 import com.neilgoldader.planmeter.mobile.data.DashboardLoader
 import com.neilgoldader.planmeter.mobile.data.WidgetSnapshot
 import com.neilgoldader.planmeter.mobile.widget.SpendWidget
+import com.neilgoldader.planmeter.mobile.widget.WidgetExpiry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -21,8 +23,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * Keeps the home-screen widget current: every 15 minutes (the WorkManager
  * minimum; Android may defer it), fetch today's summary and re-render. The
  * widget is re-rendered even when the fetch fails, so it can switch to its
- * stale prompt. Like the iPhone, background refresh pauses while the app lock
- * is on.
+ * stale prompt, and its expiry alarm follows the snapshot it shows. Like the
+ * iPhone, background refresh pauses while the app lock is on.
  */
 class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -40,7 +42,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 // Offline or asleep: keep the last snapshot; the widget shows its age.
             }
         }
-        SpendWidget().updateAll(applicationContext)
+        WidgetExpiry.redraw(applicationContext)
         return Result.success()
     }
 
@@ -60,6 +62,28 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         suspend fun syncWithWidgets(context: Context) {
             val placed = GlanceAppWidgetManager(context).getGlanceIds(SpendWidget::class.java).isNotEmpty()
             if (placed && AppGraph.from(context).store.current().server != null) schedule(context) else cancel(context)
+        }
+    }
+}
+
+/**
+ * Widget housekeeping that needs storage, so it can't run inside the widget
+ * receiver's onUpdate: after a widget is placed, the phone restarts, or the app
+ * updates, match the refresh job to the pairing and set the expiry alarm.
+ */
+class WidgetUpkeepWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        RefreshWorker.syncWithWidgets(applicationContext)
+        WidgetExpiry.schedule(applicationContext, AppGraph.from(applicationContext).store.widgetSnapshot())
+        return Result.success()
+    }
+
+    companion object {
+        internal const val NAME = "planmeter-widget-upkeep"
+
+        fun enqueue(context: Context) {
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(NAME, ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<WidgetUpkeepWorker>().build())
         }
     }
 }
