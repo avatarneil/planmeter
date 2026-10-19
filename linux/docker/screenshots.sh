@@ -36,6 +36,7 @@ shot narrow --size 400x800 --range today
 shot narrow-dark --size 400x800 --range today --dark
 shot remote-pairing --size 1200x900 --page remote --pair
 shot remote-narrow --size 400x900 --page remote --pair --dark
+shot week-hourly --size 1200x800 --range week --action win.granularity::hour
 shot accounts --size 1200x800 --page accounts
 shot preferences --size 1200x800 --page preferences
 shot plan-groups --size 1200x800 --action win.plan-groups --dark
@@ -50,3 +51,11 @@ fake=$(mktemp -d)
 ln -s "$(cd "$bin" && pwd)/mock-planmeterd" "$fake/planmeterd"
 XDG_RUNTIME_DIR=$(mktemp -d) PATH="$fake:$PATH" shot started --size 1000x700 --action win.start-daemon --delay 4000
 pkill -f "$fake/planmeterd" 2>/dev/null || true
+
+# A phone "scans" the code after two seconds; the page notices by polling.
+runtime=$(mktemp -d)
+XDG_RUNTIME_DIR=$runtime "$bin/mock-planmeterd" --auto-pair 2 2>/dev/null &
+paired=$!
+sleep 0.5
+XDG_RUNTIME_DIR=$runtime shot paired --size 1200x900 --page remote --pair --delay 4500
+kill $paired 2>/dev/null || true

@@ -382,7 +382,7 @@ impl RemotePage {
                 self.pair_group.set_description(Some(
                     "Scan a code with PlanMeter on iPhone or Android, or with the phone’s camera for the web app. Each code works once.",
                 ));
-                self.pair_box.append(&self.invite_card(r, invite));
+                self.pair_box.append(&self.invite_card(invite));
             }
             None => {
                 self.pair_group.set_description(None);
@@ -429,7 +429,7 @@ impl RemotePage {
         card
     }
 
-    fn invite_card(&self, r: &RemoteStatus, invite: &RemoteInvite) -> gtk::Box {
+    fn invite_card(&self, invite: &RemoteInvite) -> gtk::Box {
         let card = card(16);
         let codes = flow(2, 24);
         codes.set_homogeneous(false);
@@ -472,7 +472,7 @@ impl RemotePage {
                     web.append(&hint);
                 }
             }
-            if let Some(code) = invite.web_code.as_deref().filter(|_| r.https.active) {
+            if let Some(code) = invite.web_code.as_deref() {
                 let already = caption("Web app already open? Enter this code:");
                 already.set_xalign(0.5);
                 web.append(&already);

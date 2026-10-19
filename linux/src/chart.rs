@@ -236,12 +236,28 @@ pub fn x_label_indices(
         .filter(|s| *s >= bucket && s % bucket == 0)
         .find(|s| span / s <= max_labels as i64)
         .unwrap_or(*LABEL_STEPS.last().unwrap());
-    if resolution == Resolution::Day || spacing >= 86_400 {
-        let every = (spacing / 86_400).max(1) as usize;
+    let every = (spacing / 86_400).max(1) as usize;
+    if resolution == Resolution::Day {
         // Count from the last bar so today is always labelled.
         let last = starts.len() - 1;
         return (0..starts.len())
             .filter(|i| (last - i) % every == 0)
+            .collect();
+    }
+    if spacing >= 86_400 {
+        // Sub-day buckets over several days: label local midnights.
+        let midnights: Vec<usize> = starts
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.with_timezone(&Local).num_seconds_from_midnight() == 0)
+            .map(|(i, _)| i)
+            .collect();
+        let count = midnights.len();
+        return midnights
+            .into_iter()
+            .enumerate()
+            .filter(|(n, _)| (count - 1 - n) % every == 0)
+            .map(|(_, i)| i)
             .collect();
     }
     starts
@@ -391,6 +407,9 @@ mod tests {
         let picks = x_label_indices(&minutes, Resolution::Minute, 6);
         assert!(picks.len() <= 6 && !picks.is_empty(), "{picks:?}");
         assert_eq!(picks[1] - picks[0], 360);
+        let week: Vec<_> = (0..168).map(|h| t0 + Duration::hours(h)).collect();
+        let picks = x_label_indices(&week, Resolution::Hour, 8);
+        assert_eq!(picks, vec![0, 24, 48, 72, 96, 120, 144], "midnights");
         let days: Vec<_> = (0..90).map(|d| t0 + Duration::days(d)).collect();
         let picks = x_label_indices(&days, Resolution::Day, 7);
         assert!(picks.len() <= 7);
