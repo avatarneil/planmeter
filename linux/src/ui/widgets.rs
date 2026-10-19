@@ -117,6 +117,12 @@ pub fn row(title: &str, subtitle: &str) -> adw::ActionRow {
         .build()
 }
 
+/// A toast whose title is plain text, never markup: titles often carry device
+/// names, paths, or daemon error messages.
+pub fn plain_toast(text: &str) -> adw::Toast {
+    adw::Toast::builder().title(text).use_markup(false).build()
+}
+
 pub fn flow(max_per_line: u32, spacing: u32) -> gtk::FlowBox {
     let f = gtk::FlowBox::builder()
         .selection_mode(gtk::SelectionMode::None)

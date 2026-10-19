@@ -504,7 +504,7 @@ impl MainWindow {
     }
 
     pub fn toast(&self, text: &str) {
-        self.toasts.add_toast(adw::Toast::new(text));
+        self.toasts.add_toast(super::widgets::plain_toast(text));
     }
 
     pub fn present(self: &Rc<Self>) {
@@ -835,7 +835,7 @@ impl MainWindow {
     fn save_failed(&self, error: &ClientError, dialog: &glib::WeakRef<adw::PreferencesDialog>) {
         let text = format!("Couldn’t save: {error}");
         match dialog.upgrade() {
-            Some(d) => d.add_toast(adw::Toast::new(&text)),
+            Some(d) => d.add_toast(super::widgets::plain_toast(&text)),
             None => self.toast(&text),
         }
     }
