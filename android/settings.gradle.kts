@@ -23,3 +23,4 @@ dependencyResolutionManagement {
 rootProject.name = "PlanMeterAndroid"
 
 include(":protocol")
+include(":app")
