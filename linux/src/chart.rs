@@ -5,7 +5,7 @@
 use crate::format;
 use crate::models::{RemoteAccount, RemoteTimeline, Timestamp};
 use crate::range::Resolution;
-use chrono::{DateTime, Local, Timelike};
+use chrono::{Local, TimeZone, Timelike};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -225,6 +225,18 @@ pub fn x_label_indices(
     resolution: Resolution,
     max_labels: usize,
 ) -> Vec<usize> {
+    x_label_indices_in(starts, resolution, max_labels, &Local)
+}
+
+/// `x_label_indices` in a given zone. The host aligns fixed-size buckets to
+/// UTC, so in half- and quarter-hour zones no bar starts on the hour: label
+/// the first bar at or after each round local time instead.
+pub fn x_label_indices_in<Tz: TimeZone>(
+    starts: &[Timestamp],
+    resolution: Resolution,
+    max_labels: usize,
+    zone: &Tz,
+) -> Vec<usize> {
     if starts.is_empty() || max_labels == 0 {
         return Vec::new();
     }
@@ -249,7 +261,7 @@ pub fn x_label_indices(
         let midnights: Vec<usize> = starts
             .iter()
             .enumerate()
-            .filter(|(_, s)| s.with_timezone(&Local).num_seconds_from_midnight() == 0)
+            .filter(|(_, s)| (s.with_timezone(zone).num_seconds_from_midnight() as i64) < bucket)
             .map(|(i, _)| i)
             .collect();
         let count = midnights.len();
@@ -264,9 +276,8 @@ pub fn x_label_indices(
         .iter()
         .enumerate()
         .filter(|(_, s)| {
-            let local: DateTime<Local> = s.with_timezone(&Local);
-            let secs = local.num_seconds_from_midnight() as i64;
-            secs % spacing == 0
+            let secs = s.with_timezone(zone).num_seconds_from_midnight() as i64;
+            secs.rem_euclid(spacing) < bucket
         })
         .map(|(i, _)| i)
         .collect()
@@ -415,6 +426,39 @@ mod tests {
         assert!(picks.len() <= 7);
         assert_eq!(*picks.last().unwrap(), 89);
         assert!(x_label_indices(&[], Resolution::Day, 5).is_empty());
+    }
+
+    #[test]
+    fn x_labels_in_offset_zones() {
+        use chrono::FixedOffset;
+        // UTC-aligned hours start at :30 in India and :45 in Nepal.
+        for (offset, minute) in [(5 * 3600 + 1800, 30), (5 * 3600 + 2700, 45)] {
+            let zone = FixedOffset::east_opt(offset).unwrap();
+            let t0 = Utc.with_ymd_and_hms(2026, 10, 18, 18, 0, 0).unwrap();
+            let hours: Vec<_> = (0..24).map(|h| t0 + Duration::hours(h)).collect();
+            let picks = x_label_indices_in(&hours, Resolution::Hour, 8, &zone);
+            assert_eq!(picks.len(), 8, "{offset}: {picks:?}");
+            for i in &picks {
+                let local = hours[*i].with_timezone(&zone);
+                assert_eq!(local.minute(), minute);
+                assert_eq!(local.hour() % 3, 0, "{local}");
+            }
+            let week: Vec<_> = (0..168).map(|h| t0 + Duration::hours(h)).collect();
+            let picks = x_label_indices_in(&week, Resolution::Hour, 8, &zone);
+            assert_eq!(picks.len(), 7, "{offset}: {picks:?}");
+            for i in &picks {
+                let local = week[*i].with_timezone(&zone);
+                assert_eq!((local.hour(), local.minute()), (0, minute), "{local}");
+            }
+        }
+        // Whole-hour zones label the same bars as before.
+        let zone = FixedOffset::east_opt(-4 * 3600).unwrap();
+        let t0 = Utc.with_ymd_and_hms(2026, 10, 19, 4, 0, 0).unwrap();
+        let hours: Vec<_> = (0..24).map(|h| t0 + Duration::hours(h)).collect();
+        assert_eq!(
+            x_label_indices_in(&hours, Resolution::Hour, 8, &zone),
+            vec![0, 3, 6, 9, 12, 15, 18, 21]
+        );
     }
 
     #[test]
