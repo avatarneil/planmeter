@@ -1,0 +1,28 @@
+{
+  "aadHex" : "aac62a07f5f98eeb4abc1cc5",
+  "cipher" : "chacha20poly1305",
+  "ciphertextHex" : "aac62a07f5f98eeb4abc1cc542866ad026fa12812f493bcb9e4cecfb1ebecc043b111c2417f21c22faeb127e10f797987d798695fc3fca4476001ae40d8d0f4fec9d271fbbe9996db63431ca477676bb28f479b0cd6af2c80d080ca9dcafb79833c9fd9b1537b0f7f3161322f7989ef91ce7f68e64325cb642befd64",
+  "description" : "The server's reply to chacha20poly1305-pair-request.json, sealed under the response key with a fresh nonce.",
+  "deviceId" : "pairing",
+  "deviceSigningPrivateKeyHex" : "fdec7569ca94b6fe3f97675c012a3c0c361366735756069c0e125afc768019bd",
+  "deviceSigningPublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+  "ephemeralPrivateKeyHex" : "cb25beca99afaa68c7da9c03bdeb6cbc981b58f296d3fc7719e2714b202db7cc",
+  "ephemeralPublicKeyHex" : "04544da00557cd18d5de552adfba10c815ae413c42c0c7432d585fa3c0cc4337bb88fe92014284b566d485f0b87d8576076da863ea63f0cc89641670c196942d5e",
+  "name" : "chacha20poly1305-pair-response",
+  "plaintext" : "{\"deviceId\":\"0nfkgpQ6iVXlNxiZqqW0aF\",\"serverName\":\"Ada’s MacBook Pro\",\"serverVersion\":\"0.3.6\"}",
+  "requestKeyHex" : "5d8f3a9cd447c693a96c29786d9f903d616708b7481c6a04490f5f6eead2c1bb",
+  "requestKeyInfo" : "planmeter-remote-v1|pairing|request",
+  "requestNonceHex" : "431c7133bc19231da58a015e",
+  "requestVector" : "chacha20poly1305-pair-request.json",
+  "responseKeyHex" : "d4fba06a82d28931b88a9782d9d69d072389f85f3b0b1ed4aab385c605ceb570",
+  "responseKeyInfo" : "planmeter-remote-v1|pairing|response",
+  "responseNonceHex" : "aac62a07f5f98eeb4abc1cc5",
+  "sealedResponse" : {
+    "cipher" : "chacha20poly1305",
+    "ciphertext" : "qsYqB/X5jutKvBzFQoZq0Cb6EoEvSTvLnkzs+x6+zAQ7ERwkF/IcIvrrEn4Q95eYfXmGlfw/ykR2ABrkDY0PT+ydJx+76ZlttjQxykd2drso9HmwzWryyA0IDKncr7eYM8n9mxU3sPfzFhMi95ie+Rzn9o5kMly2Qr79ZA==",
+    "nonce" : "qsYqB/X5jutKvBzF"
+  },
+  "serverStaticPrivateKeyHex" : "91e6c142d6c43dde7827329081920ac0c2b402aaa1fa6261ab782bdfd66b237e",
+  "serverStaticPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+  "sharedSecretHex" : "e030ae058f0a9c08e35ca4489cbb283772cca711341a1f58e51465f84a81dacb"
+}
