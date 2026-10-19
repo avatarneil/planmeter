@@ -348,4 +348,10 @@ would be WinUI 3 (C#) talking to the pipe. The tray (notification-area icon) is 
   `cargo-sources.json` and metainfo screenshots.
 - Pin Linux-only Swift dependencies (swift-crypto pulls a floating swift-asn1).
 - Per-widget plan and target settings on Android, as on iOS.
+- Spend alerts from `planmeterd`, so they fire while the GTK app is closed (today the app
+  checks every limit, but only while it is running).
+- "Today" on a 25-hour fall-back day: the protocol caps `minutes` at 1440, so late that day
+  the first hour drops out. Accept up to 1500 minutes or add a local-day request.
+- A real release signing key for Android before any distribution (release builds are
+  debug-signed for development).
 - Windows (see above) and non-Tailscale sync (see [Sync](#sync-beyond-tailscale)).
