@@ -17,8 +17,9 @@ finish-args:
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
-  # planmeterd's control socket.
-  - --filesystem=xdg-run/planmeter
+  # planmeterd's control socket. `:create` makes the directory if the daemon
+  # hasn't run yet, so "Start Service" can reach the socket it then creates.
+  - --filesystem=xdg-run/planmeter:create
   # "Start Service" runs `systemctl --user start planmeterd` on the host.
   - --talk-name=org.freedesktop.Flatpak
 build-options:

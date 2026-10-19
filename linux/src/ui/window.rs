@@ -12,15 +12,20 @@ use chrono::{Local, Utc};
 use gtk::{gio, glib};
 use planmeter::client::{Client, ClientError, Dashboard};
 use planmeter::format;
-use planmeter::models::{PlanGroup, RemoteSettingsBody, RemoteStatus, SpendThreshold};
+use planmeter::models::{
+    HostSettings, PlanGroup, RemoteSettingsBody, RemoteStatus, RemoteSummary, SpendThreshold,
+};
 use planmeter::notify;
 use planmeter::range::{Resolution, TimeRange};
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 const AUTO_REFRESH: Duration = Duration::from_secs(30);
+/// While the window is hidden or suspended, only spend alerts are checked,
+/// every this many auto-refresh periods (5 minutes).
+const HIDDEN_ALERT_PERIODS: u32 = 10;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Refresh {
@@ -31,6 +36,35 @@ enum Refresh {
 }
 
 type Callback = Box<dyn FnOnce(&Rc<MainWindow>)>;
+
+/// What `MainWindow::spawn` hands its completion when the work panicked, so
+/// completions (busy counts, in-flight flags, save queues) always run.
+pub trait PanicFallback {
+    fn panicked() -> Self;
+}
+
+impl<T> PanicFallback for Result<T, ClientError> {
+    fn panicked() -> Self {
+        Err(ClientError::Protocol("a background task failed".into()))
+    }
+}
+
+impl<T> PanicFallback for Result<T, String> {
+    fn panicked() -> Self {
+        Err("a background task failed".into())
+    }
+}
+
+type SaveWork = Box<dyn FnOnce(&Client) -> Result<HostSettings, ClientError> + Send>;
+
+/// One host-settings save. Saves run one at a time, in order, so the daemon
+/// sees them in the order they were made.
+struct SaveJob {
+    work: SaveWork,
+    /// Group changes move accounts between cards and totals.
+    regroup: bool,
+    dialog: glib::WeakRef<adw::PreferencesDialog>,
+}
 
 pub struct MainWindow {
     pub app: adw::Application,
@@ -60,15 +94,27 @@ pub struct MainWindow {
     persist_alerts: Cell<bool>,
     /// Off for screenshots, which must not touch saved preferences.
     persist: Cell<bool>,
+    alerts_in_flight: Cell<bool>,
+    hidden_periods: Cell<u32>,
+    save_queue: RefCell<VecDeque<SaveJob>>,
+    saving: Cell<bool>,
+    /// The newest saved settings and whether any queued save regrouped,
+    /// applied once the queue drains.
+    saved_settings: RefCell<Option<HostSettings>>,
+    saved_regroup: Cell<bool>,
 }
 
 fn clock_24h() -> bool {
+    // Only an explicit choice counts: the schema default is "24h" everywhere,
+    // including in Flatpak's keyfile backend and on desktops other than GNOME.
     if let Some(schema) = gio::SettingsSchemaSource::default()
         .and_then(|s| s.lookup("org.gnome.desktop.interface", true))
     {
         if schema.has_key("clock-format") {
-            return gio::Settings::new("org.gnome.desktop.interface").string("clock-format")
-                != "12h";
+            let settings = gio::Settings::new("org.gnome.desktop.interface");
+            if let Some(value) = settings.user_value("clock-format") {
+                return value.str() != Some("12h");
+            }
         }
     }
     let locale = ["LC_ALL", "LC_TIME", "LANG"]
@@ -323,6 +369,12 @@ impl MainWindow {
             ticks: Cell::new(0),
             persist_alerts: Cell::new(false),
             persist: Cell::new(true),
+            alerts_in_flight: Cell::new(false),
+            hidden_periods: Cell::new(0),
+            save_queue: RefCell::new(VecDeque::new()),
+            saving: Cell::new(false),
+            saved_settings: RefCell::new(None),
+            saved_regroup: Cell::new(false),
         });
         *weak_slot.borrow_mut() = Rc::downgrade(&win);
         win.install_actions();
@@ -428,14 +480,22 @@ impl MainWindow {
     }
 
     fn connect_lifecycle(self: &Rc<Self>) {
-        // Refresh every 30 seconds while the window is on screen.
+        // Refresh every 30 seconds while the window is on screen. Hidden or
+        // suspended, check only spend alerts, every 5 minutes.
         let w = Rc::downgrade(self);
         glib::timeout_add_local(AUTO_REFRESH, move || {
             let Some(win) = w.upgrade() else {
                 return glib::ControlFlow::Break;
             };
             if win.window.is_visible() && !win.window.is_suspended() {
+                win.hidden_periods.set(0);
                 win.refresh(Refresh::Auto);
+            } else {
+                let n = win.hidden_periods.get() + 1;
+                win.hidden_periods.set(n);
+                if n % HIDDEN_ALERT_PERIODS == 0 {
+                    win.check_alerts_in_background();
+                }
             }
             glib::ControlFlow::Continue
         });
@@ -549,8 +609,9 @@ impl MainWindow {
         }
     }
 
-    /// Runs blocking client work off the main thread, then `done` on it.
-    pub fn spawn<T: Send + 'static>(
+    /// Runs blocking client work off the main thread, then `done` on it,
+    /// with an error if the work panicked.
+    pub fn spawn<T: PanicFallback + Send + 'static>(
         self: &Rc<Self>,
         work: impl FnOnce(Client) -> T + Send + 'static,
         done: impl FnOnce(&Rc<Self>, T) + 'static,
@@ -558,9 +619,11 @@ impl MainWindow {
         let client = self.client.clone();
         let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
-            let result = gio::spawn_blocking(move || work(client)).await;
-            if let (Some(win), Ok(value)) = (weak.upgrade(), result) {
-                done(&win, value);
+            let result = gio::spawn_blocking(move || work(client))
+                .await
+                .unwrap_or_else(|_| T::panicked());
+            if let Some(win) = weak.upgrade() {
+                done(&win, result);
             }
         });
     }
@@ -744,18 +807,86 @@ impl MainWindow {
         self.persist.set(false);
     }
 
-    fn check_alerts(&self, d: &Dashboard) {
-        let Some(threshold) = d.threshold() else {
+    /// Alerts for the range on screen from its dashboard, then for every
+    /// other range with a limit from a summary of its own.
+    fn check_alerts(self: &Rc<Self>, d: &Dashboard) {
+        self.observe_spend(d.range, &d.summary, &d.settings);
+        let others: Vec<TimeRange> = TimeRange::ALL
+            .into_iter()
+            .filter(|r| *r != d.range)
+            .collect();
+        self.clear_unlimited(&others, &d.settings);
+        let limited: Vec<TimeRange> = others
+            .into_iter()
+            .filter(|r| d.settings.threshold(r.id()).is_some())
+            .collect();
+        if limited.is_empty() || self.alerts_in_flight.replace(true) {
+            return;
+        }
+        self.spawn(
+            move |client| client.summaries(&limited, Local::now()),
+            |win, result| {
+                win.alerts_in_flight.set(false);
+                // The latest settings: a save may have landed meanwhile.
+                let settings = win.data.borrow().as_ref().map(|d| d.settings.clone());
+                let (Ok(summaries), Some(settings)) = (result, settings) else {
+                    return;
+                };
+                for (range, summary) in summaries {
+                    win.observe_spend(range, &summary, &settings);
+                }
+            },
+        );
+    }
+
+    /// Alerts while the window is hidden or suspended and not refreshing.
+    fn check_alerts_in_background(self: &Rc<Self>) {
+        if !self.notifications_enabled() || self.alerts_in_flight.replace(true) {
+            return;
+        }
+        self.spawn(
+            |client| client.alert_summaries(Local::now()),
+            |win, result| {
+                win.alerts_in_flight.set(false);
+                let Ok((settings, summaries)) = result else {
+                    return;
+                };
+                win.clear_unlimited(&TimeRange::ALL, &settings);
+                for (range, summary) in summaries {
+                    win.observe_spend(range, &summary, &settings);
+                }
+            },
+        );
+    }
+
+    /// Forgets announced crossings for ranges whose limit was removed.
+    fn clear_unlimited(&self, ranges: &[TimeRange], settings: &HostSettings) {
+        let changed = {
             let mut st = self.state.borrow_mut();
-            st.alerts.clear(d.range);
+            let before = st.alerts.clone();
+            for range in ranges {
+                if settings.threshold(range.id()).is_none() {
+                    st.alerts.clear(*range);
+                }
+            }
+            st.alerts != before
+        };
+        if changed {
+            self.save_state();
+        }
+    }
+
+    fn observe_spend(&self, range: TimeRange, summary: &RemoteSummary, settings: &HostSettings) {
+        let Some(threshold) = settings.threshold(range.id()) else {
+            self.clear_unlimited(&[range], settings);
             return;
         };
-        let spend = d.spend_total();
-        let period = notify::period_key(d.range, d.summary.from, Local::now());
+        let spend = planmeter::client::spend_total(summary, settings);
+        let period = notify::period_key(range, summary.from, Local::now());
         let announce = {
             let mut st = self.state.borrow_mut();
             let before = st.alerts.clone();
-            let announce = st.alerts.observe(d.range, &period, &threshold, spend);
+            let announce = st.alerts.observe(range, &period, &threshold, spend);
             if st.alerts != before {
                 self.persist_alerts.set(true);
             }
@@ -768,8 +899,8 @@ impl MainWindow {
         if !self.notifications_enabled() {
             return;
         }
-        let groups = format::group_list(&d.settings.effective_spend_groups());
-        if let Some((title, body)) = notify::message(status, d.range, &groups, spend, &threshold) {
+        let groups = format::group_list(&settings.effective_spend_groups());
+        if let Some((title, body)) = notify::message(status, range, &groups, spend, &threshold) {
             let notification = gio::Notification::new(&title);
             notification.set_body(Some(&body));
             notification.set_priority(if status == planmeter::models::SpendStatus::Reached {
@@ -779,13 +910,13 @@ impl MainWindow {
             });
             notification.set_icon(&gio::ThemedIcon::new(APP_ID));
             self.app
-                .send_notification(Some(&format!("spend-{}", d.range.id())), &notification);
+                .send_notification(Some(&format!("spend-{}", range.id())), &notification);
         }
     }
 
     // MARK: Host settings
 
-    fn settings_saved(self: &Rc<Self>, settings: planmeter::models::HostSettings, regroup: bool) {
+    fn settings_saved(self: &Rc<Self>, settings: HostSettings, regroup: bool) {
         if let Some(d) = self.data.borrow_mut().as_mut() {
             d.settings = settings;
         }
@@ -808,13 +939,11 @@ impl MainWindow {
         thresholds: Option<BTreeMap<String, SpendThreshold>>,
         dialog: glib::WeakRef<adw::PreferencesDialog>,
     ) {
-        self.spawn(
-            move |client| client.set_spend(groups, thresholds),
-            move |win, result| match result {
-                Ok(settings) => win.settings_saved(settings, false),
-                Err(e) => win.save_failed(&e, &dialog),
-            },
-        );
+        self.queue_save(SaveJob {
+            work: Box::new(move |client| client.set_spend(groups, thresholds)),
+            regroup: false,
+            dialog,
+        });
     }
 
     pub fn save_group(
@@ -823,11 +952,54 @@ impl MainWindow {
         group: Option<PlanGroup>,
         dialog: glib::WeakRef<adw::PreferencesDialog>,
     ) {
+        self.queue_save(SaveJob {
+            work: Box::new(move |client| client.set_group(&account, group)),
+            regroup: true,
+            dialog,
+        });
+    }
+
+    fn queue_save(self: &Rc<Self>, job: SaveJob) {
+        self.save_queue.borrow_mut().push_back(job);
+        if !self.saving.replace(true) {
+            self.run_next_save();
+        }
+    }
+
+    /// Runs queued saves one at a time. Every response reflects the saves
+    /// before it, so only the last one is applied, once the queue drains.
+    fn run_next_save(self: &Rc<Self>) {
+        let Some(job) = self.save_queue.borrow_mut().pop_front() else {
+            self.saving.set(false);
+            if let Some(settings) = self.saved_settings.borrow_mut().take() {
+                let regroup = self.saved_regroup.replace(false);
+                self.settings_saved(settings, regroup);
+            }
+            self.saved_regroup.set(false);
+            return;
+        };
+        let SaveJob {
+            work,
+            regroup,
+            dialog,
+        } = job;
+        // Keep the app alive until the daemon has the change, even if the
+        // window closes first.
+        let hold = self.app.hold();
         self.spawn(
-            move |client| client.set_group(&account, group),
-            move |win, result| match result {
-                Ok(settings) => win.settings_saved(settings, true),
-                Err(e) => win.save_failed(&e, &dialog),
+            move |client| work(&client),
+            move |win, result| {
+                drop(hold);
+                match result {
+                    Ok(settings) => {
+                        *win.saved_settings.borrow_mut() = Some(settings);
+                        if regroup {
+                            win.saved_regroup.set(true);
+                        }
+                    }
+                    Err(e) => win.save_failed(&e, &dialog),
+                }
+                win.run_next_save();
             },
         );
     }
@@ -967,7 +1139,7 @@ impl MainWindow {
         self.start_button.set_label("Starting…");
         self.spawn(
             |client| {
-                let how = start_daemon_process()?;
+                let how = start_daemon_process(client.socket())?;
                 // Wait for the socket to answer.
                 for _ in 0..40 {
                     match client.status() {
@@ -999,11 +1171,18 @@ impl MainWindow {
 }
 
 /// `systemctl --user start planmeterd`, falling back to `planmeterd` from
-/// PATH. Inside Flatpak both run on the host through `flatpak-spawn`.
-fn start_daemon_process() -> Result<&'static str, String> {
+/// PATH. Inside Flatpak both run on the host through `flatpak-spawn`. A
+/// socket other than the standard one (`--socket`, `$PLANMETER_CONTROL_SOCKET`)
+/// skips the systemd unit, which serves the standard path, and is passed on.
+fn start_daemon_process(socket: &std::path::Path) -> Result<&'static str, String> {
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
     let sandboxed = std::path::Path::new("/.flatpak-info").exists();
+    // SAFETY: getuid has no preconditions and cannot fail.
+    let uid = unsafe { libc::getuid() };
+    let standard =
+        planmeter::client::socket_path_from(None, std::env::var_os("XDG_RUNTIME_DIR"), uid);
+    let custom = (socket != standard).then(|| socket.to_string_lossy().into_owned());
     let command = |args: &[&str]| {
         let mut c = if sandboxed {
             let mut c = Command::new("flatpak-spawn");
@@ -1017,15 +1196,21 @@ fn start_daemon_process() -> Result<&'static str, String> {
         c.stdin(Stdio::null());
         c
     };
-    let systemd = match command(&["systemctl", "--user", "start", "planmeterd"])
-        .stdout(Stdio::null())
-        .output()
-    {
-        Ok(out) if out.status.success() => return Ok("systemd"),
-        Ok(out) => String::from_utf8_lossy(&out.stderr).trim().to_string(),
-        Err(e) => e.to_string(),
+    let systemd = match &custom {
+        Some(_) => "skipped for a custom socket".to_string(),
+        None => match command(&["systemctl", "--user", "start", "planmeterd"])
+            .stdout(Stdio::null())
+            .output()
+        {
+            Ok(out) if out.status.success() => return Ok("systemd"),
+            Ok(out) => String::from_utf8_lossy(&out.stderr).trim().to_string(),
+            Err(e) => e.to_string(),
+        },
     };
-    let mut daemon = command(&["planmeterd"]);
+    let mut daemon = match &custom {
+        Some(path) => command(&["planmeterd", "--socket", path]),
+        None => command(&["planmeterd"]),
+    };
     daemon
         .stdout(Stdio::null())
         .stderr(Stdio::null())

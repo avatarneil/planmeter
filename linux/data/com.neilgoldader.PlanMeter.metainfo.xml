@@ -15,7 +15,7 @@
     <ul>
       <li>Totals for the last hour, today, or the last 24 hours, 7, 30, or 90 days</li>
       <li>A stacked timeline per account, down to one-minute buckets</li>
-      <li>Spend limits, with a notification as you approach and reach them</li>
+      <li>Spend limits, with a notification as you approach and reach them while PlanMeter is open</li>
       <li>Usage by model, and Codex rate-limit windows with reset times</li>
       <li>Pair a phone over Tailscale to check usage away from your desk</li>
     </ul>

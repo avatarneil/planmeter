@@ -116,36 +116,59 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
             .collect(),
     ));
     let debounce: Rc<RefCell<Option<glib::SourceId>>> = Rc::new(RefCell::new(None));
+    let save_now: Rc<dyn Fn()> = {
+        let (win, dialog_weak, thresholds) = (win.clone(), dialog.downgrade(), thresholds.clone());
+        Rc::new(move || {
+            win.save_spend(None, Some(thresholds.borrow().clone()), dialog_weak.clone());
+        })
+    };
     let save_thresholds = {
-        let (win, dialog_weak, thresholds, debounce) = (
-            win.clone(),
-            dialog.downgrade(),
-            thresholds.clone(),
-            debounce.clone(),
-        );
+        let (save_now, debounce) = (save_now.clone(), debounce.clone());
         Rc::new(move |delay: bool| {
             if let Some(id) = debounce.borrow_mut().take() {
                 id.remove();
             }
-            let (win, dialog_weak, thresholds, debounce2) = (
-                win.clone(),
-                dialog_weak.clone(),
-                thresholds.clone(),
-                debounce.clone(),
-            );
-            let run = move || {
-                debounce2.borrow_mut().take();
-                // Runs even if the dialog closed during the debounce.
-                win.save_spend(None, Some(thresholds.borrow().clone()), dialog_weak.clone());
-            };
             if delay {
-                let id = glib::timeout_add_local_once(std::time::Duration::from_millis(700), run);
+                let (save_now, debounce2) = (save_now.clone(), debounce.clone());
+                let id = glib::timeout_add_local_once(
+                    std::time::Duration::from_millis(700),
+                    move || {
+                        debounce2.borrow_mut().take();
+                        save_now();
+                    },
+                );
                 *debounce.borrow_mut() = Some(id);
             } else {
-                run();
+                save_now();
             }
         })
     };
+    // Save a pending edit right away when the dialog or the window closes,
+    // rather than when the debounce would have fired: the app quits with
+    // its window.
+    let flush = {
+        let (save_now, debounce) = (save_now.clone(), debounce.clone());
+        move || {
+            let pending = debounce.borrow_mut().take();
+            if let Some(id) = pending {
+                id.remove();
+                save_now();
+            }
+        }
+    };
+    let flush_on_quit = flush.clone();
+    let window_handler = win.window.connect_close_request(move |_| {
+        flush_on_quit();
+        glib::Propagation::Proceed
+    });
+    let window_weak = win.window.downgrade();
+    let window_handler = RefCell::new(Some(window_handler));
+    dialog.connect_closed(move |_| {
+        flush();
+        if let (Some(window), Some(id)) = (window_weak.upgrade(), window_handler.take()) {
+            window.disconnect(id);
+        }
+    });
     for range in TimeRange::ALL {
         let existing = thresholds.borrow().get(range.id()).copied();
         let expander = adw::ExpanderRow::builder()
@@ -238,7 +261,7 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
     let alert_row = adw::SwitchRow::builder()
         .title("Spend Alerts")
         .subtitle(
-            "Notify when the spend total reaches the warning level or the limit, once per crossing",
+            "While PlanMeter is open, notify when spend for any range with a limit reaches its warning level or the limit, once per crossing",
         )
         .active(win.notifications_enabled())
         .build();
