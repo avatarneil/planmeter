@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public struct DailyCreditValue: Codable, Sendable, Identifiable {
     public var key: String
@@ -202,14 +205,25 @@ public actor CodexDailyUsage {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
+        #if canImport(Darwin)
         let (bytes, response) = try await session.bytes(for: request)
+        #else
+        // FoundationNetworking has no `bytes(for:)`: buffer the body, then
+        // apply the same size limit below.
+        let (bytes, response) = try await session.portableData(for: request)
+        #endif
         guard let response = response as? HTTPURLResponse else { throw DailyUsageError.invalid }
         guard response.statusCode == 200 else { throw DailyUsageError.http(response.statusCode) }
+        #if canImport(Darwin)
         var data = Data()
         for try await byte in bytes {
             guard data.count < 4_000_000 else { throw DailyUsageError.invalid }
             data.append(byte)
         }
+        #else
+        guard bytes.count <= 4_000_000 else { throw DailyUsageError.invalid }
+        let data = bytes
+        #endif
         guard let object = JSON.object(data) else { throw DailyUsageError.invalid }
         return object
     }
@@ -330,7 +344,7 @@ public actor CodexDailyUsage {
             var ids: Set<String> = []
             result[date] = try groups.map { item in
                 guard let dimensions = item["dimensions"] as? [String: Any],
-                      let flag = item["is_other"] as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID() else {
+                      let flag = item["is_other"] as? NSNumber, JSON.isBoolean(flag) else {
                     throw DailyUsageError.invalid
                 }
                 var value: DailyModelTokens
@@ -400,7 +414,7 @@ public actor CodexDailyUsage {
     }
 
     private static func number(_ value: Any?) throws -> Double {
-        guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite,
+        guard let value = value as? NSNumber, !JSON.isBoolean(value), value.doubleValue.isFinite,
               value.doubleValue >= 0 else { throw DailyUsageError.invalid }
         return value.doubleValue
     }

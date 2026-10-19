@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// USD per token for one model.
 public struct ModelRate: Hashable, Sendable {
@@ -109,7 +112,7 @@ public enum PricingLoader {
     }
 
     public static func appCachePath() -> String {
-        AppPaths.supportDirectory().appendingPathComponent("model-rates.json").path
+        PlanMeterPaths.stateDirectory().appendingPathComponent("model-rates.json").path
     }
 
     public static func loadCached() -> RateTable? {
@@ -140,7 +143,7 @@ public enum PricingLoader {
 
     static func fetch(session: URLSession, cacheURL: URL) async throws -> RateTable {
         let request = URLRequest(url: liteLLMURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.portableData(for: request)
         guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
             throw URLError(.badServerResponse)
         }
@@ -154,12 +157,4 @@ public enum PricingLoader {
         return table
     }
 
-}
-
-public enum AppPaths {
-    public static func supportDirectory() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
-        return base.appendingPathComponent("PlanMeter", isDirectory: true)
-    }
 }

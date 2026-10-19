@@ -35,6 +35,22 @@ enum JSON {
         return nil
     }
 
+    /// True when `JSONSerialization` produced this number from JSON `true` or
+    /// `false`. Booleans also bridge to `Int`, so counters must reject them.
+    static func isBoolean(_ number: NSNumber) -> Bool {
+        #if canImport(Darwin)
+        return CFGetTypeID(number) == CFBooleanGetTypeID()
+        #else
+        // swift-corelibs-foundation has no public CFBoolean, but its JSON
+        // booleans are the same private NSNumber subclass as `NSNumber(value: true)`.
+        return type(of: number) == booleanClass
+        #endif
+    }
+
+    #if !canImport(Darwin)
+    private static let booleanClass: NSNumber.Type = type(of: NSNumber(value: true))
+    #endif
+
     static func timestampMs(_ value: Any?) -> Int64? {
         guard let s = value as? String else { return nil }
         return ISO8601.parseMs(s)

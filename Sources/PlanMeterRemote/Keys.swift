@@ -1,6 +1,12 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(Security)
 import Security
+#endif
 
 /// The phone's long-lived identity: a P-256 signing key. Lives in the Secure
 /// Enclave when the hardware has one, so the private half never exists in
@@ -54,6 +60,9 @@ public struct SoftwareSigningKey: DeviceSigningKey {
     public func sign(_ message: Data) throws -> Data { try key.signature(for: message).rawRepresentation }
 }
 
+// The Secure Enclave is part of CryptoKit; other platforms use software keys
+// in 0600 files (see FileSecretStore).
+#if canImport(CryptoKit)
 public struct EnclaveSigningKey: DeviceSigningKey {
     let key: SecureEnclave.P256.Signing.PrivateKey
 
@@ -70,12 +79,15 @@ public struct EnclaveSigningKey: DeviceSigningKey {
     public var blob: KeyBlob { .enclave(key.dataRepresentation) }
     public func sign(_ message: Data) throws -> Data { try key.signature(for: message).rawRepresentation }
 }
+#endif
 
 public enum SigningKeys {
     /// Prefers the Secure Enclave; falls back to a software key (simulators,
     /// Intel Macs without a T2).
     public static func make() -> (key: DeviceSigningKey, blob: KeyBlob) {
+        #if canImport(CryptoKit)
         if let enclave = try? EnclaveSigningKey() { return (enclave, enclave.blob) }
+        #endif
         let soft = SoftwareSigningKey()
         return (soft, soft.blob)
     }
@@ -83,7 +95,13 @@ public enum SigningKeys {
     public static func load(_ blob: KeyBlob) throws -> DeviceSigningKey {
         switch blob {
         case .software(let raw): return try SoftwareSigningKey(rawRepresentation: raw)
-        case .enclave(let data): return try EnclaveSigningKey(dataRepresentation: data)
+        case .enclave(let data):
+            #if canImport(CryptoKit)
+            return try EnclaveSigningKey(dataRepresentation: data)
+            #else
+            _ = data
+            throw KeyError.enclaveUnavailable
+            #endif
         }
     }
 
@@ -112,6 +130,7 @@ public struct SoftwareAgreementKey: ServerAgreementKey {
     }
 }
 
+#if canImport(CryptoKit)
 public struct EnclaveAgreementKey: ServerAgreementKey {
     let key: SecureEnclave.P256.KeyAgreement.PrivateKey
 
@@ -131,10 +150,13 @@ public struct EnclaveAgreementKey: ServerAgreementKey {
         return try key.sharedSecretFromKeyAgreement(with: peer)
     }
 }
+#endif
 
 public enum AgreementKeys {
     public static func make() -> (key: ServerAgreementKey, blob: KeyBlob) {
+        #if canImport(CryptoKit)
         if let enclave = try? EnclaveAgreementKey() { return (enclave, enclave.blob) }
+        #endif
         let soft = SoftwareAgreementKey()
         return (soft, soft.blob)
     }
@@ -142,7 +164,13 @@ public enum AgreementKeys {
     public static func load(_ blob: KeyBlob) throws -> ServerAgreementKey {
         switch blob {
         case .software(let raw): return try SoftwareAgreementKey(rawRepresentation: raw)
-        case .enclave(let data): return try EnclaveAgreementKey(dataRepresentation: data)
+        case .enclave(let data):
+            #if canImport(CryptoKit)
+            return try EnclaveAgreementKey(dataRepresentation: data)
+            #else
+            _ = data
+            throw KeyError.enclaveUnavailable
+            #endif
         }
     }
 }
@@ -151,7 +179,8 @@ public enum AgreementKeys {
 
 /// Where a key blob or paired-server record lives. The Mac uses a 0600 file in
 /// Application Support (ad-hoc signatures make keychain ACL prompts noisy);
-/// iOS uses the keychain, this-device-only.
+/// iOS uses the keychain, this-device-only; Linux uses a 0600 file in the
+/// XDG state directory.
 public protocol SecretStore: Sendable {
     func read(_ key: String) throws -> Data?
     func write(_ key: String, _ data: Data) throws
@@ -173,7 +202,13 @@ public struct FileSecretStore: SecretStore {
 
     public func write(_ key: String, _ data: Data) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        #if canImport(Darwin)
         try data.write(to: url(key), options: [.atomic, .completeFileProtection])
+        #else
+        // Data protection classes are Apple-only; the 0700 directory and 0600
+        // file mode below are the protection elsewhere.
+        try data.write(to: url(key), options: [.atomic])
+        #endif
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url(key).path)
     }
 
@@ -183,6 +218,7 @@ public struct FileSecretStore: SecretStore {
     }
 }
 
+#if canImport(Security)
 public struct KeychainSecretStore: SecretStore {
     public let service: String
 
@@ -221,6 +257,7 @@ public struct KeychainSecretStore: SecretStore {
         guard status == errSecSuccess || status == errSecItemNotFound else { throw KeyError.storage("keychain delete failed (\(status))") }
     }
 }
+#endif
 
 public extension SecretStore {
     func readCodable<T: Decodable>(_ type: T.Type, _ key: String) throws -> T? {

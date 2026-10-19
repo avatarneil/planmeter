@@ -1,3 +1,4 @@
+#if canImport(CloudKit)
 import CloudKit
 import XCTest
 @testable import PlanMeterRemote
@@ -18,3 +19,4 @@ final class CloudSubscriptionTests: XCTestCase {
         XCTAssertFalse(info.shouldBadge)
     }
 }
+#endif

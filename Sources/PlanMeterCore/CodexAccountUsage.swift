@@ -1,5 +1,11 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 
 /// Fetches at most once per five minutes per login. Failures retain the last
 /// successful reading with an explicit stale status, never a fabricated zero.
@@ -43,12 +49,57 @@ public actor CodexAccountUsage {
     }
 
     static func executable(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
-        let paths = (environment["PATH"] ?? "").split(separator: ":").map { "\($0)/codex" } + [
-            NSHomeDirectory() + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex",
+        #if canImport(Darwin)
+        let paths = appleExecutableCandidates(environment: environment, home: PlanMeterPaths.homeDirectory(environment: environment))
+        #else
+        let paths = linuxExecutableCandidates(environment: environment, home: PlanMeterPaths.homeDirectory(environment: environment))
+        #endif
+        return paths.first { FileManager.default.isExecutableFile(atPath: $0) }.map { URL(fileURLWithPath: $0) }
+    }
+
+    static func appleExecutableCandidates(environment: [String: String], home: String) -> [String] {
+        (environment["PATH"] ?? "").split(separator: ":").map { "\($0)/codex" } + [
+            home + "/.local/bin/codex", "/opt/homebrew/bin/codex", "/usr/local/bin/codex",
             "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
             "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex",
         ]
-        return paths.first { FileManager.default.isExecutableFile(atPath: $0) }.map { URL(fileURLWithPath: $0) }
+    }
+
+    /// PATH first, then the usual install locations: a systemd user service
+    /// starts with a minimal PATH that misses per-user package-manager prefixes.
+    static func linuxExecutableCandidates(environment: [String: String], home: String, fileManager: FileManager = .default) -> [String] {
+        func absolute(_ key: String) -> String? {
+            guard let value = environment[key], value.hasPrefix("/") else { return nil }
+            return value
+        }
+        var directories = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
+        // Prefixes configured through the environment.
+        directories += [
+            absolute("NPM_CONFIG_PREFIX").map { $0 + "/bin" },
+            absolute("PNPM_HOME"),
+            absolute("BUN_INSTALL").map { $0 + "/bin" },
+            absolute("VOLTA_HOME").map { $0 + "/bin" },
+        ].compactMap { $0 }
+        directories += [
+            home + "/.local/bin",            // standalone release binary, pipx-style installs
+            home + "/.npm-global/bin",       // npm with a per-user prefix
+            home + "/.local/share/pnpm",
+            home + "/.bun/bin",
+            home + "/.volta/bin",
+            home + "/.yarn/bin",
+            home + "/.cargo/bin",            // built from source
+            "/home/linuxbrew/.linuxbrew/bin",
+            home + "/.linuxbrew/bin",
+            "/usr/local/bin",                // npm's default global prefix
+            "/usr/bin",
+        ]
+        // nvm keeps one prefix per Node version; prefer the newest.
+        let nvm = (absolute("NVM_DIR") ?? home + "/.nvm") + "/versions/node"
+        let versions = ((try? fileManager.contentsOfDirectory(atPath: nvm)) ?? [])
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+        directories += versions.map { "\(nvm)/\($0)/bin" }
+        var seen: Set<String> = []
+        return directories.filter { !$0.isEmpty && seen.insert($0).inserted }.map { $0 + "/codex" }
     }
 
     static func read(target: CodexUsageTarget, executableURL: URL? = nil, timeout: TimeInterval = 15,
@@ -124,7 +175,7 @@ public actor CodexAccountUsage {
         formatter.isLenient = false
         for row in rows {
             guard let label = row["startDate"] as? String, let date = formatter.date(from: label), formatter.string(from: date) == label,
-                  let number = row["tokens"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  let number = row["tokens"] as? NSNumber, !JSON.isBoolean(number),
                   number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue < Double(Int.max),
                   number.doubleValue.rounded(.down) == number.doubleValue, seen.insert(label).inserted else { throw UsageError.unsupported }
             days.append(AccountUsageDay(startDate: label, tokens: number.intValue))
@@ -158,6 +209,13 @@ enum UsageError: Error {
     }
 }
 
+#if !canImport(Darwin)
+/// Darwin's Foundation marks pipes F_SETNOSIGPIPE. Elsewhere, writing to a
+/// child that already exited raises SIGPIPE and kills this process, so ignore
+/// it once; the write then fails with EPIPE and is reported as a failed read.
+private let ignoreBrokenPipes: Void = { _ = signal(SIGPIPE, SIG_IGN) }()
+#endif
+
 /// A short-lived stdio client. Only initialization and read methods are sent;
 /// it never starts a model turn, changes login, or consumes reset credits.
 private final class CodexUsageRPC: @unchecked Sendable {
@@ -173,6 +231,9 @@ private final class CodexUsageRPC: @unchecked Sendable {
     let deadline: Date
 
     init(executableURL: URL, home: String, timeout: TimeInterval) throws {
+        #if !canImport(Darwin)
+        _ = ignoreBrokenPipes
+        #endif
         deadline = Date().addingTimeInterval(timeout)
         process.executableURL = executableURL
         process.arguments = ["app-server", "--stdio"]

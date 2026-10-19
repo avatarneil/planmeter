@@ -2,7 +2,7 @@ import XCTest
 @testable import PlanMeterCore
 
 final class UsageProjectionTests: XCTestCase {
-    let fixture = CodexDailyUsageTests()
+    let fixture = CodexDailyUsageTests.fixture()
     var account: Account { Account.placeholder(id: fixture.target.localAccountId!) }
     var from: Date { fixture.now.addingTimeInterval(-86_400) }
     var to: Date { fixture.now }

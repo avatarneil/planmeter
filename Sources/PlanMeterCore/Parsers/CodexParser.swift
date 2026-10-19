@@ -204,7 +204,7 @@ public enum CodexParser {
     }
 
     static func count(_ value: Any?) -> Int? {
-        guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
+        guard let value = value as? NSNumber, !JSON.isBoolean(value) else { return nil }
         let number = value.doubleValue
         guard number.isFinite, number >= 0, number.rounded(.down) == number, number < Double(Int.max),
               value.int64Value >= 0 else { return nil }
