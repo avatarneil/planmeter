@@ -86,7 +86,7 @@ pub fn present(win: &Rc<MainWindow>, page: Option<&str>) {
                 reverting.set(true);
                 row.set_active(true);
                 reverting.set(false);
-                dialog.add_toast(adw::Toast::new(
+                dialog.add_toast(super::widgets::plain_toast(
                     "At least one plan group counts toward the total",
                 ));
                 return;

@@ -76,6 +76,7 @@ impl RemotePage {
         let enabled_row = adw::SwitchRow::builder()
             .title("Remote Access")
             .subtitle("Off")
+            .use_markup(false)
             .build();
         let status_dot = status_dot("");
         enabled_row.add_prefix(&status_dot);
@@ -124,6 +125,7 @@ impl RemotePage {
         connection.add(&port_row);
         let https_row = adw::SwitchRow::builder()
             .title("HTTPS with Tailscale Serve")
+            .use_markup(false)
             .build();
         connection.add(&https_row);
         let url_row = row("Web App Address", "");
@@ -255,7 +257,7 @@ impl RemotePage {
                         "Address"
                     };
                     p.toasts
-                        .add_toast(adw::Toast::new(&format!("{name} copied")));
+                        .add_toast(super::widgets::plain_toast(&format!("{name} copied")));
                 }
             });
         }
@@ -503,7 +505,7 @@ impl RemotePage {
         copy.connect_clicked(move |b| {
             b.clipboard().set_text(&url);
             if let Some(t) = toasts.upgrade() {
-                t.add_toast(adw::Toast::new(
+                t.add_toast(super::widgets::plain_toast(
                     "Pairing link copied. It is a secret: share it only with your own device.",
                 ));
             }
