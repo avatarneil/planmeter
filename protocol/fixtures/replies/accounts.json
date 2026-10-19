@@ -1,0 +1,80 @@
+{
+  "accounts" : {
+    "accounts" : [
+      {
+        "email" : "ada.lovelace@example.org",
+        "group" : "work",
+        "id" : "codex:plan:business",
+        "name" : "Work Codex",
+        "plan" : "Business",
+        "provider" : "codex",
+        "providerName" : "Codex"
+      },
+      {
+        "accentColorHex" : "#10A37F",
+        "email" : "ada@example.com",
+        "group" : "personal",
+        "id" : "codex:plan:pro",
+        "name" : "Personal Codex",
+        "plan" : "Pro",
+        "provider" : "codex",
+        "providerName" : "Codex"
+      },
+      {
+        "accentColorHex" : "#D97757",
+        "email" : "ada@example.com",
+        "group" : "personal",
+        "id" : "claude:home:/Users/ada/.claude-personal/projects",
+        "name" : "Personal Claude",
+        "plan" : "Max",
+        "provider" : "claude",
+        "providerName" : "Claude Code"
+      },
+      {
+        "email" : "ada.lovelace@example.org",
+        "group" : "work",
+        "id" : "claude:home:/Users/ada/.claude/projects",
+        "name" : "Work Claude",
+        "plan" : "Enterprise",
+        "provider" : "claude",
+        "providerName" : "Claude Code"
+      },
+      {
+        "group" : "other",
+        "id" : "opencode:local",
+        "name" : "OpenCode",
+        "plan" : "local",
+        "provider" : "opencode",
+        "providerName" : "OpenCode"
+      }
+    ],
+    "scannedAt" : "2026-10-19T16:00:00Z",
+    "sources" : [
+      {
+        "path" : "/Users/ada/.codex/sessions",
+        "provider" : "codex",
+        "status" : "ok"
+      },
+      {
+        "path" : "/Users/ada/.codex/archived_sessions",
+        "provider" : "codex",
+        "status" : "ok"
+      },
+      {
+        "path" : "/Users/ada/.claude-personal/projects",
+        "provider" : "claude",
+        "status" : "ok"
+      },
+      {
+        "path" : "/Users/ada/.claude/projects",
+        "provider" : "claude",
+        "status" : "partial"
+      },
+      {
+        "path" : "/Users/ada/.local/share/opencode/opencode.db",
+        "provider" : "opencode",
+        "status" : "missing"
+      }
+    ]
+  }
+}

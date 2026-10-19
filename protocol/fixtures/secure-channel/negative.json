@@ -1,0 +1,445 @@
+{
+  "description" : "Server-side checks applied to altered requests and client-side checks applied to altered responses. Each vector lists the result of checkTimestamp (at `now`), verifySignature (against devicePublicKeyHex, method, path), and open (with the server key) for requests, or openResponse for responses. Error names: unsupportedVersion, malformed, timeWindow, decryptFailed.",
+  "serverStaticPrivateKeyHex" : "91e6c142d6c43dde7827329081920ac0c2b402aaa1fa6261ab782bdfd66b237e",
+  "serverStaticPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+  "vectors" : [
+    {
+      "description" : "chacha20poly1305-request.json unchanged: every check passes.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "valid-baseline",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Clients from before cipher negotiation omit `cipher`; it means chacha20poly1305, including in the header.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "missing-cipher-field",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "First ciphertext byte after the embedded nonce flipped: the signature and the AEAD both fail.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "decryptFailed",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "tampered-ciphertext",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjX9r1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Last tag byte flipped.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "decryptFailed",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "tampered-tag",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwlp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Signed and sealed for /v1/rpc but checked as /v1/pair: the header differs, so the signature and the AEAD fail.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "decryptFailed",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "wrong-path",
+      "now" : 1792500000,
+      "path" : "/v1/pair",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Checked as GET instead of POST.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "decryptFailed",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "GET",
+      "name" : "wrong-method",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Signed by a different device key over the right input. The AEAD still opens, which is why servers verify first.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "bad-signature",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "PXAKWaGBnWWK91yHm1coJccyYpBAm3VP8UrMTtXvlo4RYsnB1eRRHeg3+S4cOPCUFo1sDiHgIJSUAE+zF8iygg==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "(r, n - s) is the other encoding of the same ECDSA signature. The Swift server accepts it on Apple platforms and Linux, so clients need not normalize to low S.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "s-complement-signature",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6YqJHozpdwJ5z7DX1g54qD78B+MQ5kMZB1PUXc9+WfA8tQ==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "aes-256-gcm-request.json relabelled as chacha20poly1305: the cipher is bound into the header.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "decryptFailed",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "cipher-swapped",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "GgJIHT+Fa2EpB0QlSBTXxl0tcRvGIshrTy4Jcl+OUssJqg1jnLCY9Zw89RS5WvUwRe8xR3AbxkHe",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BPltyJXPVVUjx5bgx9ikep2LQaDsl+uzWac3yU91YS/0Bz9ZSE7sCG0eIeVwQ02MOKgQHDmDTSD15PfQ7PgilG0=",
+        "nonce" : "GgJIHT+Fa2EpB0Ql",
+        "signature" : "gVkT6LeeBUnwsxjnYP1blkUibfD/J1zLGc+jIxV2qlpwBwed+Le6Fp0lAkl5bUczJQ0wsEBXnTvRpT1PsF5cNA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Exactly 120 seconds of skew is accepted.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "ok",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "clock-skew-edge",
+      "now" : 1792500120,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "121 seconds of skew is rejected before any cryptography.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "timeWindow",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "stale-timestamp",
+      "now" : 1792500121,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Skew counts in both directions.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "timeWindow",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "future-timestamp",
+      "now" : 1792499879,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "Only v = 1 exists. The version is not part of the header, so the signature still verifies.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "unsupportedVersion",
+        "open" : "ok",
+        "plaintext" : "{\"days\":1,\"method\":\"timeline\",\"resolution\":\"hour\"}",
+        "verifySignature" : true
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "unsupported-version",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 2
+      }
+    },
+    {
+      "description" : "The nonce field must be exactly 12 bytes.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "malformed",
+        "open" : "decryptFailed",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "short-nonce",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "BD2oj57vM+Sym/zjh5wr9nfCtr0sqne0TV4DclUs92dKyBsy4vmkPCYMMIzCZKDhIPOcstrsqdMSiorwe5250zA=",
+        "nonce" : "lwbbCwmImiE=",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "ephemeralPublicKey must be the 65-byte X9.63 uncompressed point.",
+      "devicePublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "expect" : {
+        "checkTimestamp" : "malformed",
+        "open" : "error",
+        "verifySignature" : false
+      },
+      "kind" : "request",
+      "method" : "POST",
+      "name" : "compressed-or-truncated-ephemeral-key",
+      "now" : 1792500000,
+      "path" : "/v1/rpc",
+      "sealedRequest" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "lwbbCwmImiEo5QJjXtr1nBEDE6pApN+5UsgoYJbvg5GIIqTZldzNjYhGjq8q6Cwi1MB9N9g1Oi/aoJ4QaPgJcU1oYI2ZmoQnk0wMOwnp",
+        "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+        "ephemeralPublicKey" : "PaiPnu8z5LKb/OOHnCv2d8K2vSyqd7RNXgNyVSz3Z0rIGzLi+aQ8JgwwjMJkoOEg85yy2uyp0xKKivB7nbnTMA==",
+        "nonce" : "lwbbCwmImiEo5QJj",
+        "signature" : "H/fwnGJi6bV+vEEqAvK7l5SEvCKO6WAM1ldnOWml6Yp24XMViP2GMU8oKfGHV8EDtQPpx2P+lzEfW/tEonLonA==",
+        "timestamp" : 1792500000,
+        "v" : 1
+      }
+    },
+    {
+      "description" : "chacha20poly1305-response.json unchanged.",
+      "expect" : {
+        "openResponse" : "ok",
+        "plaintext" : "{\"accounts\":{\"accounts\":[{\"email\":\"ada.lovelace@example.org\",\"group\":\"work\",\"id\":\"codex:plan:business\",\"name\":\"Work Codex\",\"plan\":\"Business\",\"provider\":\"codex\",\"providerName\":\"Codex\"},{\"accentColorHex\":\"#10A37F\",\"email\":\"ada@example.com\",\"group\":\"personal\",\"id\":\"codex:plan:pro\",\"name\":\"Personal Codex\",\"plan\":\"Pro\",\"provider\":\"codex\",\"providerName\":\"Codex\"},{\"accentColorHex\":\"#D97757\",\"email\":\"ada@example.com\",\"group\":\"personal\",\"id\":\"claude:home:\\/Users\\/ada\\/.claude-personal\\/projects\",\"name\":\"Personal Claude\",\"plan\":\"Max\",\"provider\":\"claude\",\"providerName\":\"Claude Code\"},{\"email\":\"ada.lovelace@example.org\",\"group\":\"work\",\"id\":\"claude:home:\\/Users\\/ada\\/.claude\\/projects\",\"name\":\"Work Claude\",\"plan\":\"Enterprise\",\"provider\":\"claude\",\"providerName\":\"Claude Code\"},{\"group\":\"other\",\"id\":\"opencode:local\",\"name\":\"OpenCode\",\"plan\":\"local\",\"provider\":\"opencode\",\"providerName\":\"OpenCode\"}],\"scannedAt\":\"2026-10-19T16:00:00Z\",\"sources\":[{\"path\":\"\\/Users\\/ada\\/.codex\\/sessions\",\"provider\":\"codex\",\"status\":\"ok\"},{\"path\":\"\\/Users\\/ada\\/.codex\\/archived_sessions\",\"provider\":\"codex\",\"status\":\"ok\"},{\"path\":\"\\/Users\\/ada\\/.claude-personal\\/projects\",\"provider\":\"claude\",\"status\":\"ok\"},{\"path\":\"\\/Users\\/ada\\/.claude\\/projects\",\"provider\":\"claude\",\"status\":\"partial\"},{\"path\":\"\\/Users\\/ada\\/.local\\/share\\/opencode\\/opencode.db\",\"provider\":\"opencode\",\"status\":\"missing\"}]}}"
+      },
+      "kind" : "response",
+      "name" : "response-valid-baseline",
+      "responseKeyHex" : "0e6c65fca96bf8ef72f0b15dd1fc6331379447e9299fe85a12876b88102718c8",
+      "sealedResponse" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "H6Prppmi7Gwm8iou2txIPpkEzHyh4A6KQ64JgbShEfk8ciE4g4N43JBpIo0DB9JnrNdlD/i6n0LueVNvKCr4/z1XswCgm1rP1XstnehX/jtFOmoovs6AVEr+j+kIXlBOis4Jgeru7wD8SiAYkLQ8XimhNSCE79ahzSt0r2ugYFN8m1mL6A00SDkD3Oj5Kwrj3nJDoLofzhrHnEepi1Oj2aWNA/AIvx5wdeg/smxuVz7ZL94wLU+NbRxCjgRlsR/pvKcXVX2q8AMHQ3473JEmBdk8U/P39FYrMnKuXEzFjeMOYtXTk/dCzCe8UUz7U58mJh2RlC0q2QT9oN+f6OMLBamZTuNKdqSQFejmz+1yD3tRGSHT/y35yxGyZ4ItSsZq674Ex3YG4FWe6uKyPCuZ1t6Ic7fFe5zabkYH3BBW/yholAJQzxyfFyJWMTj1QHXdXOnFVgx9D1GKrAoJeV9Vamc4R4qpPQrr4HUCsE/d1zAcpZeAoojvUD13vIWz6wwdF27TOHm4GLT6nhWRo6Qkyqg/ct7jK5ZZGulvaOcfro/No8PAwUFFeBfF6nkxDK9uPnoeGZagli4esUH/prKITAx0y2eeeDHQzMEFapr2g7d5ZghdTG2XcY/yceGKDTPoWLtzv5uj8wirOwTYjEaBApaRt5DBAQQg8nQX8fQ2EFIEKbYZ88Gh6SD4BwsonoZPe0yREqAlw66UB7y1qeAFU6h5BgoJ/Q7RafgvxY9fm56hJGWmPNxJjwKQR7XQVKwOjefo+bPujHRnbYP0l/Ko2Rywpgf1oGaMDyazVCPHp/PcA5xEKjg9wMRwteP/vIlAZT7tPtqZqcWvcwOEvRWgZeYJaq8OEZKGt7LYvurROKusAE2DTp1PenrrZI7yKNh5kzX8zmPLI0sBMVzR3sE4AMI143TqccavPCzzU9bM4uu12af0B3xr7nv5c8FjyMNlYhFoBOseuSG1gAqTTtL04oMS6AU9vmGPqZXQL7N46F62uUtn7+QONH2GNyxrc8jhZalI+HuyRei+SLeLSVnRAd9aQAaA3KiMVEDDFyN/YanUnmSleZO7af3jKditISX+7pTKN3AoKwxwnOtgaRqeStNZnld/Uv3BeX3smG/oWrgWG4xQem8ldQ19/Dz1CM0R+5s8Cu5x4ym1TCd5QFNfzp6ae0Z7vb+tTOVF2kX+IbMeVXE044YCqFFkVHg2OO+GCSDrHuyQTsCYjUw2G4zH+J25Wg4N0CeggD/HZey5bB5dVmhnxSlSPgrIQ4gEmu9r4BcpNbOJkBrktlZQGVj7xeaQ8qVE0UuyIFxk0aGR215YbQts+ZPacGfJzH8RBqskMj9jCLXKzLwE4orCMbeOkwYXC3xXzCB9zHyjpixFHS5jqMuRuQ+G3LVdV9Y1RTWfj4imqzooB7zXoVbgWrNYcBRmNZPQQ3flIXF5eY71DHr+FozqhYoLwicgLduc2Z732C2BL6JI2XHXvh+05eJj3dObeooxghxjs3E4ZJM7HdFHEGgdrVWW2WhUyEx4GeyCQzNkZA444L8otSNntlPpD8Z2TSdLELRcUZNANvSYI2g8wI7Z+dwQf+1k0B3/KDpfP++DV1qX051G/aXx8qYTHWCnWT5Xw0DEWU7i19Umx8WXHmjHnONBi9Zqm5oo/AeIzSV07XwT6AG7gts7owYYYWYPLzMZOzfLnizf+tu/zKr6TDCiQ3Mgo24DTP3Nw+EgZTUiLYf5e9kEJZY6NDzKiP+hTwSC0r1wsScn3C6it1FtbvGLqI8xJaMZCQdrmmA4nwnmaMYKigUqOcwI72NpWTunt7zRDb4BuzZFIqUGLdNHPpTmSOs6Un/GI2DJSFBsxgnXHdU7j7Fi",
+        "nonce" : "H6Prppmi7Gwm8iou"
+      }
+    },
+    {
+      "description" : "First ciphertext byte after the embedded nonce flipped.",
+      "expect" : {
+        "openResponse" : "decryptFailed"
+      },
+      "kind" : "response",
+      "name" : "response-tampered-ciphertext",
+      "responseKeyHex" : "0e6c65fca96bf8ef72f0b15dd1fc6331379447e9299fe85a12876b88102718c8",
+      "sealedResponse" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "H6Prppmi7Gwm8iou29xIPpkEzHyh4A6KQ64JgbShEfk8ciE4g4N43JBpIo0DB9JnrNdlD/i6n0LueVNvKCr4/z1XswCgm1rP1XstnehX/jtFOmoovs6AVEr+j+kIXlBOis4Jgeru7wD8SiAYkLQ8XimhNSCE79ahzSt0r2ugYFN8m1mL6A00SDkD3Oj5Kwrj3nJDoLofzhrHnEepi1Oj2aWNA/AIvx5wdeg/smxuVz7ZL94wLU+NbRxCjgRlsR/pvKcXVX2q8AMHQ3473JEmBdk8U/P39FYrMnKuXEzFjeMOYtXTk/dCzCe8UUz7U58mJh2RlC0q2QT9oN+f6OMLBamZTuNKdqSQFejmz+1yD3tRGSHT/y35yxGyZ4ItSsZq674Ex3YG4FWe6uKyPCuZ1t6Ic7fFe5zabkYH3BBW/yholAJQzxyfFyJWMTj1QHXdXOnFVgx9D1GKrAoJeV9Vamc4R4qpPQrr4HUCsE/d1zAcpZeAoojvUD13vIWz6wwdF27TOHm4GLT6nhWRo6Qkyqg/ct7jK5ZZGulvaOcfro/No8PAwUFFeBfF6nkxDK9uPnoeGZagli4esUH/prKITAx0y2eeeDHQzMEFapr2g7d5ZghdTG2XcY/yceGKDTPoWLtzv5uj8wirOwTYjEaBApaRt5DBAQQg8nQX8fQ2EFIEKbYZ88Gh6SD4BwsonoZPe0yREqAlw66UB7y1qeAFU6h5BgoJ/Q7RafgvxY9fm56hJGWmPNxJjwKQR7XQVKwOjefo+bPujHRnbYP0l/Ko2Rywpgf1oGaMDyazVCPHp/PcA5xEKjg9wMRwteP/vIlAZT7tPtqZqcWvcwOEvRWgZeYJaq8OEZKGt7LYvurROKusAE2DTp1PenrrZI7yKNh5kzX8zmPLI0sBMVzR3sE4AMI143TqccavPCzzU9bM4uu12af0B3xr7nv5c8FjyMNlYhFoBOseuSG1gAqTTtL04oMS6AU9vmGPqZXQL7N46F62uUtn7+QONH2GNyxrc8jhZalI+HuyRei+SLeLSVnRAd9aQAaA3KiMVEDDFyN/YanUnmSleZO7af3jKditISX+7pTKN3AoKwxwnOtgaRqeStNZnld/Uv3BeX3smG/oWrgWG4xQem8ldQ19/Dz1CM0R+5s8Cu5x4ym1TCd5QFNfzp6ae0Z7vb+tTOVF2kX+IbMeVXE044YCqFFkVHg2OO+GCSDrHuyQTsCYjUw2G4zH+J25Wg4N0CeggD/HZey5bB5dVmhnxSlSPgrIQ4gEmu9r4BcpNbOJkBrktlZQGVj7xeaQ8qVE0UuyIFxk0aGR215YbQts+ZPacGfJzH8RBqskMj9jCLXKzLwE4orCMbeOkwYXC3xXzCB9zHyjpixFHS5jqMuRuQ+G3LVdV9Y1RTWfj4imqzooB7zXoVbgWrNYcBRmNZPQQ3flIXF5eY71DHr+FozqhYoLwicgLduc2Z732C2BL6JI2XHXvh+05eJj3dObeooxghxjs3E4ZJM7HdFHEGgdrVWW2WhUyEx4GeyCQzNkZA444L8otSNntlPpD8Z2TSdLELRcUZNANvSYI2g8wI7Z+dwQf+1k0B3/KDpfP++DV1qX051G/aXx8qYTHWCnWT5Xw0DEWU7i19Umx8WXHmjHnONBi9Zqm5oo/AeIzSV07XwT6AG7gts7owYYYWYPLzMZOzfLnizf+tu/zKr6TDCiQ3Mgo24DTP3Nw+EgZTUiLYf5e9kEJZY6NDzKiP+hTwSC0r1wsScn3C6it1FtbvGLqI8xJaMZCQdrmmA4nwnmaMYKigUqOcwI72NpWTunt7zRDb4BuzZFIqUGLdNHPpTmSOs6Un/GI2DJSFBsxgnXHdU7j7Fi",
+        "nonce" : "H6Prppmi7Gwm8iou"
+      }
+    },
+    {
+      "description" : "The `nonce` field is the AEAD's additional data; it must equal the nonce embedded in `ciphertext`.",
+      "expect" : {
+        "openResponse" : "decryptFailed"
+      },
+      "kind" : "response",
+      "name" : "response-nonce-field-mismatch",
+      "responseKeyHex" : "0e6c65fca96bf8ef72f0b15dd1fc6331379447e9299fe85a12876b88102718c8",
+      "sealedResponse" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "H6Prppmi7Gwm8iou2txIPpkEzHyh4A6KQ64JgbShEfk8ciE4g4N43JBpIo0DB9JnrNdlD/i6n0LueVNvKCr4/z1XswCgm1rP1XstnehX/jtFOmoovs6AVEr+j+kIXlBOis4Jgeru7wD8SiAYkLQ8XimhNSCE79ahzSt0r2ugYFN8m1mL6A00SDkD3Oj5Kwrj3nJDoLofzhrHnEepi1Oj2aWNA/AIvx5wdeg/smxuVz7ZL94wLU+NbRxCjgRlsR/pvKcXVX2q8AMHQ3473JEmBdk8U/P39FYrMnKuXEzFjeMOYtXTk/dCzCe8UUz7U58mJh2RlC0q2QT9oN+f6OMLBamZTuNKdqSQFejmz+1yD3tRGSHT/y35yxGyZ4ItSsZq674Ex3YG4FWe6uKyPCuZ1t6Ic7fFe5zabkYH3BBW/yholAJQzxyfFyJWMTj1QHXdXOnFVgx9D1GKrAoJeV9Vamc4R4qpPQrr4HUCsE/d1zAcpZeAoojvUD13vIWz6wwdF27TOHm4GLT6nhWRo6Qkyqg/ct7jK5ZZGulvaOcfro/No8PAwUFFeBfF6nkxDK9uPnoeGZagli4esUH/prKITAx0y2eeeDHQzMEFapr2g7d5ZghdTG2XcY/yceGKDTPoWLtzv5uj8wirOwTYjEaBApaRt5DBAQQg8nQX8fQ2EFIEKbYZ88Gh6SD4BwsonoZPe0yREqAlw66UB7y1qeAFU6h5BgoJ/Q7RafgvxY9fm56hJGWmPNxJjwKQR7XQVKwOjefo+bPujHRnbYP0l/Ko2Rywpgf1oGaMDyazVCPHp/PcA5xEKjg9wMRwteP/vIlAZT7tPtqZqcWvcwOEvRWgZeYJaq8OEZKGt7LYvurROKusAE2DTp1PenrrZI7yKNh5kzX8zmPLI0sBMVzR3sE4AMI143TqccavPCzzU9bM4uu12af0B3xr7nv5c8FjyMNlYhFoBOseuSG1gAqTTtL04oMS6AU9vmGPqZXQL7N46F62uUtn7+QONH2GNyxrc8jhZalI+HuyRei+SLeLSVnRAd9aQAaA3KiMVEDDFyN/YanUnmSleZO7af3jKditISX+7pTKN3AoKwxwnOtgaRqeStNZnld/Uv3BeX3smG/oWrgWG4xQem8ldQ19/Dz1CM0R+5s8Cu5x4ym1TCd5QFNfzp6ae0Z7vb+tTOVF2kX+IbMeVXE044YCqFFkVHg2OO+GCSDrHuyQTsCYjUw2G4zH+J25Wg4N0CeggD/HZey5bB5dVmhnxSlSPgrIQ4gEmu9r4BcpNbOJkBrktlZQGVj7xeaQ8qVE0UuyIFxk0aGR215YbQts+ZPacGfJzH8RBqskMj9jCLXKzLwE4orCMbeOkwYXC3xXzCB9zHyjpixFHS5jqMuRuQ+G3LVdV9Y1RTWfj4imqzooB7zXoVbgWrNYcBRmNZPQQ3flIXF5eY71DHr+FozqhYoLwicgLduc2Z732C2BL6JI2XHXvh+05eJj3dObeooxghxjs3E4ZJM7HdFHEGgdrVWW2WhUyEx4GeyCQzNkZA444L8otSNntlPpD8Z2TSdLELRcUZNANvSYI2g8wI7Z+dwQf+1k0B3/KDpfP++DV1qX051G/aXx8qYTHWCnWT5Xw0DEWU7i19Umx8WXHmjHnONBi9Zqm5oo/AeIzSV07XwT6AG7gts7owYYYWYPLzMZOzfLnizf+tu/zKr6TDCiQ3Mgo24DTP3Nw+EgZTUiLYf5e9kEJZY6NDzKiP+hTwSC0r1wsScn3C6it1FtbvGLqI8xJaMZCQdrmmA4nwnmaMYKigUqOcwI72NpWTunt7zRDb4BuzZFIqUGLdNHPpTmSOs6Un/GI2DJSFBsxgnXHdU7j7Fi",
+        "nonce" : "Y4FccHgaOy7KdCMO"
+      }
+    },
+    {
+      "description" : "Opened with the request key instead of the response key.",
+      "expect" : {
+        "openResponse" : "decryptFailed"
+      },
+      "kind" : "response",
+      "name" : "response-wrong-key",
+      "responseKeyHex" : "9cdc0365695e243a5e06be289b9f5b8bd719bf4705c74782dd3c8b4a7c6307ea",
+      "sealedResponse" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "H6Prppmi7Gwm8iou2txIPpkEzHyh4A6KQ64JgbShEfk8ciE4g4N43JBpIo0DB9JnrNdlD/i6n0LueVNvKCr4/z1XswCgm1rP1XstnehX/jtFOmoovs6AVEr+j+kIXlBOis4Jgeru7wD8SiAYkLQ8XimhNSCE79ahzSt0r2ugYFN8m1mL6A00SDkD3Oj5Kwrj3nJDoLofzhrHnEepi1Oj2aWNA/AIvx5wdeg/smxuVz7ZL94wLU+NbRxCjgRlsR/pvKcXVX2q8AMHQ3473JEmBdk8U/P39FYrMnKuXEzFjeMOYtXTk/dCzCe8UUz7U58mJh2RlC0q2QT9oN+f6OMLBamZTuNKdqSQFejmz+1yD3tRGSHT/y35yxGyZ4ItSsZq674Ex3YG4FWe6uKyPCuZ1t6Ic7fFe5zabkYH3BBW/yholAJQzxyfFyJWMTj1QHXdXOnFVgx9D1GKrAoJeV9Vamc4R4qpPQrr4HUCsE/d1zAcpZeAoojvUD13vIWz6wwdF27TOHm4GLT6nhWRo6Qkyqg/ct7jK5ZZGulvaOcfro/No8PAwUFFeBfF6nkxDK9uPnoeGZagli4esUH/prKITAx0y2eeeDHQzMEFapr2g7d5ZghdTG2XcY/yceGKDTPoWLtzv5uj8wirOwTYjEaBApaRt5DBAQQg8nQX8fQ2EFIEKbYZ88Gh6SD4BwsonoZPe0yREqAlw66UB7y1qeAFU6h5BgoJ/Q7RafgvxY9fm56hJGWmPNxJjwKQR7XQVKwOjefo+bPujHRnbYP0l/Ko2Rywpgf1oGaMDyazVCPHp/PcA5xEKjg9wMRwteP/vIlAZT7tPtqZqcWvcwOEvRWgZeYJaq8OEZKGt7LYvurROKusAE2DTp1PenrrZI7yKNh5kzX8zmPLI0sBMVzR3sE4AMI143TqccavPCzzU9bM4uu12af0B3xr7nv5c8FjyMNlYhFoBOseuSG1gAqTTtL04oMS6AU9vmGPqZXQL7N46F62uUtn7+QONH2GNyxrc8jhZalI+HuyRei+SLeLSVnRAd9aQAaA3KiMVEDDFyN/YanUnmSleZO7af3jKditISX+7pTKN3AoKwxwnOtgaRqeStNZnld/Uv3BeX3smG/oWrgWG4xQem8ldQ19/Dz1CM0R+5s8Cu5x4ym1TCd5QFNfzp6ae0Z7vb+tTOVF2kX+IbMeVXE044YCqFFkVHg2OO+GCSDrHuyQTsCYjUw2G4zH+J25Wg4N0CeggD/HZey5bB5dVmhnxSlSPgrIQ4gEmu9r4BcpNbOJkBrktlZQGVj7xeaQ8qVE0UuyIFxk0aGR215YbQts+ZPacGfJzH8RBqskMj9jCLXKzLwE4orCMbeOkwYXC3xXzCB9zHyjpixFHS5jqMuRuQ+G3LVdV9Y1RTWfj4imqzooB7zXoVbgWrNYcBRmNZPQQ3flIXF5eY71DHr+FozqhYoLwicgLduc2Z732C2BL6JI2XHXvh+05eJj3dObeooxghxjs3E4ZJM7HdFHEGgdrVWW2WhUyEx4GeyCQzNkZA444L8otSNntlPpD8Z2TSdLELRcUZNANvSYI2g8wI7Z+dwQf+1k0B3/KDpfP++DV1qX051G/aXx8qYTHWCnWT5Xw0DEWU7i19Umx8WXHmjHnONBi9Zqm5oo/AeIzSV07XwT6AG7gts7owYYYWYPLzMZOzfLnizf+tu/zKr6TDCiQ3Mgo24DTP3Nw+EgZTUiLYf5e9kEJZY6NDzKiP+hTwSC0r1wsScn3C6it1FtbvGLqI8xJaMZCQdrmmA4nwnmaMYKigUqOcwI72NpWTunt7zRDb4BuzZFIqUGLdNHPpTmSOs6Un/GI2DJSFBsxgnXHdU7j7Fi",
+        "nonce" : "H6Prppmi7Gwm8iou"
+      }
+    },
+    {
+      "description" : "The response nonce must be exactly 12 bytes.",
+      "expect" : {
+        "openResponse" : "malformed"
+      },
+      "kind" : "response",
+      "name" : "response-short-nonce",
+      "responseKeyHex" : "0e6c65fca96bf8ef72f0b15dd1fc6331379447e9299fe85a12876b88102718c8",
+      "sealedResponse" : {
+        "cipher" : "chacha20poly1305",
+        "ciphertext" : "H6Prppmi7Gwm8iou2txIPpkEzHyh4A6KQ64JgbShEfk8ciE4g4N43JBpIo0DB9JnrNdlD/i6n0LueVNvKCr4/z1XswCgm1rP1XstnehX/jtFOmoovs6AVEr+j+kIXlBOis4Jgeru7wD8SiAYkLQ8XimhNSCE79ahzSt0r2ugYFN8m1mL6A00SDkD3Oj5Kwrj3nJDoLofzhrHnEepi1Oj2aWNA/AIvx5wdeg/smxuVz7ZL94wLU+NbRxCjgRlsR/pvKcXVX2q8AMHQ3473JEmBdk8U/P39FYrMnKuXEzFjeMOYtXTk/dCzCe8UUz7U58mJh2RlC0q2QT9oN+f6OMLBamZTuNKdqSQFejmz+1yD3tRGSHT/y35yxGyZ4ItSsZq674Ex3YG4FWe6uKyPCuZ1t6Ic7fFe5zabkYH3BBW/yholAJQzxyfFyJWMTj1QHXdXOnFVgx9D1GKrAoJeV9Vamc4R4qpPQrr4HUCsE/d1zAcpZeAoojvUD13vIWz6wwdF27TOHm4GLT6nhWRo6Qkyqg/ct7jK5ZZGulvaOcfro/No8PAwUFFeBfF6nkxDK9uPnoeGZagli4esUH/prKITAx0y2eeeDHQzMEFapr2g7d5ZghdTG2XcY/yceGKDTPoWLtzv5uj8wirOwTYjEaBApaRt5DBAQQg8nQX8fQ2EFIEKbYZ88Gh6SD4BwsonoZPe0yREqAlw66UB7y1qeAFU6h5BgoJ/Q7RafgvxY9fm56hJGWmPNxJjwKQR7XQVKwOjefo+bPujHRnbYP0l/Ko2Rywpgf1oGaMDyazVCPHp/PcA5xEKjg9wMRwteP/vIlAZT7tPtqZqcWvcwOEvRWgZeYJaq8OEZKGt7LYvurROKusAE2DTp1PenrrZI7yKNh5kzX8zmPLI0sBMVzR3sE4AMI143TqccavPCzzU9bM4uu12af0B3xr7nv5c8FjyMNlYhFoBOseuSG1gAqTTtL04oMS6AU9vmGPqZXQL7N46F62uUtn7+QONH2GNyxrc8jhZalI+HuyRei+SLeLSVnRAd9aQAaA3KiMVEDDFyN/YanUnmSleZO7af3jKditISX+7pTKN3AoKwxwnOtgaRqeStNZnld/Uv3BeX3smG/oWrgWG4xQem8ldQ19/Dz1CM0R+5s8Cu5x4ym1TCd5QFNfzp6ae0Z7vb+tTOVF2kX+IbMeVXE044YCqFFkVHg2OO+GCSDrHuyQTsCYjUw2G4zH+J25Wg4N0CeggD/HZey5bB5dVmhnxSlSPgrIQ4gEmu9r4BcpNbOJkBrktlZQGVj7xeaQ8qVE0UuyIFxk0aGR215YbQts+ZPacGfJzH8RBqskMj9jCLXKzLwE4orCMbeOkwYXC3xXzCB9zHyjpixFHS5jqMuRuQ+G3LVdV9Y1RTWfj4imqzooB7zXoVbgWrNYcBRmNZPQQ3flIXF5eY71DHr+FozqhYoLwicgLduc2Z732C2BL6JI2XHXvh+05eJj3dObeooxghxjs3E4ZJM7HdFHEGgdrVWW2WhUyEx4GeyCQzNkZA444L8otSNntlPpD8Z2TSdLELRcUZNANvSYI2g8wI7Z+dwQf+1k0B3/KDpfP++DV1qX051G/aXx8qYTHWCnWT5Xw0DEWU7i19Umx8WXHmjHnONBi9Zqm5oo/AeIzSV07XwT6AG7gts7owYYYWYPLzMZOzfLnizf+tu/zKr6TDCiQ3Mgo24DTP3Nw+EgZTUiLYf5e9kEJZY6NDzKiP+hTwSC0r1wsScn3C6it1FtbvGLqI8xJaMZCQdrmmA4nwnmaMYKigUqOcwI72NpWTunt7zRDb4BuzZFIqUGLdNHPpTmSOs6Un/GI2DJSFBsxgnXHdU7j7Fi",
+        "nonce" : "H6Prppmi7Gw="
+      }
+    }
+  ]
+}

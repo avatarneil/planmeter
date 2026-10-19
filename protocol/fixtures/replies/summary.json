@@ -1,0 +1,132 @@
+{
+  "summary" : {
+    "days" : 7,
+    "from" : "2026-10-13T04:00:00Z",
+    "generatedAt" : "2026-10-19T16:00:00Z",
+    "groups" : [
+      {
+        "accounts" : [
+          {
+            "account" : {
+              "accentColorHex" : "#10A37F",
+              "email" : "ada@example.com",
+              "group" : "personal",
+              "id" : "codex:plan:pro",
+              "name" : "Personal Codex",
+              "plan" : "Pro",
+              "provider" : "codex",
+              "providerName" : "Codex"
+            },
+            "totals" : {
+              "cacheSavingsUsd" : 62.875,
+              "cachedInputTokens" : 55871232,
+              "costUsd" : 48.25,
+              "inputTokens" : 61204880,
+              "outputTokens" : 402118,
+              "sessions" : 14,
+              "tokens" : 61606998
+            }
+          },
+          {
+            "account" : {
+              "accentColorHex" : "#D97757",
+              "email" : "ada@example.com",
+              "group" : "personal",
+              "id" : "claude:home:/Users/ada/.claude-personal/projects",
+              "name" : "Personal Claude",
+              "plan" : "Max",
+              "provider" : "claude",
+              "providerName" : "Claude Code"
+            },
+            "totals" : {
+              "cacheSavingsUsd" : 23.25,
+              "cachedInputTokens" : 17310220,
+              "costUsd" : 12.5,
+              "inputTokens" : 18220406,
+              "outputTokens" : 96531,
+              "sessions" : 6,
+              "tokens" : 18316937
+            }
+          }
+        ],
+        "group" : "personal",
+        "totals" : {
+          "cacheSavingsUsd" : 86.125,
+          "cachedInputTokens" : 73181452,
+          "costUsd" : 60.75,
+          "inputTokens" : 79425286,
+          "outputTokens" : 498649,
+          "sessions" : 20,
+          "tokens" : 79923935
+        }
+      },
+      {
+        "accounts" : [
+          {
+            "account" : {
+              "email" : "ada.lovelace@example.org",
+              "group" : "work",
+              "id" : "codex:plan:business",
+              "name" : "Work Codex",
+              "plan" : "Business",
+              "provider" : "codex",
+              "providerName" : "Codex"
+            },
+            "totals" : {
+              "cacheSavingsUsd" : 120.5,
+              "cachedInputTokens" : 131002880,
+              "costUsd" : 96.125,
+              "inputTokens" : 140663012,
+              "outputTokens" : 911402,
+              "sessions" : 22,
+              "tokens" : 141574414
+            }
+          },
+          {
+            "account" : {
+              "email" : "ada.lovelace@example.org",
+              "group" : "work",
+              "id" : "claude:home:/Users/ada/.claude/projects",
+              "name" : "Work Claude",
+              "plan" : "Enterprise",
+              "provider" : "claude",
+              "providerName" : "Claude Code"
+            },
+            "totals" : {
+              "cacheSavingsUsd" : 51.125,
+              "cachedInputTokens" : 38004118,
+              "costUsd" : 31.875,
+              "inputTokens" : 40118660,
+              "outputTokens" : 210975,
+              "sessions" : 9,
+              "tokens" : 40329635
+            }
+          }
+        ],
+        "group" : "work",
+        "totals" : {
+          "cacheSavingsUsd" : 171.625,
+          "cachedInputTokens" : 169006998,
+          "costUsd" : 128,
+          "inputTokens" : 180781672,
+          "outputTokens" : 1122377,
+          "sessions" : 31,
+          "tokens" : 181904049
+        }
+      }
+    ],
+    "pricingSource" : "LiteLLM",
+    "serverName" : "Ada’s MacBook Pro",
+    "to" : "2026-10-20T04:00:00Z",
+    "todayCostUsd" : 21.375,
+    "total" : {
+      "cacheSavingsUsd" : 257.75,
+      "cachedInputTokens" : 242188450,
+      "costUsd" : 188.75,
+      "inputTokens" : 260206958,
+      "outputTokens" : 1621026,
+      "sessions" : 51,
+      "tokens" : 261827984
+    }
+  }
+}

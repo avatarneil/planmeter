@@ -1,0 +1,26 @@
+{
+  "description" : "deviceId = the first 22 characters of unpadded base64url(SHA-256(65-byte X9.63 public key)).",
+  "vectors" : [
+    {
+      "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+      "label" : "device",
+      "publicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+      "sha256Base64Url" : "0nfkgpQ6iVXlNxiZqqW0aFEyudQZpn92Bgg7iOyX-1o",
+      "sha256Hex" : "d277e482943a8955e5371899aaa5b4685132b9d419a67f7606083b88ec97fb5a"
+    },
+    {
+      "deviceId" : "J57XWDuAUzis2fDpiRTxMZ",
+      "label" : "other-device",
+      "publicKeyHex" : "04dc8813d9ba3b248ba54b95b22e8b539f2400a178c3a1365fdb03f095a5c44e411bde66bf1da1fad6bc2a0279e864fd8a43bf421237131f5068ff19ec1b3abf68",
+      "sha256Base64Url" : "J57XWDuAUzis2fDpiRTxMZcVChY2J5vvKdVuIT7gjaM",
+      "sha256Hex" : "279ed7583b805338acd9f0e98914f13197150a1636279bef29d56e213ee08da3"
+    },
+    {
+      "deviceId" : "MduAV6EjuOsRYnSBlx0mb1",
+      "label" : "server",
+      "publicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+      "sha256Base64Url" : "MduAV6EjuOsRYnSBlx0mb1YUn-KpXBxAMQ0LVJGqV3U",
+      "sha256Hex" : "31db8057a123b8eb11627481971d266f56149fe2a95c1c40310d0b5491aa5775"
+    }
+  ]
+}

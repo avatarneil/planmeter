@@ -1,0 +1,146 @@
+{
+  "timeline" : {
+    "accounts" : [
+      {
+        "accentColorHex" : "#10A37F",
+        "email" : "ada@example.com",
+        "group" : "personal",
+        "id" : "codex:plan:pro",
+        "name" : "Personal Codex",
+        "plan" : "Pro",
+        "provider" : "codex",
+        "providerName" : "Codex"
+      },
+      {
+        "email" : "ada.lovelace@example.org",
+        "group" : "work",
+        "id" : "codex:plan:business",
+        "name" : "Work Codex",
+        "plan" : "Business",
+        "provider" : "codex",
+        "providerName" : "Codex"
+      }
+    ],
+    "days" : 1,
+    "minutes" : 60,
+    "periods" : [
+      "2026-10-19T15:05:00Z",
+      "2026-10-19T15:10:00Z",
+      "2026-10-19T15:15:00Z",
+      "2026-10-19T15:20:00Z",
+      "2026-10-19T15:25:00Z",
+      "2026-10-19T15:30:00Z",
+      "2026-10-19T15:35:00Z",
+      "2026-10-19T15:40:00Z",
+      "2026-10-19T15:45:00Z",
+      "2026-10-19T15:50:00Z",
+      "2026-10-19T15:55:00Z",
+      "2026-10-19T16:00:00Z"
+    ],
+    "points" : [
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.125,
+        "period" : "2026-10-19T15:05:00Z",
+        "tokens" : 180000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.375,
+        "period" : "2026-10-19T15:10:00Z",
+        "tokens" : 192500
+      },
+      {
+        "accountId" : "codex:plan:pro",
+        "costUsd" : 0.75,
+        "period" : "2026-10-19T15:10:00Z",
+        "tokens" : 411000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.625,
+        "period" : "2026-10-19T15:15:00Z",
+        "tokens" : 205000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.125,
+        "period" : "2026-10-19T15:20:00Z",
+        "tokens" : 217500
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.375,
+        "period" : "2026-10-19T15:25:00Z",
+        "tokens" : 230000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.625,
+        "period" : "2026-10-19T15:30:00Z",
+        "tokens" : 242500
+      },
+      {
+        "accountId" : "codex:plan:pro",
+        "costUsd" : 0.75,
+        "period" : "2026-10-19T15:30:00Z",
+        "tokens" : 415000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.125,
+        "period" : "2026-10-19T15:35:00Z",
+        "tokens" : 255000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.375,
+        "period" : "2026-10-19T15:40:00Z",
+        "tokens" : 267500
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.625,
+        "period" : "2026-10-19T15:45:00Z",
+        "tokens" : 280000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.125,
+        "period" : "2026-10-19T15:50:00Z",
+        "tokens" : 292500
+      },
+      {
+        "accountId" : "codex:plan:pro",
+        "costUsd" : 0.75,
+        "period" : "2026-10-19T15:50:00Z",
+        "tokens" : 419000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.375,
+        "period" : "2026-10-19T15:55:00Z",
+        "tokens" : 305000
+      },
+      {
+        "accountId" : "codex:plan:business",
+        "baselineCostUsd" : 0.125,
+        "costUsd" : 0.625,
+        "period" : "2026-10-19T16:00:00Z",
+        "tokens" : 317500
+      }
+    ],
+    "resolution" : "5m"
+  }
+}
