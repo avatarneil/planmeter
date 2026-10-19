@@ -1,0 +1,45 @@
+{
+  "request" : {
+    "body" : {
+      "groups" : [
+        "personal",
+        "work"
+      ],
+      "thresholds" : {
+        "today" : {
+          "limit" : 25,
+          "warningPercent" : 80
+        },
+        "week" : {
+          "limit" : 120,
+          "warningPercent" : 90
+        }
+      }
+    },
+    "method" : "PUT",
+    "path" : "/v1/settings/spend"
+  },
+  "response" : {
+    "body" : {
+      "groupOverrides" : {
+        "claude:home:/home/dev/.claude/projects" : "work",
+        "codex:plan:business" : "personal"
+      },
+      "spendGroups" : [
+        "personal",
+        "work"
+      ],
+      "spendThresholds" : {
+        "today" : {
+          "limit" : 25,
+          "warningPercent" : 80
+        },
+        "week" : {
+          "limit" : 120,
+          "warningPercent" : 90
+        }
+      }
+    },
+    "status" : 200
+  }
+}

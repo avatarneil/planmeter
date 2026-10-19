@@ -1,0 +1,90 @@
+{
+  "request" : {
+    "body" : {
+      "days" : 1,
+      "method" : "summary"
+    },
+    "method" : "POST",
+    "path" : "/v1/rpc"
+  },
+  "response" : {
+    "body" : {
+      "summary" : {
+        "days" : 1,
+        "from" : "2026-10-18T13:00:00Z",
+        "generatedAt" : "2026-10-19T12:30:00Z",
+        "groups" : [
+          {
+            "accounts" : [
+              {
+                "account" : {
+                  "accentColorHex" : "#0891b2",
+                  "email" : "dev@example.com",
+                  "group" : "work",
+                  "id" : "codex:plan:business",
+                  "name" : "Codex Work",
+                  "plan" : "Business",
+                  "provider" : "codex",
+                  "providerName" : "Codex"
+                },
+                "totals" : {
+                  "cachedInputTokens" : 8000,
+                  "cacheSavingsUsd" : 0,
+                  "costUsd" : 1.25,
+                  "inputTokens" : 9200,
+                  "outputTokens" : 400,
+                  "sessions" : 1,
+                  "tokens" : 9600
+                }
+              },
+              {
+                "account" : {
+                  "email" : "dev@example.net",
+                  "group" : "work",
+                  "id" : "claude:home:/home/dev/.claude/projects",
+                  "name" : "Claude Personal",
+                  "plan" : "Max",
+                  "provider" : "claude",
+                  "providerName" : "Claude Code"
+                },
+                "totals" : {
+                  "cachedInputTokens" : 2000,
+                  "cacheSavingsUsd" : 0,
+                  "costUsd" : 0.5,
+                  "inputTokens" : 2600,
+                  "outputTokens" : 200,
+                  "sessions" : 1,
+                  "tokens" : 2800
+                }
+              }
+            ],
+            "group" : "work",
+            "totals" : {
+              "cachedInputTokens" : 10000,
+              "cacheSavingsUsd" : 0,
+              "costUsd" : 1.75,
+              "inputTokens" : 11800,
+              "outputTokens" : 600,
+              "sessions" : 2,
+              "tokens" : 12400
+            }
+          }
+        ],
+        "pricingSource" : "LiteLLM",
+        "serverName" : "devbox",
+        "to" : "2026-10-19T13:00:00Z",
+        "todayCostUsd" : 1.75,
+        "total" : {
+          "cachedInputTokens" : 10000,
+          "cacheSavingsUsd" : 0,
+          "costUsd" : 1.75,
+          "inputTokens" : 11800,
+          "outputTokens" : 600,
+          "sessions" : 2,
+          "tokens" : 12400
+        }
+      }
+    },
+    "status" : 200
+  }
+}
