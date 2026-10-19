@@ -15,7 +15,8 @@ import Musl
 /// connection, 16 KiB of headers, a 1 MiB body, and 20 seconds to deliver the
 /// request. Unix sockets are created `0600`, and with `.sameUser` the peer's
 /// credentials (`SO_PEERCRED` on Linux, `getpeereid` elsewhere) must match
-/// this process's effective UID.
+/// this process's effective UID. `stop()` returns once the listening sockets
+/// are closed, so the same address can be bound again straight away.
 public final class POSIXHTTPServer: @unchecked Sendable {
     public enum Endpoint: Sendable, Hashable, CustomStringConvertible {
         case tcp(host: String, port: UInt16)
@@ -41,6 +42,12 @@ public final class POSIXHTTPServer: @unchecked Sendable {
         public var connectionTimeout = HTTPLimits.connectionTimeout
         /// Further connections are closed immediately while this many are open.
         public var maxConnections = 32
+        /// The same, per remote TCP address, so one peer cannot hold every
+        /// slot. Loopback is exempt: Tailscale Serve proxies every HTTPS
+        /// client from there.
+        public var maxConnectionsPerPeer = 8
+        /// Tests turn this off to exercise the per-peer cap over loopback.
+        var peerCapExemptsLoopback = true
         public var peerPolicy: PeerPolicy = .any
 
         public init(peerPolicy: PeerPolicy = .any) {
@@ -72,6 +79,7 @@ public final class POSIXHTTPServer: @unchecked Sendable {
     private let lock = NSLock()
     private var listeners: [Listener] = []
     private var activeConnections = 0
+    private var connectionsByPeer: [String: Int] = [:]
     /// (endpoint, state): "listening", "stopped", or "failed: …".
     public var onStateChange: (@Sendable (String, String) -> Void)?
     /// Diagnostics such as refused peers.
@@ -101,23 +109,35 @@ public final class POSIXHTTPServer: @unchecked Sendable {
         listeners.append(contentsOf: started)
         lock.unlock()
         for listener in started {
-            let thread = Thread { [weak self] in self?.acceptLoop(listener) }
+            let thread = Thread { [weak self] in
+                if let self { self.acceptLoop(listener) } else { listener.close() }
+                listener.markExited()
+            }
             thread.name = "planmeter.http.accept"
             thread.start()
             onStateChange?(listener.endpoint.description, "listening")
         }
     }
 
+    /// Closes every listening socket and waits for the accept threads to let
+    /// go of them; connections already accepted finish on their own.
     public func stop() {
         lock.lock()
         let current = listeners
         listeners.removeAll()
         lock.unlock()
+        for listener in current { listener.wake() }
         for listener in current {
-            listener.wake()
+            if !listener.waitForExit(timeout: Self.stopTimeout) {
+                onLog?("\(listener.endpoint): accept thread did not stop within \(Self.stopTimeout) s")
+            }
             onStateChange?(listener.endpoint.description, "stopped")
         }
     }
+
+    /// The accept thread only has to notice the wake pipe; this bound is for
+    /// a thread that never got scheduled, not a normal stop.
+    static let stopTimeout: TimeInterval = 5
 
     /// The bound TCP port for an endpoint, useful after binding port 0.
     public func boundPort(for endpoint: Endpoint) -> UInt16? {
@@ -128,7 +148,12 @@ public final class POSIXHTTPServer: @unchecked Sendable {
     // MARK: Accepting
 
     private func acceptLoop(_ listener: Listener) {
-        defer { listener.close() }
+        defer {
+            lock.lock()
+            listeners.removeAll { $0 === listener }
+            lock.unlock()
+            listener.close()
+        }
         while true {
             var fds = [
                 pollfd(fd: listener.fd, events: Int16(POLLIN), revents: 0),
@@ -164,30 +189,43 @@ public final class POSIXHTTPServer: @unchecked Sendable {
     }
 
     private func serve(_ fd: Int32, endpoint: Endpoint, remoteHost: String) {
+        // Unix sockets have one trusted peer; loopback may be Tailscale Serve.
+        var peer: String?
+        if case .tcp = endpoint, !(options.peerCapExemptsLoopback && TailscaleInfo.isLoopback(remoteHost)) { peer = remoteHost }
         lock.lock()
-        if activeConnections >= options.maxConnections {
+        let perPeer = peer.map { connectionsByPeer[$0, default: 0] } ?? 0
+        if activeConnections >= options.maxConnections || perPeer >= options.maxConnectionsPerPeer {
             lock.unlock()
             posixClose(fd)
             onLog?("\(endpoint): too many connections; dropped one from \(remoteHost)")
             return
         }
         activeConnections += 1
+        if let peer { connectionsByPeer[peer] = perPeer + 1 }
         lock.unlock()
+        let connection = Connection(fd: fd, peer: peer)
         Socket.configureAccepted(fd)
         DispatchQueue.global(qos: .userInitiated).async { [self] in
             if case .unix = endpoint, options.peerPolicy == .sameUser {
                 let uid = Socket.peerUID(fd)
                 guard let uid, uid == geteuid() else {
                     onLog?("\(endpoint): refused peer uid \(uid.map(String.init) ?? "unknown")")
-                    finish(fd, response: .error(403, "forbidden"))
+                    finish(connection, response: .error(403, "forbidden"))
                     return
                 }
             }
-            readRequest(fd, endpoint: endpoint, remoteHost: remoteHost)
+            readRequest(connection, endpoint: endpoint, remoteHost: remoteHost)
         }
     }
 
-    private func readRequest(_ fd: Int32, endpoint: Endpoint, remoteHost: String) {
+    /// An accepted socket and the peer it counts against.
+    private struct Connection: Sendable {
+        let fd: Int32
+        let peer: String?
+    }
+
+    private func readRequest(_ connection: Connection, endpoint: Endpoint, remoteHost: String) {
+        let fd = connection.fd
         let deadline = Date().addingTimeInterval(options.connectionTimeout)
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 65536)
@@ -201,20 +239,20 @@ public final class POSIXHTTPServer: @unchecked Sendable {
                     let response = await handler(request)
                     // Write from a dispatch thread: a slow reader must never
                     // block the cooperative pool.
-                    DispatchQueue.global(qos: .userInitiated).async { self.finish(fd, response: response) }
+                    DispatchQueue.global(qos: .userInitiated).async { self.finish(connection, response: response) }
                 }
                 return
             case .failure(let status, let message):
-                finish(fd, response: .error(status, message))
+                finish(connection, response: .error(status, message))
                 return
             case .close:
-                finish(fd, response: nil)
+                finish(connection, response: nil)
                 return
             case .incomplete:
                 guard Socket.wait(fd, for: Int16(POLLIN), until: deadline) else {
                     // Same as the Mac listener: a request that misses the
                     // deadline is dropped without a reply.
-                    finish(fd, response: nil)
+                    finish(connection, response: nil)
                     return
                 }
                 let count = chunk.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
@@ -223,14 +261,15 @@ public final class POSIXHTTPServer: @unchecked Sendable {
                 } else if count == 0 {
                     isComplete = true
                 } else if errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR {
-                    finish(fd, response: nil)
+                    finish(connection, response: nil)
                     return
                 }
             }
         }
     }
 
-    private func finish(_ fd: Int32, response: HTTPResponse?) {
+    private func finish(_ connection: Connection, response: HTTPResponse?) {
+        let fd = connection.fd
         if let response {
             Socket.writeAll(fd, response.serialized(), until: Date().addingTimeInterval(options.connectionTimeout))
         }
@@ -238,6 +277,10 @@ public final class POSIXHTTPServer: @unchecked Sendable {
         posixClose(fd)
         lock.lock()
         activeConnections -= 1
+        if let peer = connection.peer {
+            let remaining = connectionsByPeer[peer, default: 1] - 1
+            connectionsByPeer[peer] = remaining > 0 ? remaining : nil
+        }
         lock.unlock()
     }
 
@@ -268,6 +311,7 @@ private final class Listener: @unchecked Sendable {
     let socketIdentity: (dev: UInt64, ino: UInt64)?
     private let closeLock = NSLock()
     private var closed = false
+    private let exited = DispatchSemaphore(value: 0)
 
     init(endpoint: POSIXHTTPServer.Endpoint, fd: Int32, boundPort: UInt16?, socketIdentity: (dev: UInt64, ino: UInt64)?) throws {
         var pipeFDs: [Int32] = [0, 0]
@@ -297,9 +341,21 @@ private final class Listener: @unchecked Sendable {
         }
     }
 
+    /// Asks the accept loop to return. A no-op once closed: the pipe's fd
+    /// number may already belong to something else.
     func wake() {
+        closeLock.lock()
+        defer { closeLock.unlock() }
+        guard !closed else { return }
         var byte: UInt8 = 1
         _ = write(wakeWrite, &byte, 1)
+    }
+
+    /// Called by the accept thread after `close()`.
+    func markExited() { exited.signal() }
+
+    func waitForExit(timeout: TimeInterval) -> Bool {
+        exited.wait(timeout: .now() + timeout) == .success
     }
 
     func close() {

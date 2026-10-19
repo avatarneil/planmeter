@@ -12,28 +12,28 @@ public protocol RemoteListener: AnyObject {
 /// listener itself, Tailscale HTTPS, and pairing links. The Mac app's
 /// `RemoteState` plays the same role with Network.framework and SwiftUI.
 ///
-/// The listener binds the machine's tailnet addresses (IPv4 and IPv6), never
-/// the wildcard. Loopback is added when Tailscale Serve needs it for HTTPS,
-/// when asked to (`--loopback`, for local testing), and always on macOS,
-/// which cannot connect to its own tailnet address.
+/// It binds the machine's tailnet addresses (IPv4 and IPv6) as Tailscale
+/// reports them, never the wildcard, with one listener per address. Loopback
+/// is added when Tailscale Serve needs it for HTTPS, when asked to
+/// (`--loopback`, for local testing), and always on macOS, which cannot
+/// connect to its own tailnet address.
 @MainActor
 public final class RemoteController {
     /// Tailscale probes and `tailscale serve`, injectable for tests.
     public struct Environment: Sendable {
-        public var tailnetAddresses: @Sendable () -> [String]
-        public var magicDNSName: @Sendable () -> String?
+        /// Tailnet addresses and MagicDNS name, read together.
+        public var tailnet: @Sendable () -> TailscaleInfo.Node
         public var tailscaleAvailable: @Sendable () -> Bool
         public var certificateStatus: @Sendable () -> TailscaleServe.CertificateStatus
         public var serveIsActive: @Sendable (UInt16) -> Bool
         public var serveEnable: @Sendable (UInt16) -> TailscaleServe.Result
         public var serveDisable: @Sendable () -> TailscaleServe.Result
 
-        public init(tailnetAddresses: @escaping @Sendable () -> [String], magicDNSName: @escaping @Sendable () -> String?,
+        public init(tailnet: @escaping @Sendable () -> TailscaleInfo.Node,
                     tailscaleAvailable: @escaping @Sendable () -> Bool, certificateStatus: @escaping @Sendable () -> TailscaleServe.CertificateStatus,
                     serveIsActive: @escaping @Sendable (UInt16) -> Bool, serveEnable: @escaping @Sendable (UInt16) -> TailscaleServe.Result,
                     serveDisable: @escaping @Sendable () -> TailscaleServe.Result) {
-            self.tailnetAddresses = tailnetAddresses
-            self.magicDNSName = magicDNSName
+            self.tailnet = tailnet
             self.tailscaleAvailable = tailscaleAvailable
             self.certificateStatus = certificateStatus
             self.serveIsActive = serveIsActive
@@ -42,8 +42,7 @@ public final class RemoteController {
         }
 
         public static let live = Environment(
-            tailnetAddresses: { [TailscaleInfo.ipv4(), TailscaleInfo.ipv6()].compactMap { $0 } },
-            magicDNSName: { TailscaleInfo.magicDNSName() },
+            tailnet: { TailscaleInfo.node() },
             tailscaleAvailable: { TailscaleServe.isAvailable },
             certificateStatus: { TailscaleServe.certificateStatus() },
             serveIsActive: { TailscaleServe.isActive(localPort: $0) },
@@ -91,11 +90,10 @@ public final class RemoteController {
     public private(set) var httpsActive = false
     public private(set) var httpsDomain: String?
     public private(set) var httpsMessage: String?
-    private var listener: RemoteListener?
-    /// What the current listener was asked to bind. Compared on each tick
-    /// instead of `boundAddresses`, so an address that keeps failing to bind
-    /// does not restart the listener (and cancel the invite) every 30 seconds.
-    private var requestedAddresses: [String] = []
+    /// One listener per bound address. Each tick starts the missing ones and
+    /// stops the unwanted ones, so an address that failed to bind is retried
+    /// without disturbing the others (or cancelling the invite).
+    private var listeners: [String: RemoteListener] = [:]
 
     public init(service: RemoteService, settings: HostSettingsStore, environment: Environment = .live,
                 listenerFactory: ListenerFactory? = nil, bindLoopback: Bool) {
@@ -135,21 +133,22 @@ public final class RemoteController {
 
     // MARK: Lifecycle
 
-    /// Brings the listener in line with settings and the network: starts,
-    /// stops, or rebinds when the tailnet addresses or port changed. Safe to
-    /// call repeatedly; the daemon calls it every 30 seconds so a Tailscale
-    /// connection made after boot is picked up.
+    /// Brings the listeners in line with settings and the network: binds new
+    /// addresses, retries ones that failed, drops ones that went away, and
+    /// starts over when the port changed. Safe to call repeatedly; the daemon
+    /// calls it every 30 seconds so a Tailscale connection made after boot is
+    /// picked up.
     public func apply() async {
         let environment = self.environment
-        let probe = await Task.detached(priority: .utility) { () -> ([String], String?, Bool) in
-            (environment.tailnetAddresses(), environment.magicDNSName(), environment.tailscaleAvailable())
+        let probe = await Task.detached(priority: .utility) { () -> (TailscaleInfo.Node, Bool) in
+            (environment.tailnet(), environment.tailscaleAvailable())
         }.value
-        tailnetAddresses = probe.0
-        dnsName = probe.1
-        tailscaleAvailable = probe.2
+        tailnetAddresses = probe.0.addresses
+        dnsName = probe.0.dnsName
+        tailscaleAvailable = probe.1
 
         guard isEnabled else {
-            if listener != nil { service.log("remote access off") }
+            if !listeners.isEmpty { service.log("remote access off") }
             stopListener()
             state = .off
             message = forceEnabled == false ? "Disabled for this run (--no-remote)." : nil
@@ -157,36 +156,55 @@ public final class RemoteController {
         }
         var addresses = tailnetAddresses
         if bindLoopback || httpsEnabled { addresses.append("127.0.0.1") }
-        if listener != nil, Set(addresses) == Set(requestedAddresses), boundPort == port {
-            await refreshHTTPS(ensure: httpsEnabled)
-            return
+        if let boundPort, boundPort != port { stopListener() }
+        let unwanted = listeners.keys.filter { !addresses.contains($0) }
+        if !unwanted.isEmpty {
+            for address in unwanted { listeners.removeValue(forKey: address)?.stop() }
+            // The invite may name an address that is gone.
+            service.cancelInvite()
         }
-        stopListener()
         guard !addresses.isEmpty else {
+            stopListener()
             state = .unavailable
             message = "Tailscale is not connected. Remote access only listens on the tailnet."
             return
         }
         let service = self.service
-        do {
-            let listener = try listenerFactory(port, addresses, { request in await service.handle(request) })
-            self.listener = listener
-            requestedAddresses = addresses
-            boundAddresses = listener.boundAddresses
-            boundPort = port
+        let previous = boundAddresses
+        var failures: [String] = []
+        for address in addresses where listeners[address] == nil {
+            do {
+                let listener = try listenerFactory(port, [address], { request in await service.handle(request) })
+                if listener.boundAddresses.contains(address) {
+                    listeners[address] = listener
+                } else {
+                    listener.stop()
+                    failures.append("could not bind \(address)")
+                }
+            } catch {
+                failures.append(error.localizedDescription)
+            }
+        }
+        boundAddresses = addresses.filter { listeners[$0] != nil }
+        boundPort = listeners.isEmpty ? nil : port
+        let previousMessage = message
+        if listeners.isEmpty {
+            state = .error
+            message = "Could not start: \(failures.joined(separator: "; "))"
+            if message != previousMessage { service.log(message!) }
+        } else {
             state = .listening
             if tailnetAddresses.isEmpty {
                 message = "Tailscale is not connected; listening on loopback only."
-            } else if let group = listener as? POSIXListenerGroup, !group.failures.isEmpty {
-                message = "Some addresses could not be bound: \(group.failures.joined(separator: "; "))"
+            } else if !failures.isEmpty {
+                message = "Some addresses could not be bound: \(failures.joined(separator: "; "))"
             } else {
                 message = nil
             }
-            service.log("listening on \(boundAddresses.map { $0.contains(":") ? "[\($0)]" : $0 }.joined(separator: ", ")) port \(port)")
-        } catch {
-            state = .error
-            message = "Could not start: \(error.localizedDescription)"
-            service.log(message!)
+            if boundAddresses != previous {
+                service.log("listening on \(boundAddresses.map { $0.contains(":") ? "[\($0)]" : $0 }.joined(separator: ", ")) port \(port)")
+            }
+            if let message, message != previousMessage, !failures.isEmpty { service.log(message) }
         }
         await refreshHTTPS(ensure: httpsEnabled)
     }
@@ -197,9 +215,8 @@ public final class RemoteController {
     }
 
     private func stopListener() {
-        listener?.stop()
-        listener = nil
-        requestedAddresses = []
+        for listener in listeners.values { listener.stop() }
+        listeners.removeAll()
         boundAddresses = []
         boundPort = nil
         service.cancelInvite()
@@ -241,7 +258,7 @@ public final class RemoteController {
     /// Reads the current serve state; when `ensure` is set, re-applies our
     /// mapping (idempotent) so it survives Tailscale restarts.
     public func refreshHTTPS(ensure: Bool) async {
-        guard isEnabled, listener != nil else {
+        guard isEnabled, !listeners.isEmpty else {
             httpsActive = false
             return
         }

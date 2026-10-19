@@ -154,25 +154,75 @@ public enum TailscaleServe {
 }
 
 /// Finds the machine's Tailscale addresses. IPv4 in 100.64.0.0/10 is the
-/// tailnet CGNAT range; the MagicDNS name comes from the Tailscale CLI when
-/// it is installed.
+/// tailnet CGNAT range, but other networks use it too (carrier-grade NAT,
+/// cloud VPCs, container networks), so an address only counts when Tailscale
+/// reports it or it sits on Tailscale's own interface. The MagicDNS name
+/// comes from the Tailscale CLI when it is installed.
 public enum TailscaleInfo {
-    /// The first tailnet IPv4 address on any interface.
-    public static func ipv4() -> String? {
-        interfaceAddresses(family: AF_INET).first(where: isTailnetAddress)
+    /// What `tailscale status --json` says about this machine.
+    public struct Node: Sendable, Equatable {
+        /// Tailnet addresses, IPv4 first; at most one per family.
+        public var addresses: [String]
+        public var dnsName: String?
+
+        public init(addresses: [String], dnsName: String? = nil) {
+            self.addresses = addresses
+            self.dnsName = dnsName
+        }
     }
 
-    /// The first tailnet IPv6 address (fd7a:115c:a1e0::/48) on any interface.
+    /// Addresses and MagicDNS name from one CLI call. The addresses are the
+    /// ones Tailscale reports for this node; when the CLI is missing or does
+    /// not answer, the interface scan (`ipv4()`, `ipv6()`) stands in.
+    public static func node() -> Node {
+        let result = TailscaleServe.isAvailable ? TailscaleServe.run(["status", "--json"]) : nil
+        if let result, let reported = node(fromStatus: result) { return reported }
+        return Node(addresses: [ipv4(), ipv6()].compactMap { $0 })
+    }
+
+    /// Parses `tailscale status --json`. Nil when the output is unusable;
+    /// no addresses when Tailscale is not running.
+    static func node(fromStatus result: TailscaleServe.Result) -> Node? {
+        guard let root = statusObject(result), let state = root["BackendState"] as? String else { return nil }
+        guard state == "Running" else { return Node(addresses: [], dnsName: dnsName(in: root)) }
+        let reported = ((root["Self"] as? [String: Any])?["TailscaleIPs"] as? [String]) ?? (root["TailscaleIPs"] as? [String]) ?? []
+        let tailnet = reported.filter(isTailnetAddress)
+        return Node(addresses: [tailnet.first { !$0.contains(":") }, tailnet.first { $0.contains(":") }].compactMap { $0 },
+                    dnsName: dnsName(in: root))
+    }
+
+    private static func statusObject(_ result: TailscaleServe.Result) -> [String: Any]? {
+        guard let data = result.standardOutput.data(using: .utf8) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    private static func dnsName(in root: [String: Any]) -> String? {
+        guard let dns = (root["Self"] as? [String: Any])?["DNSName"] as? String, !dns.isEmpty else { return nil }
+        return dns.hasSuffix(".") ? String(dns.dropLast()) : dns
+    }
+
+    /// The tailnet IPv4 address on Tailscale's interface.
+    public static func ipv4() -> String? {
+        interfaceAddresses(family: AF_INET).first { isTailscaleInterface($0.interface) && isTailnetAddress($0.address) }?.address
+    }
+
+    /// The tailnet IPv6 address (fd7a:115c:a1e0::/48) on Tailscale's interface.
     public static func ipv6() -> String? {
-        interfaceAddresses(family: AF_INET6).first(where: isTailnetAddress)
+        interfaceAddresses(family: AF_INET6).first { isTailscaleInterface($0.interface) && isTailnetAddress($0.address) }?.address
+    }
+
+    /// `tailscale0` on Linux (the default `--tun` name) and `utun*` on macOS,
+    /// where both the standalone and App Store clients use a utun device.
+    static func isTailscaleInterface(_ name: String) -> Bool {
+        name.hasPrefix("tailscale") || name.hasPrefix("utun")
     }
 
     /// Numeric addresses of every interface in one address family.
-    static func interfaceAddresses(family: Int32) -> [String] {
+    static func interfaceAddresses(family: Int32) -> [(interface: String, address: String)] {
         var addrs: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&addrs) == 0, let first = addrs else { return [] }
         defer { freeifaddrs(addrs) }
-        var out: [String] = []
+        var out: [(interface: String, address: String)] = []
         var cursor: UnsafeMutablePointer<ifaddrs>? = first
         while let ifa = cursor {
             defer { cursor = ifa.pointee.ifa_next }
@@ -183,7 +233,7 @@ public enum TailscaleInfo {
             guard getnameinfo(sa, socklen_t(length), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }
             let ip = String(cString: host)
             // Drop an IPv6 zone suffix such as "%utun4".
-            out.append(ip.split(separator: "%").first.map(String.init) ?? ip)
+            out.append((String(cString: ifa.pointee.ifa_name), ip.split(separator: "%").first.map(String.init) ?? ip))
         }
         return out
     }
@@ -201,19 +251,7 @@ public enum TailscaleInfo {
     }
 
     public static func magicDNSName() -> String? {
-        guard let cli = TailscaleServe.executablePath else { return nil }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: cli)
-        process.arguments = ["status", "--json"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let selfNode = root["Self"] as? [String: Any],
-              let dns = selfNode["DNSName"] as? String, !dns.isEmpty else { return nil }
-        return dns.hasSuffix(".") ? String(dns.dropLast()) : dns
+        guard TailscaleServe.isAvailable else { return nil }
+        return statusObject(TailscaleServe.run(["status", "--json"])).flatMap(dnsName(in:))
     }
 }

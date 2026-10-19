@@ -228,23 +228,68 @@ final class ControlAPITests: XCTestCase {
         XCTAssertEqual(today.total.costUsd, 1.75)
     }
 
-    func testPartialBindDoesNotRestartTheListener() async throws {
+    func testFailedAddressIsRetriedWithoutRestartingTheOthers() async throws {
         let h = try await ControlHarness.make()
         defer { h.cleanUp() }
-        var created = 0
+        final class Attempts { var byAddress: [String: Int] = [:]; var listeners: [String: FakeListener] = [:] }
+        let attempts = Attempts()
+        var ipv6Binds = false
         h.remote.environment = .fake(addresses: ["100.64.0.7", "fd7a:115c:a1e0::7"])
+        h.remote.stop()
         h.remote.listenerFactory = { _, addresses, _ in
-            created += 1
-            return FakeListener(addresses: addresses.filter { !$0.contains(":") })
+            for address in addresses { attempts.byAddress[address, default: 0] += 1 }
+            let listener = FakeListener(addresses: addresses.filter { ipv6Binds || !$0.contains(":") })
+            for address in listener.boundAddresses { attempts.listeners[address] = listener }
+            return listener
         }
         await h.remote.apply()
-        XCTAssertEqual(created, 1)
+        XCTAssertEqual(h.remote.state, .listening)
         XCTAssertEqual(h.remote.boundAddresses, ["100.64.0.7"])
+        XCTAssertEqual(h.remote.message, "Some addresses could not be bound: could not bind fd7a:115c:a1e0::7")
         try h.remote.newInvite()
+
+        // Each tick retries the address that failed and leaves the rest alone.
         await h.remote.apply()
         await h.remote.apply()
-        XCTAssertEqual(created, 1, "an address that failed to bind must not cause a restart on every tick")
+        XCTAssertEqual(attempts.byAddress["fd7a:115c:a1e0::7"], 3)
+        XCTAssertEqual(attempts.byAddress["100.64.0.7"], 1)
+        XCTAssertEqual(attempts.listeners["100.64.0.7"]?.stopped, false)
         XCTAssertNotNil(h.service.activeInvite)
+
+        // Once it binds, it joins the others; the invite survives.
+        ipv6Binds = true
+        await h.remote.apply()
+        XCTAssertEqual(h.remote.boundAddresses, ["100.64.0.7", "fd7a:115c:a1e0::7"])
+        XCTAssertNil(h.remote.message)
+        XCTAssertEqual(attempts.listeners["100.64.0.7"]?.stopped, false)
+        XCTAssertNotNil(h.service.activeInvite)
+
+        // An address that goes away is stopped on its own, and the invite,
+        // which may name it, is cancelled.
+        h.remote.environment = .fake(addresses: ["100.64.0.7"])
+        await h.remote.apply()
+        XCTAssertEqual(h.remote.boundAddresses, ["100.64.0.7"])
+        XCTAssertEqual(attempts.listeners["fd7a:115c:a1e0::7"]?.stopped, true)
+        XCTAssertEqual(attempts.listeners["100.64.0.7"]?.stopped, false)
+        XCTAssertNil(h.service.activeInvite)
+    }
+
+    func testNothingBoundIsAnErrorThatKeepsRetrying() async throws {
+        let h = try await ControlHarness.make()
+        defer { h.cleanUp() }
+        h.remote.stop()
+        var calls = 0
+        h.remote.listenerFactory = { _, _, _ in
+            calls += 1
+            throw RemoteController.ControllerError.bindFailed("bind 100.64.0.7:7787 failed: Address already in use")
+        }
+        await h.remote.apply()
+        XCTAssertEqual(h.remote.state, .error)
+        XCTAssertEqual(h.remote.message, "Could not start: bind 100.64.0.7:7787 failed: Address already in use")
+        XCTAssertTrue(h.remote.boundAddresses.isEmpty)
+        await h.remote.apply()
+        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(h.service.events.filter { $0.contains("Could not start") }.count, 1, "an unchanged failure is logged once")
     }
 
     func testUnknownRoutesAndMethods() async throws {
