@@ -3,7 +3,8 @@ import PackageDescription
 
 // Apple hosts build every target, exactly as before. Other hosts (Linux now,
 // Windows later) build only the platform-neutral pieces: the core, the remote
-// protocol, the watch payload, the CLI, and the MCP server.
+// protocol, the watch payload, the CLI, the MCP server, and the host library and
+// daemon (planmeterd).
 //
 // Keep the Apple branch's dependency list unchanged. Xcode Cloud builds the iOS
 // app with automatic package resolution disabled, so any dependency change seen
@@ -44,6 +45,8 @@ let portableProducts: [Product] = [
     .library(name: "PlanMeterCore", targets: ["PlanMeterCore"]),
     .library(name: "PlanMeterRemote", targets: ["PlanMeterRemote"]),
     .library(name: "PlanMeterWatchShared", targets: ["PlanMeterWatchShared"]),
+    .library(name: "PlanMeterHost", targets: ["PlanMeterHost"]),
+    .executable(name: "planmeterd", targets: ["planmeterd"]),
 ]
 
 let portableTargets: [Target] = [
@@ -63,6 +66,21 @@ let portableTargets: [Target] = [
     // The compact summary the iPhone relays to the watch; Foundation only.
     .target(
         name: "PlanMeterWatchShared",
+        swiftSettings: swift5
+    ),
+    // The host side shared by the Mac app and planmeterd: remote report
+    // builder, pairing and RPC handling, Tailscale helpers, a POSIX HTTP
+    // listener, and the headless engine and control API. Portable: no
+    // Network.framework, AppKit, SwiftUI, or Observation.
+    .target(
+        name: "PlanMeterHost",
+        dependencies: ["PlanMeterCore", "PlanMeterRemote"],
+        swiftSettings: swift5
+    ),
+    // Headless host daemon for Linux (and macOS, for development).
+    .executableTarget(
+        name: "planmeterd",
+        dependencies: ["PlanMeterHost", "PlanMeterCore", "PlanMeterRemote"],
         swiftSettings: swift5
     ),
     .executableTarget(
@@ -88,6 +106,11 @@ let portableTargets: [Target] = [
         dependencies: ["PlanMeterRemote"] + cryptoDependencies,
         swiftSettings: swift5
     ),
+    .testTarget(
+        name: "PlanMeterHostTests",
+        dependencies: ["PlanMeterHost", "PlanMeterCore", "PlanMeterRemote"] + cryptoDependencies,
+        swiftSettings: swift5
+    ),
 ]
 
 // MARK: - Apple-only targets (SwiftUI, Charts, CloudKit, Sparkle)
@@ -109,6 +132,7 @@ let appleTargets: [Target] = [
             "PlanMeterDesktopShared",
             "PlanMeterCore",
             "PlanMeterRemote",
+            "PlanMeterHost",
             .product(name: "Sparkle", package: "Sparkle"),
         ],
         // The web client is copied into the .app by scripts/bundle.sh and
@@ -125,7 +149,7 @@ let appleTargets: [Target] = [
     .testTarget(name: "PlanMeterDesktopSharedTests", dependencies: ["PlanMeterDesktopShared"], swiftSettings: swift5),
     .testTarget(
         name: "PlanMeterTests",
-        dependencies: ["PlanMeter"],
+        dependencies: ["PlanMeter", "PlanMeterHost"],
         swiftSettings: swift5
     ),
 ]

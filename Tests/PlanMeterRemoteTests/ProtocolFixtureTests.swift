@@ -386,7 +386,11 @@ final class ProtocolFixtureTests: XCTestCase {
         var found: Set<String> = []
         while let path = enumerator.nextObject() as? String {
             var isDirectory: ObjCBool = false
-            if FileManager.default.fileExists(atPath: root + "/" + path, isDirectory: &isDirectory), !isDirectory.boolValue, !path.hasPrefix(".") {
+            // control/, web-pairing/, and http/ describe host behaviour; they
+            // are generated and checked by PlanMeterHostTests (ControlFixtureTests
+            // and RemoteFixtureTests).
+            if FileManager.default.fileExists(atPath: root + "/" + path, isDirectory: &isDirectory), !isDirectory.boolValue, !path.hasPrefix("."),
+               !["control/", "web-pairing/", "http/"].contains(where: path.hasPrefix) {
                 found.insert(path)
             }
         }
