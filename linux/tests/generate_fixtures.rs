@@ -1,15 +1,15 @@
-//! Regenerates the sample fixtures in `tests/fixtures/` from the mock daemon:
+//! Regenerates the sample control fixtures in `tests/fixtures/control/` from
+//! the mock daemon:
 //!
 //!     cargo test --test generate_fixtures -- --ignored
 //!
-//! They follow the canonical `protocol/fixtures/` layout (a bare `RemoteReply`
-//! per method; a request/response exchange per control endpoint) and stand in
-//! for it in repositories that do not have it.
+//! They use the canonical request/response exchange layout and stand in for
+//! `protocol/fixtures/control/` until the daemon provides it. Replies come
+//! from the canonical `protocol/fixtures/replies/`.
 
 use chrono::{DateTime, TimeZone, Utc};
 use planmeter::http::encode_segment;
 use planmeter::mock::MockDaemon;
-use planmeter::models::*;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -17,104 +17,29 @@ fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 10, 19, 15, 2, 0).unwrap()
 }
 
-fn write(sub: &str, name: &str, value: &Value) {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(sub);
-    std::fs::create_dir_all(&dir).unwrap();
-    // serde_json's map is sorted without `preserve_order`, like RemoteJSON.
-    let text = serde_json::to_string_pretty(value).unwrap() + "\n";
-    std::fs::write(dir.join(format!("{name}.json")), text).unwrap();
-}
-
 /// Sends one request to the mock and records the exchange.
-fn exchange(
-    d: &mut MockDaemon,
-    name: &str,
-    method: &str,
-    path: &str,
-    body: Option<Value>,
-) -> Value {
+fn exchange(d: &mut MockDaemon, name: &str, method: &str, path: &str, body: Option<Value>) {
     let bytes = body
         .as_ref()
         .map(|b| serde_json::to_vec(b).unwrap())
         .unwrap_or_default();
     let (status, response) = d.route(method, path, &bytes, now());
     let response: Value = serde_json::from_slice(&response).unwrap();
-    write(
-        "control",
-        name,
-        &json!({
-            "request": { "method": method, "path": path, "body": body },
-            "response": { "status": status, "body": response },
-        }),
-    );
-    response
-}
-
-fn reply(d: &mut MockDaemon, name: &str, request: RemoteRequest) {
-    let body = serde_json::to_vec(&request).unwrap();
-    let (status, response) = d.route("POST", "/v1/rpc", &body, now());
-    assert_eq!(status, 200, "{name}");
-    write("replies", name, &serde_json::from_slice(&response).unwrap());
-}
-
-fn request(
-    method: RemoteMethod,
-    days: Option<i64>,
-    resolution: Option<&str>,
-    minutes: Option<i64>,
-) -> RemoteRequest {
-    RemoteRequest {
-        method,
-        days,
-        resolution: resolution.map(Into::into),
-        account: None,
-        minutes,
-    }
+    let value = json!({
+        "request": { "method": method, "path": path, "body": body },
+        "response": { "status": status, "body": response },
+    });
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/control");
+    std::fs::create_dir_all(&dir).unwrap();
+    // serde_json's map is sorted without `preserve_order`, like RemoteJSON.
+    let text = serde_json::to_string_pretty(&value).unwrap() + "\n";
+    std::fs::write(dir.join(format!("{name}.json")), text).unwrap();
 }
 
 #[test]
 #[ignore]
-fn regenerate_sample_fixtures() {
+fn regenerate_sample_control_fixtures() {
     let mut d = MockDaemon::new(now());
-    reply(
-        &mut d,
-        "summary",
-        request(RemoteMethod::Summary, Some(7), None, None),
-    );
-    reply(
-        &mut d,
-        "summary-last-hour",
-        request(RemoteMethod::Summary, Some(1), None, Some(60)),
-    );
-    reply(
-        &mut d,
-        "timeline",
-        request(RemoteMethod::Timeline, Some(1), Some("hour"), None),
-    );
-    reply(
-        &mut d,
-        "timeline-week-day",
-        request(RemoteMethod::Timeline, Some(7), Some("day"), None),
-    );
-    reply(
-        &mut d,
-        "models",
-        request(RemoteMethod::Models, Some(7), None, None),
-    );
-    reply(
-        &mut d,
-        "limits",
-        request(RemoteMethod::Limits, None, None, None),
-    );
-    reply(
-        &mut d,
-        "accounts",
-        request(RemoteMethod::Accounts, None, None, None),
-    );
-    write("replies", "error", &json!({ "error": "server not ready" }));
-
     exchange(&mut d, "get-status", "GET", "/v1/status", None);
     exchange(
         &mut d,
@@ -131,7 +56,10 @@ fn regenerate_sample_fixtures() {
         Some(json!({ "method": "summary", "days": 1 })),
     );
     exchange(&mut d, "get-settings", "GET", "/v1/settings", None);
-    let groups = format!("/v1/settings/groups/{}", encode_segment("opencode"));
+    let groups = format!(
+        "/v1/settings/groups/{}",
+        encode_segment("codex:plan:personal")
+    );
     exchange(
         &mut d,
         "put-settings-groups",
@@ -146,7 +74,10 @@ fn regenerate_sample_fixtures() {
         "/v1/settings/spend",
         Some(json!({
             "groups": ["personal", "work"],
-            "thresholds": { "today": { "limit": 60, "warningPercent": 80 }, "week": { "limit": 400, "warningPercent": 75 } },
+            "thresholds": {
+                "today": { "limit": 60, "warningPercent": 80 },
+                "week": { "limit": 400, "warningPercent": 75 },
+            },
         })),
     );
     exchange(&mut d, "get-remote", "GET", "/v1/remote", None);

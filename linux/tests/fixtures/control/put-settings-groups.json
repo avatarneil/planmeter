@@ -4,12 +4,12 @@
       "group": "work"
     },
     "method": "PUT",
-    "path": "/v1/settings/groups/opencode"
+    "path": "/v1/settings/groups/codex%3Aplan%3Apersonal"
   },
   "response": {
     "body": {
       "groupOverrides": {
-        "opencode": "work"
+        "codex:plan:personal": "work"
       },
       "spendGroups": [
         "personal",
