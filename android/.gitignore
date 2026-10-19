@@ -1,0 +1,14 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+captures/
+.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+
+# SwiftPM state for the interop harness
+interop/swift/.build/
+interop/swift/Package.resolved
+interop/swift/.swiftpm/
