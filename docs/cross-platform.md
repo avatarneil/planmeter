@@ -1,7 +1,8 @@
 # Cross-platform PlanMeter
 
-Status: exploration, landing as a PR stack. Nothing here changes the macOS, iOS, or watchOS
-apps' behavior, signing, or release process.
+Status: implemented as a PR stack (see [Rollout](#rollout-this-stack)); not merged or
+released. Nothing here changes the macOS, iOS, or watchOS apps' behavior, signing, or release
+process.
 
 ## Goals
 
@@ -271,8 +272,14 @@ readings. On macOS the daemon is a development tool and keeps its files in
 - Pairing works by scanning the Mac/Linux QR code (CameraX + ZXing core, no Google Play
   services), by opening a `planmeter://pair` link, or by pasting the link.
 - The device signing key is P-256 in the Android Keystore, StrongBox-backed when available.
-  This is the counterpart of the iPhone's Secure Enclave key. The paired-server record is
-  stored with encrypted preferences.
+  This is the counterpart of the iPhone's Secure Enclave key. The paired-server record
+  (host, port, server public key, device id) is not secret and lives in DataStore; app data
+  is excluded from backup and device transfer, since the Keystore key cannot move anyway.
+- Requests are plain HTTP to the tailnet address, like the iPhone's: payloads are end-to-end
+  encrypted and signed, and the transport is WireGuard. A network security config cannot
+  express IP ranges, so cleartext is allowed in the config and every request is checked in
+  code to resolve to 100.64.0.0/10 or fd7a:115c:a1e0::/48. Headscale tailnets with custom
+  ranges are refused for now.
 - The UI is a Compose dashboard matching the iPhone: range picker, totals, per-group and
   per-account breakdown, timeline chart (Compose Canvas), models, Codex limits, and accounts.
   It uses Material 3 with dynamic color, light and dark themes, and an optional biometric lock.
@@ -310,4 +317,41 @@ would be WinUI 3 (C#) talking to the pipe. The tray (notification-area icon) is 
    Mac app keeps its behavior and uses the shared code.
 5. **Linux desktop app**: Rust GTK 4 / libadwaita client of the control API.
 6. **Android app**: Kotlin/Compose companion with a Glance widget.
-7. **CI and docs**: Linux and Android CI jobs, README platform table.
+7. **Docs**: README platform table, Linux and Android sections. (Each layer adds its own CI
+   job: `linux`, `linux-app`, `android`.)
+
+## Verification so far
+
+- **Accounting parity**: `planmeter-cli` on Linux and macOS over the same read-only provider
+  homes gave identical totals per account. A parity test requires byte-identical remote
+  replies from the Mac's `AppModel` and the daemon's `HostEngine`, and the Linux and macOS
+  daemons returned identical hourly points on real data.
+- **Mac regressions**: the Mac's remote replies were byte-identical before and after the
+  host extraction (24 reply variants), and the Remote sheet snapshot was unchanged.
+- **Protocol**: the Kotlin implementation reproduces every golden fixture, opens
+  Swift-sealed requests, and paired with a live Swift host and made 205 RPCs. An independent
+  Node implementation written from `protocol/README.md` alone reproduced every fixture.
+- **End to end on Linux**: the real `planmeterd` scanned real (read-only) transcripts in one
+  container, and the GTK app rendered them over the shared control socket in another.
+- **Not yet verified on hardware**: the Android Keystore/StrongBox, camera scanning,
+  biometrics, the widget on a real launcher, and WorkManager timing (JVM and Robolectric
+  tests only). The Linux app has only run under Xvfb. HTTPS with `tailscale serve` on Linux
+  was tested with fakes.
+
+## Follow-ups
+
+- Run Android on a device or emulator; run the GTK app and `planmeterd` on a real Linux
+  desktop with Tailscale connected.
+- On Linux, the CLI and MCP server read group overrides from `UserDefaults`, not the daemon's
+  `settings.json`; unify them.
+- Linux tray icon (StatusNotifierItem), locale-aware currency in the GTK app, Flathub-ready
+  `cargo-sources.json` and metainfo screenshots.
+- Pin Linux-only Swift dependencies (swift-crypto pulls a floating swift-asn1).
+- Per-widget plan and target settings on Android, as on iOS.
+- Spend alerts from `planmeterd`, so they fire while the GTK app is closed (today the app
+  checks every limit, but only while it is running).
+- "Today" on a 25-hour fall-back day: the protocol caps `minutes` at 1440, so late that day
+  the first hour drops out. Accept up to 1500 minutes or add a local-day request.
+- A real release signing key for Android before any distribution (release builds are
+  debug-signed for development).
+- Windows (see above) and non-Tailscale sync (see [Sync](#sync-beyond-tailscale)).
