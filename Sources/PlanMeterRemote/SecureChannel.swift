@@ -146,11 +146,15 @@ public enum SecureChannel {
     // MARK: Client side
 
     public static func seal(plaintext: Data, serverPublicKeyRaw: Data, deviceId: String, signer: DeviceSigningKey, method: String, path: String, cipher: Cipher = .chacha20poly1305, now: Date = Date()) throws -> (request: SealedRequest, responseKey: SymmetricKey) {
-        let ephemeral = P256.KeyAgreement.PrivateKey()
+        try seal(plaintext: plaintext, serverPublicKeyRaw: serverPublicKeyRaw, deviceId: deviceId, signer: signer, method: method, path: path,
+                 cipher: cipher, timestamp: Int64(now.timeIntervalSince1970), ephemeral: P256.KeyAgreement.PrivateKey(), nonce: randomNonce())
+    }
+
+    /// `seal` with the random inputs supplied, for golden test vectors
+    /// (protocol/fixtures). Only the device signature stays randomized.
+    static func seal(plaintext: Data, serverPublicKeyRaw: Data, deviceId: String, signer: DeviceSigningKey, method: String, path: String, cipher: Cipher, timestamp: Int64, ephemeral: P256.KeyAgreement.PrivateKey, nonce: Data) throws -> (request: SealedRequest, responseKey: SymmetricKey) {
         let serverKey = try P256.KeyAgreement.PublicKey(x963Representation: serverPublicKeyRaw)
         let secret = try ephemeral.sharedSecretFromKeyAgreement(with: serverKey)
-        let nonce = randomNonce()
-        let timestamp = Int64(now.timeIntervalSince1970)
         let ephemeralRaw = ephemeral.publicKey.x963Representation
         let keys = derive(secret, nonce: nonce, deviceId: deviceId)
         let hdr = header(deviceId: deviceId, ephemeral: ephemeralRaw, nonce: nonce, timestamp: timestamp, method: method, path: path, cipher: cipher)
@@ -192,7 +196,11 @@ public enum SecureChannel {
     }
 
     public static func sealResponse(plaintext: Data, key: SymmetricKey, cipher: Cipher = .chacha20poly1305) throws -> SealedResponse {
-        let nonce = randomNonce()
+        try sealResponse(plaintext: plaintext, key: key, cipher: cipher, nonce: randomNonce())
+    }
+
+    /// `sealResponse` with the nonce supplied, for golden test vectors.
+    static func sealResponse(plaintext: Data, key: SymmetricKey, cipher: Cipher, nonce: Data) throws -> SealedResponse {
         let combined = try aeadSeal(plaintext, key: key, nonce: nonce, aad: nonce, cipher: cipher)
         return SealedResponse(nonce: nonce, ciphertext: combined, cipher: cipher)
     }
