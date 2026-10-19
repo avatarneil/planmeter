@@ -20,6 +20,13 @@ class PairingInvite(
 ) {
     fun isExpired(now: Instant = Instant.now()): Boolean = now.isAfter(expiresAt)
 
+    /** Where the link points, as `host:port` (IPv6 hosts bracketed), for the user to check. */
+    val address: String
+        get() = (if (serverHost.contains(':') && !serverHost.startsWith("[")) "[$serverHost]" else serverHost) + ":$port"
+
+    /** The same fingerprint [PairedServer.serverKeyFingerprint] shows once paired. */
+    val serverKeyFingerprint: String get() = Base64Url.encode(sha256(serverPublicKey)).take(16)
+
     /** `planmeter://pair?h=&p=&n=&k=&t=&e=` with a base64url key. */
     fun toUrl(): String {
         val items = listOf(

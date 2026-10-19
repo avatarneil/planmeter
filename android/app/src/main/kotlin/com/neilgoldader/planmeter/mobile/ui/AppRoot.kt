@@ -33,6 +33,9 @@ import com.neilgoldader.planmeter.mobile.ui.pairing.PairingRoute
 import com.neilgoldader.planmeter.mobile.ui.settings.SettingsScreen
 import com.neilgoldader.planmeter.mobile.ui.settings.SettingsUiState
 import com.neilgoldader.planmeter.mobile.ui.theme.Surfaces
+import com.neilgoldader.planmeter.mobile.ui.theme.tabular
+import com.neilgoldader.planmeter.protocol.PairedServer
+import com.neilgoldader.planmeter.protocol.PairingInvite
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 
@@ -72,14 +75,11 @@ fun AppRoot(viewModel: AppViewModel, biometricsAvailable: Boolean, onUnlockReque
     }
 
     state.pairing.pendingInvite?.takeIf { !state.isLocked }?.let { invite ->
-        AlertDialog(
-            onDismissRequest = viewModel::dismissPendingInvite,
-            title = { Text("Pair with ${invite.serverName}?") },
-            text = {
-                Text("This phone is paired with ${state.dashboard.server?.serverName ?: "another computer"}. Pairing with ${invite.serverName} replaces it.")
-            },
-            confirmButton = { TextButton(onClick = viewModel::confirmPendingInvite) { Text("Pair") } },
-            dismissButton = { TextButton(onClick = viewModel::dismissPendingInvite) { Text("Cancel") } },
+        PendingInviteDialog(
+            invite = invite,
+            current = state.dashboard.server,
+            onConfirm = viewModel::confirmPendingInvite,
+            onDismiss = viewModel::dismissPendingInvite,
         )
     }
     if (paired && !state.isLocked) {
@@ -128,6 +128,30 @@ private fun PairedNavigation(viewModel: AppViewModel, state: AppUiState, biometr
             )
         }
     }
+}
+
+/**
+ * Confirms a pairing link opened from outside the app. The name is whatever
+ * the link says, so the address and the key fingerprint (as Settings shows it
+ * once paired) tell the user which computer it really is.
+ */
+@Composable
+private fun PendingInviteDialog(invite: PairingInvite, current: PairedServer?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pair with ${invite.serverName}?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (current != null) "This phone is paired with ${current.serverName}. Pairing with ${invite.serverName} replaces it."
+                    else "Only continue if this link came from your own computer.",
+                )
+                Text("Address: ${invite.address}\nKey: ${invite.serverKeyFingerprint}", style = MaterialTheme.typography.bodySmall.tabular())
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Pair") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

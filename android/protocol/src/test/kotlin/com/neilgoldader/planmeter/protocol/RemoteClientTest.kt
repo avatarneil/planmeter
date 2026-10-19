@@ -162,6 +162,22 @@ class RemoteClientTest {
     }
 
     @Test
+    fun tailnetPolicyRefusesHostsThatWouldBendTheUrl() {
+        // The resolver would vouch for anything; the host's shape is checked first.
+        val policy = HostPolicy.tailnetOnly { listOf(InetAddress.getByName("100.101.102.103")) }
+        policy.check("devbox.tail1234.ts.net")
+        policy.check("devbox.tail1234.ts.net.")
+        policy.check("100.101.102.103")
+        for (host in listOf(
+            "evil.example@100.101.102.103", "100.101.102.103/x", "100.101.102.103#", "100.101.102.103?a",
+            "devbox:80", "dev box", "", "-devbox", "devbox..ts.net", "[devbox]", "fd7a:115c:a1e0::1%wlan0", "100.101.102.103\\x",
+        )) {
+            val e = expect<RemoteClientException.Transport> { policy.check(host) }
+            assertEquals(host, RemoteClientException.Transport.Kind.NOT_TAILNET, e.kind)
+        }
+    }
+
+    @Test
     fun ipv6HostsAreBracketed() {
         val server = PairedServer("fd7a:115c:a1e0::1", 7787, "Mac", ByteArray(65), "id", now)
         assertEquals("http://[fd7a:115c:a1e0::1]:7787", server.baseUrl)
