@@ -1,5 +1,6 @@
 package com.neilgoldader.planmeter.mobile.ui.pairing
 
+import com.neilgoldader.planmeter.mobile.ui.AppIcons
 import android.Manifest
 import android.app.Activity
 import android.content.ClipboardManager
@@ -40,15 +41,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Lan
-import androidx.compose.material.icons.outlined.NoPhotography
-import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -100,6 +92,7 @@ fun PairingRoute(state: PairingUiState, onPairText: (String) -> Unit, onDismissE
             },
         )
     }
+    var lastScan by remember { mutableStateOf<String?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val activity = context.findActivity()
         access = when {
@@ -119,10 +112,23 @@ fun PairingRoute(state: PairingUiState, onPairText: (String) -> Unit, onDismissE
             )
         },
         onPairText = onPairText,
-        onDismissError = onDismissError,
+        onDismissError = {
+            lastScan = null
+            onDismissError()
+        },
         readClipboard = { context.clipboardText() },
         scanner = { modifier ->
-            QrScanner(onCode = { code -> if (!state.isPairing) onPairText(code) }, modifier = modifier)
+            QrScanner(
+                onCode = { code ->
+                    // A code that just failed stays in view; don't retry it every few seconds
+                    // (failed attempts count toward the host's limit) until the error is dismissed.
+                    if (!state.isPairing && code != lastScan) {
+                        lastScan = code
+                        onPairText(code)
+                    }
+                },
+                modifier = modifier,
+            )
         },
     )
 }
@@ -248,10 +254,10 @@ private fun ScannerCard(
             }
         } else {
             val (icon, title, body) = when (access) {
-                CameraAccess.UNAVAILABLE -> Triple(Icons.Outlined.NoPhotography, "No camera", "Paste the pairing link below instead.")
-                CameraAccess.PERMANENTLY_DENIED -> Triple(Icons.Outlined.NoPhotography, "Camera access is off", "Allow the camera in Settings, or paste the pairing link below.")
-                CameraAccess.DENIED -> Triple(Icons.Outlined.QrCodeScanner, "Scan the QR code", "PlanMeter uses the camera only to read the pairing code.")
-                else -> Triple(Icons.Outlined.QrCodeScanner, "Scan the QR code", "Allow camera access to scan the code shown by PlanMeter on your computer.")
+                CameraAccess.UNAVAILABLE -> Triple(AppIcons.NoPhotography, "No camera", "Paste the pairing link below instead.")
+                CameraAccess.PERMANENTLY_DENIED -> Triple(AppIcons.NoPhotography, "Camera access is off", "Allow the camera in Settings, or paste the pairing link below.")
+                CameraAccess.DENIED -> Triple(AppIcons.QrCodeScanner, "Scan the QR code", "PlanMeter uses the camera only to read the pairing code.")
+                else -> Triple(AppIcons.QrCodeScanner, "Scan the QR code", "Allow camera access to scan the code shown by PlanMeter on your computer.")
             }
             Column(
                 Modifier.fillMaxSize().padding(24.dp),
@@ -316,7 +322,7 @@ private fun PasteLink(
             keyboardActions = KeyboardActions(onGo = { if (link.isNotBlank()) onPairText(link) }),
             trailingIcon = {
                 IconButton(onClick = { readClipboard()?.let { onLinkChange(it.trim()) } }) {
-                    Icon(Icons.Outlined.ContentPaste, contentDescription = "Paste from clipboard")
+                    Icon(AppIcons.ContentPaste, contentDescription = "Paste from clipboard")
                 }
             },
             shape = RoundedCornerShape(14.dp),
@@ -347,7 +353,7 @@ private fun ErrorCard(error: String?, onDismiss: () -> Unit) {
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
     ) {
         Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.WarningAmber, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(AppIcons.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
             Text(error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
             TextButton(onClick = onDismiss) { Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer) }
         }
@@ -358,10 +364,10 @@ private fun ErrorCard(error: String?, onDismiss: () -> Unit) {
 private fun Facts() {
     Surface(shape = RoundedCornerShape(20.dp), color = Surfaces.card, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Fact(Icons.Outlined.Lan, "Install the Tailscale app on this phone and sign in to the same tailnet as your computer.")
-            Fact(Icons.Outlined.Schedule, "Pairing codes are single use and expire in 5 minutes.")
-            Fact(Icons.Outlined.Key, "This phone's key stays in its secure hardware. Your computer pins it.")
-            Fact(Icons.Outlined.Shield, "Every request is end-to-end encrypted and signed, on top of Tailscale's WireGuard.")
+            Fact(AppIcons.Lan, "Install the Tailscale app on this phone and sign in to the same tailnet as your computer.")
+            Fact(AppIcons.Schedule, "Pairing codes are single use and expire in 5 minutes.")
+            Fact(AppIcons.Key, "This phone's key stays in its secure hardware. Your computer pins it.")
+            Fact(AppIcons.Shield, "Every request is end-to-end encrypted and signed, on top of Tailscale's WireGuard.")
         }
     }
 }

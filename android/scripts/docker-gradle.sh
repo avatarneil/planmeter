@@ -15,6 +15,8 @@ repo_dir="$(cd "$android_dir/.." && pwd)"
 image="${PLANMETER_ANDROID_IMAGE:-eclipse-temurin:21-jdk-noble}"
 sdk_volume="${PLANMETER_ANDROID_SDK_VOLUME:-planmeter-android-sdk}"
 gradle_volume="${PLANMETER_ANDROID_GRADLE_VOLUME:-planmeter-android-gradle}"
+# Keeps ~/.android (the debug signing key) between runs, so rebuilt APKs install over old ones.
+home_volume="${PLANMETER_ANDROID_HOME_VOLUME:-planmeter-android-home}"
 
 if [[ $# -eq 0 ]]; then
   set -- :protocol:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
@@ -31,6 +33,7 @@ exec docker run --rm ${tty[@]+"${tty[@]}"} \
   -v "$repo_dir":/work \
   -v "$sdk_volume":/opt/android-sdk \
   -v "$gradle_volume":/root/.gradle \
+  -v "$home_volume":/root/.android \
   -e ANDROID_HOME=/opt/android-sdk \
   -e PLANMETER_INTEROP_PAIR_URL \
   -e GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false" \

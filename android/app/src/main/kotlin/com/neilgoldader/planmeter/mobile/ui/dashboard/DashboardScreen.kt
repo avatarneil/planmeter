@@ -1,5 +1,6 @@
 package com.neilgoldader.planmeter.mobile.ui.dashboard
 
+import com.neilgoldader.planmeter.mobile.ui.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -113,9 +108,9 @@ fun DashboardScreen(
                             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         }
                     } else {
-                        IconButton(onClick = onRefresh) { Icon(Icons.Outlined.Refresh, contentDescription = "Refresh") }
+                        IconButton(onClick = onRefresh) { Icon(AppIcons.Refresh, contentDescription = "Refresh") }
                     }
-                    IconButton(onClick = onOpenSettings) { Icon(Icons.Outlined.Settings, contentDescription = "Settings") }
+                    IconButton(onClick = onOpenSettings) { Icon(AppIcons.Settings, contentDescription = "Settings") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surfaces.screen, scrolledContainerColor = Surfaces.screen),
                 scrollBehavior = scrollBehavior,
@@ -195,15 +190,15 @@ private class DashboardSections(
         val updated = state.lastUpdated
         when {
             error != null && data != null -> Banner(
-                Icons.Outlined.CloudOff,
+                AppIcons.CloudOff,
                 if (updated != null) "$error Showing data from ${Fmt.relative(updated, now)}." else error,
                 BannerTone.Warning,
                 actionLabel = "Retry",
                 onAction = onRefresh,
             )
-            error != null -> Banner(Icons.Outlined.WarningAmber, error, BannerTone.Error, actionLabel = "Retry", onAction = onRefresh)
+            error != null -> Banner(AppIcons.Warning, error, BannerTone.Error, actionLabel = "Retry", onAction = onRefresh)
             updated != null && Duration.between(updated, now) > STALE_AFTER -> Banner(
-                Icons.Outlined.History,
+                AppIcons.History,
                 "Last updated ${Fmt.relative(updated, now)}.",
                 BannerTone.Info,
                 actionLabel = "Refresh",
@@ -269,7 +264,7 @@ private fun EmptyState(state: DashboardUiState, onRefresh: () -> Unit) {
             CircularProgressIndicator()
             Text("Loading from $name…", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            Icon(Icons.Outlined.CloudOff, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(AppIcons.CloudOff, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("No data yet", style = MaterialTheme.typography.titleLarge)
             Text(
                 "Make sure $name is awake, PlanMeter is running with Remote access on, and this phone is connected to Tailscale.",

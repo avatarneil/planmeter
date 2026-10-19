@@ -29,9 +29,10 @@ android/scripts/docker-gradle.sh :app:assembleDebug # just the APK
 
 The script runs `eclipse-temurin:21-jdk-noble` as `linux/amd64` (Android's
 `aapt2` has no linux-arm64 build, so Apple silicon runs it under Rosetta or
-QEMU). The Android SDK goes in the `planmeter-android-sdk` volume and the
-Gradle cache in `planmeter-android-gradle`, so only the first run downloads
-them. `scripts/ensure-android-sdk.sh` installs the command-line tools, accepts
+QEMU). The Android SDK goes in the `planmeter-android-sdk` volume, the Gradle
+cache in `planmeter-android-gradle`, and `~/.android` (with the debug signing
+key, so rebuilt APKs install over earlier ones) in `planmeter-android-home`.
+Only the first run downloads anything. `scripts/ensure-android-sdk.sh` installs the command-line tools, accepts
 the licenses, and installs the platform and build tools.
 
 With a local JDK 21 and Android SDK (as in CI), run Gradle directly:
@@ -47,13 +48,20 @@ as the `planmeter-android-debug` artifact.
 
 ## Install (sideload)
 
-The debug APK is signed with the Android debug key.
+Two APKs, both signed with the local debug key (there is no Play Store listing):
 
-- With USB debugging: `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`
+| Task | APK | Size |
+| --- | --- | --- |
+| `:app:assembleRelease` | `android/app/build/outputs/apk/release/app-release.apk` | about 6 MB, R8-minified |
+| `:app:assembleDebug` | `android/app/build/outputs/apk/debug/app-debug.apk` | about 50 MB, debuggable |
+
+- With USB debugging: `adb install -r <apk>`
 - Without a computer: copy the APK to the phone and open it. Android asks you to
   allow installs from that app (Files, Drive, a browser) the first time.
 
-Release builds are minified but unsigned; there is no Play Store listing.
+Debug builds also allow loopback and the emulator's `10.0.2.2` host alias (see
+Security); release builds talk only to tailnet addresses. A distributed build
+would replace the debug signing config with a real key.
 
 ## Pair
 
