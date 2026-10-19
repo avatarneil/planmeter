@@ -62,6 +62,13 @@ For the web client over HTTPS, let your user drive `tailscale serve`
 `{"httpsEnabled": true}`. That also binds `127.0.0.1`, which Tailscale Serve
 proxies to.
 
+## Trying it in Docker
+
+From a Mac or Linux checkout, `make linux-smoke` builds `planmeterd` in the
+`swift:6.2-noble` image and runs `scripts/linux/smoke-planmeterd.sh`: every
+control endpoint over the socket, a paired client calling every RPC over
+loopback, and a clean SIGTERM shutdown.
+
 ## Useful flags
 
 `--socket PATH`, `--port N`, `--remote` / `--no-remote` (this run only),

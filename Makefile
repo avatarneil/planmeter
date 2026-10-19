@@ -1,4 +1,4 @@
-.PHONY: build check-version test linux-build linux-test app signed-app release-macos run install install-mcp clean
+.PHONY: build check-version test linux-build linux-test linux-smoke app signed-app release-macos run install install-mcp clean
 
 build:
 	swift build
@@ -16,6 +16,10 @@ linux-build:
 
 linux-test:
 	./scripts/linux/run.sh test
+
+# Runs planmeterd in the container and exercises its control and remote APIs.
+linux-smoke:
+	./scripts/linux/run.sh smoke
 
 app:
 	./scripts/bundle.sh
