@@ -133,6 +133,31 @@ fn settings_round_trip() {
 }
 
 #[test]
+fn alert_summaries_cover_every_range_with_a_limit() {
+    let f = start();
+    let mut thresholds = BTreeMap::new();
+    thresholds.insert("today".to_string(), SpendThreshold::new(50.0, 80.0));
+    thresholds.insert("month".to_string(), SpendThreshold::new(900.0, 80.0));
+    f.client.set_spend(None, Some(thresholds)).unwrap();
+    let now = Local::now();
+    let (settings, summaries) = f.client.alert_summaries(now).unwrap();
+    let ranges: Vec<TimeRange> = summaries.iter().map(|(r, _)| *r).collect();
+    assert_eq!(ranges, vec![TimeRange::Today, TimeRange::Month]);
+    for (range, summary) in &summaries {
+        let dashboard = f
+            .client
+            .dashboard(*range, range.default_granularity(), now)
+            .unwrap();
+        assert!(
+            (planmeter::client::spend_total(summary, &settings) - dashboard.spend_total()).abs()
+                < 1e-6,
+            "{range:?}: same spend as the dashboard"
+        );
+    }
+    assert!(f.client.summaries(&[], now).unwrap().is_empty());
+}
+
+#[test]
 fn remote_pairing_flow() {
     let f = start();
     let remote = f.client.remote().unwrap();

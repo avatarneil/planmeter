@@ -259,7 +259,8 @@ readings. On macOS the daemon is a development tool and keeps its files in
   libcurl WebSocket support on Linux. When it is unavailable, that reading is labelled
   unavailable and local reporting continues.
 - **Desktop integration** for the GTK app: an AdwApplicationWindow dashboard, GNotification
-  for spend-limit crossings, a `.desktop` file, AppStream metainfo, and a Flatpak manifest
+  for spend-limit crossings while the app is open (alerting from `planmeterd` is a
+  follow-up), a `.desktop` file, AppStream metainfo, and a Flatpak manifest
   (unpublished). A StatusNotifierItem tray icon is a follow-up; GNOME needs an extension
   to show it.
 - **Packaging** (not published in this stack): systemd user unit for `planmeterd`,

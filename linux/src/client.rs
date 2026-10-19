@@ -327,6 +327,43 @@ impl Client {
             })
         })
     }
+
+    /// Spend summaries for several ranges, fetched in parallel, for alerts on
+    /// ranges other than the one on screen.
+    pub fn summaries(
+        &self,
+        ranges: &[TimeRange],
+        now: DateTime<Local>,
+    ) -> Result<Vec<(TimeRange, RemoteSummary)>> {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = ranges
+                .iter()
+                .map(|&range| {
+                    let request = range.request(RemoteMethod::Summary, None, now);
+                    (range, scope.spawn(move || self.summary(&request)))
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|(range, handle)| Ok((range, join(handle.join())?)))
+                .collect()
+        })
+    }
+
+    /// The host settings and a summary for every range with a spend limit:
+    /// what spend alerts need when the dashboard is not refreshing.
+    pub fn alert_summaries(
+        &self,
+        now: DateTime<Local>,
+    ) -> Result<(HostSettings, Vec<(TimeRange, RemoteSummary)>)> {
+        let settings = self.settings()?;
+        let ranges: Vec<TimeRange> = TimeRange::ALL
+            .into_iter()
+            .filter(|r| settings.threshold(r.id()).is_some())
+            .collect();
+        let summaries = self.summaries(&ranges, now)?;
+        Ok((settings, summaries))
+    }
 }
 
 fn join<T>(result: std::thread::Result<Result<T>>) -> Result<T> {
@@ -373,14 +410,19 @@ impl Dashboard {
 
     /// Spend of the groups that count toward the total.
     pub fn spend_total(&self) -> f64 {
-        self.summary
-            .totals_for_groups(&self.settings.effective_spend_groups())
-            .cost_usd
+        spend_total(&self.summary, &self.settings)
     }
 
     pub fn threshold(&self) -> Option<SpendThreshold> {
         self.settings.threshold(self.range.id())
     }
+}
+
+/// Spend toward a range's limit: the groups that count toward the total.
+pub fn spend_total(summary: &RemoteSummary, settings: &HostSettings) -> f64 {
+    summary
+        .totals_for_groups(&settings.effective_spend_groups())
+        .cost_usd
 }
 
 #[cfg(test)]

@@ -14,8 +14,9 @@ Run `planmeterd` as a systemd user service, or use the bundled mock daemon for d
 - **Dashboard**: total spend for the last hour, today, or the last 24 hours, 7, 30, or
   90 days, with today's spend, tokens, cached-input share, cache savings, and sessions.
 - **Spend limit** progress for the selected range (teal, amber, coral as on the Mac), and a
-  desktop notification when the spend total reaches the warning level or the limit, once
-  per crossing per period.
+  desktop notification when spend for any range with a limit reaches its warning level or
+  the limit, once per crossing per period. Alerts are checked while the app is open, every
+  5 minutes when its window is hidden; the app quits with its window.
 - **Personal / Work / Other** cards with each account's spend in its accent color.
 - **Timeline**: stacked bars per account, drawn with Cairo, with a bucket-size menu
   (1 min to 1 day, at most about 1,500 bars per range, as on the Mac and iPhone), hover
