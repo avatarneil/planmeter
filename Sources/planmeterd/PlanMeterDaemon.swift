@@ -128,6 +128,9 @@ final class Daemon {
         tick.cancel()
         controlServer.stop()
         remote.stop()
+        // Device counters first: the engine waits for a running scan, which
+        // can outlast systemd's stop timeout.
+        service.persistDevices()
         await engine.stop()
         scan.cancel()
         service.persistDevices()
