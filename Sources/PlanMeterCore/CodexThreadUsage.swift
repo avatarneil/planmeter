@@ -140,7 +140,7 @@ public enum CodexThreadUsage {
             if required { throw UsageError.unsupported }
             return nil
         }
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+        guard let number = value as? NSNumber, !JSON.isBoolean(number),
               number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue < Double(Int.max),
               number.doubleValue.rounded(.down) == number.doubleValue else { throw UsageError.unsupported }
         return number.intValue

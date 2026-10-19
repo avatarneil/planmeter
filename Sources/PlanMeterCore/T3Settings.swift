@@ -34,7 +34,7 @@ public struct T3Settings: Sendable {
         if let env = ProcessInfo.processInfo.environment["T3CODE_HOME"], !env.isEmpty {
             return URL(fileURLWithPath: PathUtil.expand(env))
         }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".t3")
+        return URL(fileURLWithPath: PlanMeterPaths.homeDirectory(), isDirectory: true).appendingPathComponent(".t3")
     }
 
     public static func defaultSettingsURL() -> URL {
@@ -91,9 +91,9 @@ public struct T3Settings: Sendable {
 public enum PathUtil {
     public static func expand(_ path: String) -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed == "~" { return NSHomeDirectory() }
+        if trimmed == "~" { return PlanMeterPaths.homeDirectory() }
         if trimmed.hasPrefix("~/") {
-            return NSHomeDirectory() + trimmed.dropFirst(1)
+            return PlanMeterPaths.homeDirectory() + trimmed.dropFirst(1)
         }
         return (trimmed as NSString).standardizingPath
     }

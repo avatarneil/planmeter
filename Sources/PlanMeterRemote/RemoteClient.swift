@@ -1,5 +1,12 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public enum RemoteClientError: Error, LocalizedError {
     case http(Int, String)
@@ -35,7 +42,9 @@ public final class RemoteClient: Sendable {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 20
         c.timeoutIntervalForResource = 30
-        c.waitsForConnectivity = false
+        #if canImport(Darwin)
+        c.waitsForConnectivity = false // read-only (and already false) in FoundationNetworking
+        #endif
         c.httpCookieAcceptPolicy = .never
         c.urlCache = nil
         return URLSession(configuration: c)
@@ -104,7 +113,7 @@ public final class RemoteClient: Sendable {
 
     static func perform(_ request: URLRequest, session: URLSession) async throws -> (Data, HTTPURLResponse) {
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await session.portableData(for: request)
             guard let http = response as? HTTPURLResponse else { throw RemoteClientError.malformedReply }
             return (data, http)
         } catch let e as RemoteClientError {

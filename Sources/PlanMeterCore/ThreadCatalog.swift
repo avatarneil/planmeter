@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 
 /// Enrich session IDs using explicit provider mappings, never title similarity.
 public enum ThreadCatalog {

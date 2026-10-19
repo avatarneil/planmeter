@@ -4,7 +4,7 @@ import XCTest
 final class CodexDailyUsageTests: XCTestCase {
     let target = CodexUsageTarget(id: "workspace:member", name: "Workspace", home: "/tmp/unused", email: "member@example.com",
                                  plan: "business", serviceAccountId: "workspace", localAccountId: "codex:plan:business")
-    let now = AccountUsageTests().now
+    let now = AccountUsageTests.fixture().now
 
     func credits(_ breakdown: String = "product", date: String = "2026-10-01", values: [String: Any]? = nil) -> [String: Any] {
         let values = values ?? (breakdown == "product" ? ["work": 20, "codex": 2, "chatgpt": 0.5] : ["test": 22, "voice": 0.5])
