@@ -181,14 +181,18 @@ fn read_chunked(reader: &mut impl BufRead) -> io::Result<Vec<u8>> {
             while !read_line(reader)?.is_empty() {}
             return Ok(body);
         }
-        if body.len() + size > MAX_BODY {
-            return Err(invalid("body too large"));
-        }
         let start = body.len();
-        body.resize(start + size, 0);
+        let end = start
+            .checked_add(size)
+            .filter(|&end| end <= MAX_BODY)
+            .ok_or_else(|| invalid("body too large"))?;
+        body.resize(end, 0);
         reader.read_exact(&mut body[start..])?;
         let mut crlf = [0u8; 2];
         reader.read_exact(&mut crlf)?;
+        if &crlf != b"\r\n" {
+            return Err(invalid("chunk without CRLF"));
+        }
     }
 }
 
@@ -326,6 +330,20 @@ mod tests {
         assert_eq!(read_response(&raw[..]).unwrap().body, b"{\"a\":1}");
         let raw = b"HTTP/1.0 200 OK\r\n\r\n{\"b\":2}";
         assert_eq!(read_response(&raw[..]).unwrap().body, b"{\"b\":2}");
+    }
+
+    #[test]
+    fn rejects_oversized_chunks() {
+        // A huge second chunk must not wrap the length and panic.
+        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\na\r\nffffffffffffffff\r\nb\r\n0\r\n\r\n";
+        assert!(read_response(&raw[..]).is_err());
+        let raw = format!(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n",
+            MAX_BODY + 1
+        );
+        assert!(read_response(raw.as_bytes()).is_err());
+        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\naXY0\r\n\r\n";
+        assert!(read_response(&raw[..]).is_err());
     }
 
     #[test]

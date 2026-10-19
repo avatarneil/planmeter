@@ -680,8 +680,9 @@ impl DashboardPage {
     fn update_limits(&self, d: &Dashboard) {
         self.limits_list.remove_all();
         let now = Utc::now();
-        self.limits_group
-            .set_description(Some(d.limits.note.as_str()).filter(|n| !n.is_empty()));
+        // Group descriptions are Pango markup; the note comes from the daemon.
+        let note = Some(markup_escape(&d.limits.note)).filter(|n| !n.is_empty());
+        self.limits_group.set_description(note.as_deref());
         if d.limits.accounts.is_empty() {
             let row = row(
                 "No Codex accounts",

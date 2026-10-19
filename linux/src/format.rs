@@ -63,20 +63,30 @@ pub fn usd_axis(value: f64, step: f64) -> String {
     format!("${value:.2}")
 }
 
-/// Token counts: `999`, `1.2K`, `12K`, `1.2M`, `1.23B`.
+/// Token counts: `999`, `1.2K`, `12K`, `1.2M`, `1.23B`. The unit is chosen
+/// after rounding, so 999,950 reads `1.0M` rather than `1000K`.
 pub fn tokens(value: i64) -> String {
     let v = value as f64;
-    if v >= 1_000_000_000.0 {
-        format!("{:.2}B", v / 1_000_000_000.0)
-    } else if v >= 1_000_000.0 {
-        format!("{:.1}M", v / 1_000_000.0)
-    } else if v >= 10_000.0 {
-        format!("{:.0}K", v / 1_000.0)
-    } else if v >= 1_000.0 {
-        format!("{:.1}K", v / 1_000.0)
-    } else {
-        value.to_string()
+    if v < 1_000.0 {
+        return value.to_string();
     }
+    let fits = |x: f64, decimals: usize, limit: f64| {
+        format!("{x:.decimals$}")
+            .parse::<f64>()
+            .is_ok_and(|r| r < limit)
+    };
+    let k = v / 1_000.0;
+    if fits(k, 1, 10.0) {
+        return format!("{k:.1}K");
+    }
+    if fits(k, 0, 1_000.0) {
+        return format!("{k:.0}K");
+    }
+    let m = v / 1_000_000.0;
+    if fits(m, 1, 1_000.0) {
+        return format!("{m:.1}M");
+    }
+    format!("{:.2}B", v / 1_000_000_000.0)
 }
 
 /// A fraction as a whole percentage: `0.642` → `64%`.
@@ -197,10 +207,12 @@ pub fn web_code(code: &str) -> String {
     }
 }
 
-/// Parses `#rrggbb` or `#rrggbbaa` into sRGB components in `0..=1`.
+/// Parses `#rrggbb` or `#rrggbbaa` (the `#` optional) into sRGB components
+/// in `0..=1`.
 pub fn parse_hex(hex: &str) -> Option<(f64, f64, f64, f64)> {
-    let s = hex.trim().trim_start_matches('#');
-    if !(s.len() == 6 || s.len() == 8) || !s.is_ascii() {
+    let trimmed = hex.trim();
+    let s = trimmed.strip_prefix('#').unwrap_or(trimmed);
+    if !(s.len() == 6 || s.len() == 8) || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     let value = u32::from_str_radix(s, 16).ok()?;
@@ -232,8 +244,16 @@ pub const SERIES_PALETTE: [&str; 8] = [
     "#4f7cff", "#f0883e", "#2fb87a", "#c06ad9", "#e5484d", "#0aa8a7", "#d9a400", "#8b8f98",
 ];
 
+/// `#rrggbb` for any color `parse_hex` accepts, safe for Pango markup and CSS.
+pub fn normalized_hex(hex: &str) -> Option<String> {
+    let (r, g, b, _) = parse_hex(hex)?;
+    let byte = |c: f64| (c * 255.0).round() as u8;
+    Some(format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b)))
+}
+
 /// The account's accent when it is unique among `accounts`, otherwise a
 /// palette color by position, as the Mac and iPhone pick series colors.
+/// Always `#rrggbb`: the result goes into Pango markup and CSS.
 pub fn account_color(accounts: &[crate::models::RemoteAccount], id: &str) -> String {
     let Some(index) = accounts.iter().position(|a| a.id == id) else {
         return "#8b8f98".into();
@@ -251,8 +271,10 @@ pub fn account_color(accounts: &[crate::models::RemoteAccount], id: &str) -> Str
             })
             .count()
             == 1;
-        if unique && parse_hex(hex).is_some() {
-            return hex.to_string();
+        if unique {
+            if let Some(hex) = normalized_hex(hex) {
+                return hex;
+            }
         }
     }
     SERIES_PALETTE[index % SERIES_PALETTE.len()].to_string()
@@ -361,6 +383,10 @@ mod tests {
         assert_eq!(tokens(45_600), "46K");
         assert_eq!(tokens(48_200_000), "48.2M");
         assert_eq!(tokens(1_230_000_000), "1.23B");
+        assert_eq!(tokens(9_999), "10K");
+        assert_eq!(tokens(999_499), "999K");
+        assert_eq!(tokens(999_950), "1.0M");
+        assert_eq!(tokens(999_950_000), "1.00B");
     }
 
     #[test]
@@ -404,6 +430,10 @@ mod tests {
         );
         assert_eq!(parse_hex("#12"), None);
         assert_eq!(parse_hex("#zzzzzz"), None);
+        assert_eq!(parse_hex("##123456"), None);
+        assert_eq!(parse_hex("+1234567"), None);
+        assert_eq!(normalized_hex(" 0891B2 ").as_deref(), Some("#0891b2"));
+        assert_eq!(normalized_hex("#0891b2cc").as_deref(), Some("#0891b2"));
     }
 
     #[test]
@@ -419,8 +449,10 @@ mod tests {
             mk("b", Some("#ABCDEF")),
             mk("c", Some("#abcdef")),
             mk("d", None),
+            mk("e", Some("0891B2")),
         ];
         assert_eq!(account_color(&accounts, "a"), "#123456");
+        assert_eq!(account_color(&accounts, "e"), "#0891b2");
         assert_eq!(account_color(&accounts, "b"), SERIES_PALETTE[1]);
         assert_eq!(account_color(&accounts, "d"), SERIES_PALETTE[3]);
         assert_eq!(account_color(&accounts, "missing"), "#8b8f98");
