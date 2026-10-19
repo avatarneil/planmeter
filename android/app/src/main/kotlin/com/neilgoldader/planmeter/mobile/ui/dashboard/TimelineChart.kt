@@ -1,6 +1,7 @@
 package com.neilgoldader.planmeter.mobile.ui.dashboard
 
-import android.text.format.DateFormat
+import android.icu.text.DateFormat as IcuDateFormat
+import android.icu.util.TimeZone as IcuTimeZone
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -45,9 +46,9 @@ import com.neilgoldader.planmeter.protocol.RemoteTimeline
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
+import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -149,7 +150,6 @@ class ChartModel(val timeline: RemoteTimeline, val zone: ZoneId = ZoneId.systemD
     }
 
     fun tickLabel(instant: Instant, tickMinutes: Long, locale: Locale): String {
-        val time: ZonedDateTime = instant.atZone(zone)
         val multiDay = domainEnd.epochSecond - domainStart.epochSecond > 86_400 + 3_600
         val skeleton = when {
             tickMinutes >= 1440 -> "MMMd"
@@ -157,21 +157,39 @@ class ChartModel(val timeline: RemoteTimeline, val zone: ZoneId = ZoneId.systemD
             tickMinutes % 60 == 0L -> "j"
             else -> "jm"
         }
-        return DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale).format(time)
+        return format(instant, skeleton, locale)
     }
 
     /** Spoken and inspector label for one bucket: "Mon, Oct 19, 3:00 PM – 3:15 PM" or "Mon, Oct 19". */
     fun bucketLabel(bar: ChartBar, locale: Locale): String {
-        fun format(instant: Instant, skeleton: String) =
-            DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale).format(instant.atZone(zone))
-        if (step == null) return format(bar.start, "EEEMMMd")
-        val start = format(bar.start, if (timeline.days > 1) "EEEMMMdjm" else "jm")
-        return "$start – ${format(bar.end, "jm")}"
+        if (step == null) return format(bar.start, "EEEMMMd", locale)
+        val start = format(bar.start, if (timeline.days > 1) "EEEMMMdjm" else "jm", locale)
+        return "$start – ${format(bar.end, "jm", locale)}"
     }
+
+    private val formats = HashMap<Pair<String, Locale>, IcuDateFormat>()
+
+    /**
+     * Formats with ICU rather than java.time: on Android 12 and 13, skeletons
+     * like "jm" resolve to day-period patterns ("Bh:mm" in zh-TW) whose "B"
+     * that release's java.time cannot parse. Used from the main thread only.
+     */
+    private fun format(instant: Instant, skeleton: String, locale: Locale): String =
+        formats.getOrPut(skeleton to locale) {
+            IcuDateFormat.getInstanceForSkeleton(skeleton, locale).apply { timeZone = icuTimeZone(zone) }
+        }.format(Date(instant.toEpochMilli()))
 
     companion object {
         /** Candidate label spacings in minutes; 43200 means the first of each month. */
         val TICK_STEPS = listOf(1L, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10_080, 20_160, 43_200)
+
+        /** ICU knows region ids; fixed offsets need its "GMT+hh:mm" form. */
+        private fun icuTimeZone(zone: ZoneId): IcuTimeZone = IcuTimeZone.getTimeZone(
+            when (zone) {
+                is ZoneOffset -> if (zone == ZoneOffset.UTC) "GMT" else "GMT${zone.id}"
+                else -> zone.id
+            },
+        )
     }
 }
 

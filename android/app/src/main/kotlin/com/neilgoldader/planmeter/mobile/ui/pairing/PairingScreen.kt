@@ -72,6 +72,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.neilgoldader.planmeter.mobile.R
 import com.neilgoldader.planmeter.mobile.ui.PairingUiState
 import com.neilgoldader.planmeter.mobile.ui.theme.Surfaces
@@ -91,6 +92,14 @@ fun PairingRoute(state: PairingUiState, onPairText: (String) -> Unit, onDismissE
                 else -> CameraAccess.NOT_REQUESTED
             },
         )
+    }
+    // Access may change in system Settings (the "Open settings" button) while this screen waits.
+    LifecycleResumeEffect(hasCamera) {
+        if (hasCamera) {
+            val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (granted) access = CameraAccess.GRANTED else if (access == CameraAccess.GRANTED) access = CameraAccess.NOT_REQUESTED
+        }
+        onPauseOrDispose {}
     }
     var lastScan by remember { mutableStateOf<String?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

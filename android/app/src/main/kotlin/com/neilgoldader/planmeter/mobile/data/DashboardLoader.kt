@@ -14,6 +14,8 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /** Everything the dashboard shows for one range. */
 data class DashboardData(
+    /** The range this data was loaded for, which may lag the selection while a fetch runs or fails. */
+    val range: MobileRange,
     val summary: RemoteSummary,
     val timeline: RemoteTimeline?,
     val limits: RemoteLimits?,
@@ -58,6 +60,7 @@ class DashboardLoader(private val call: suspend (RemoteRequest) -> RemoteReply) 
         if (minutes != null && s.minutes != minutes) return@coroutineScope LoadResult.NoSubDayWindows
         LoadResult.Loaded(
             DashboardData(
+                range = range,
                 summary = s,
                 timeline = t,
                 limits = l,
