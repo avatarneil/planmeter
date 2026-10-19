@@ -22,7 +22,7 @@
   "response": {
     "body": {
       "groupOverrides": {
-        "opencode": "work"
+        "codex:plan:personal": "work"
       },
       "spendGroups": [
         "personal",
