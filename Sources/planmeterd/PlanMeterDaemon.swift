@@ -32,6 +32,9 @@ enum PlanMeterDaemon {
             break
         }
         Log.verbose = options.verbose
+        // Catch shutdown signals before any startup work, so a stop request
+        // that arrives early still shuts down cleanly.
+        Signals.install([SIGTERM, SIGINT])
         // A client that disconnects mid-reply must not kill the daemon.
         signal(SIGPIPE, SIG_IGN)
         do {
@@ -123,7 +126,7 @@ final class Daemon {
             }
         }
 
-        let received = await Signals.wait(for: [SIGTERM, SIGINT])
+        let received = await Signals.wait()
         Log.info("received \(received == SIGTERM ? "SIGTERM" : "SIGINT"); shutting down")
         tick.cancel()
         controlServer.stop()
@@ -210,30 +213,45 @@ enum WebLocator {
 
 /// Waits for the first of several signals, then restores their default
 /// action so a second one ends the process immediately.
+/// Shutdown signals, caught by a handler that writes the signal number to a
+/// pipe. The handler is installed synchronously, unlike a dispatch signal
+/// source, so no signal is lost between installing and waiting.
 enum Signals {
-    private final class Waiter: @unchecked Sendable {
-        var sources: [DispatchSourceSignal] = []
-        var resumed = false
-    }
+    nonisolated(unsafe) private static var readEnd: Int32 = -1
+    nonisolated(unsafe) private static var writeEnd: Int32 = -1
+    nonisolated(unsafe) private static var installed: [Int32] = []
 
-    @MainActor
-    static func wait(for signals: [Int32]) async -> Int32 {
-        let waiter = Waiter()
-        let received: Int32 = await withCheckedContinuation { continuation in
-            for number in signals {
-                signal(number, SIG_IGN)
-                let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
-                source.setEventHandler {
-                    guard !waiter.resumed else { return }
-                    waiter.resumed = true
-                    continuation.resume(returning: number)
-                }
-                source.resume()
-                waiter.sources.append(source)
+    static func install(_ signals: [Int32]) {
+        var fds: [Int32] = [-1, -1]
+        guard pipe(&fds) == 0 else { return }
+        readEnd = fds[0]
+        writeEnd = fds[1]
+        installed = signals
+        for number in signals {
+            signal(number) { received in
+                // Only async-signal-safe calls here.
+                var byte = UInt8(truncatingIfNeeded: received)
+                _ = write(Signals.writeEnd, &byte, 1)
             }
         }
-        for source in waiter.sources { source.cancel() }
-        for number in signals { signal(number, SIG_DFL) }
+    }
+
+    /// Returns the first signal received since `install`, then restores the
+    /// default actions so a second signal stops the process at once.
+    @MainActor
+    static func wait() async -> Int32 {
+        let readEnd = readEnd
+        let received: Int32 = await withCheckedContinuation { continuation in
+            let source = DispatchSource.makeReadSource(fileDescriptor: readEnd, queue: .main)
+            source.setEventHandler {
+                var byte: UInt8 = 0
+                guard read(readEnd, &byte, 1) == 1 else { return }
+                source.cancel()
+                continuation.resume(returning: Int32(byte))
+            }
+            source.resume()
+        }
+        for number in installed { signal(number, SIG_DFL) }
         return received
     }
 }
