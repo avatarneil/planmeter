@@ -1,0 +1,191 @@
+{
+  "models": [
+    {
+      "accountId": "codex:plan:work",
+      "accountName": "Codex Work",
+      "group": "work",
+      "model": "gpt-5.5-codex",
+      "priced": true,
+      "provider": "codex",
+      "totals": {
+        "cacheSavingsUsd": 35.41598121599993,
+        "cachedInputTokens": 32196346,
+        "costUsd": 144.31489203267287,
+        "inputTokens": 45347631,
+        "outputTokens": 3943764,
+        "sessions": 79,
+        "tokens": 49291395
+      }
+    },
+    {
+      "accountId": "claude:work",
+      "accountName": "Claude Work",
+      "group": "work",
+      "model": "claude-sonnet-4-5",
+      "priced": true,
+      "provider": "claude",
+      "totals": {
+        "cacheSavingsUsd": 40.731342267000045,
+        "cachedInputTokens": 37028492,
+        "costUsd": 138.11090664811775,
+        "inputTokens": 52153311,
+        "outputTokens": 4535475,
+        "sessions": 66,
+        "tokens": 56688787
+      }
+    },
+    {
+      "accountId": "claude:work",
+      "accountName": "Claude Work",
+      "group": "work",
+      "model": "claude-opus-4-5",
+      "priced": true,
+      "provider": "claude",
+      "totals": {
+        "cacheSavingsUsd": 16.63674543300002,
+        "cachedInputTokens": 15124314,
+        "costUsd": 56.41149708162556,
+        "inputTokens": 21302057,
+        "outputTokens": 1852517,
+        "sessions": 27,
+        "tokens": 23154574
+      }
+    },
+    {
+      "accountId": "claude:personal",
+      "accountName": "Claude",
+      "group": "personal",
+      "model": "claude-opus-4-5",
+      "priced": true,
+      "provider": "claude",
+      "totals": {
+        "cacheSavingsUsd": 9.543884074999992,
+        "cachedInputTokens": 8676258,
+        "costUsd": 32.44403359536709,
+        "inputTokens": 12220486,
+        "outputTokens": 1062946,
+        "sessions": 54,
+        "tokens": 13283433
+      }
+    },
+    {
+      "accountId": "codex:plan:work",
+      "accountName": "Codex Work",
+      "group": "work",
+      "model": "gpt-5.5-codex-max",
+      "priced": true,
+      "provider": "codex",
+      "totals": {
+        "cacheSavingsUsd": 6.745901183999987,
+        "cachedInputTokens": 6132637,
+        "costUsd": 27.488550863366264,
+        "inputTokens": 8637644,
+        "outputTokens": 751193,
+        "sessions": 15,
+        "tokens": 9388837
+      }
+    },
+    {
+      "accountId": "claude:personal",
+      "accountName": "Claude",
+      "group": "personal",
+      "model": "claude-sonnet-4-5",
+      "priced": true,
+      "provider": "claude",
+      "totals": {
+        "cacheSavingsUsd": 6.593956269999994,
+        "cachedInputTokens": 5994505,
+        "costUsd": 22.415877756799077,
+        "inputTokens": 8443245,
+        "outputTokens": 734399,
+        "sessions": 38,
+        "tokens": 9177644
+      }
+    },
+    {
+      "accountId": "codex:plan:personal",
+      "accountName": "Codex",
+      "group": "personal",
+      "model": "gpt-5.5-codex",
+      "priced": true,
+      "provider": "codex",
+      "totals": {
+        "cacheSavingsUsd": 6.094218701999994,
+        "cachedInputTokens": 5540198,
+        "costUsd": 20.725028633311737,
+        "inputTokens": 7803658,
+        "outputTokens": 679003,
+        "sessions": 79,
+        "tokens": 8482662
+      }
+    },
+    {
+      "accountId": "codex:plan:personal",
+      "accountName": "Codex",
+      "group": "personal",
+      "model": "gpt-5.4-mini",
+      "priced": true,
+      "provider": "codex",
+      "totals": {
+        "cacheSavingsUsd": 1.7188821979999982,
+        "cachedInputTokens": 1562620,
+        "costUsd": 5.845520896575104,
+        "inputTokens": 2201032,
+        "outputTokens": 191513,
+        "sessions": 23,
+        "tokens": 2392545
+      }
+    },
+    {
+      "accountId": "opencode",
+      "accountName": "OpenCode",
+      "group": "other",
+      "model": "openrouter/qwen3-coder",
+      "priced": true,
+      "provider": "opencode",
+      "totals": {
+        "cacheSavingsUsd": 1.0260709799999992,
+        "cachedInputTokens": 932791,
+        "costUsd": 5.811810603634268,
+        "inputTokens": 1314127,
+        "outputTokens": 114513,
+        "sessions": 90,
+        "tokens": 1428640
+      }
+    },
+    {
+      "accountId": "claude:personal",
+      "accountName": "Claude",
+      "group": "personal",
+      "model": "claude-haiku-4-5",
+      "priced": true,
+      "provider": "claude",
+      "totals": {
+        "cacheSavingsUsd": 1.2146761549999991,
+        "cachedInputTokens": 1104251,
+        "costUsd": 4.129240639410356,
+        "inputTokens": 1555334,
+        "outputTokens": 135284,
+        "sessions": 7,
+        "tokens": 1690618
+      }
+    },
+    {
+      "accountId": "opencode",
+      "accountName": "OpenCode",
+      "group": "other",
+      "model": "local/llama-4-scout",
+      "priced": false,
+      "provider": "opencode",
+      "totals": {
+        "cacheSavingsUsd": 0.6840473199999995,
+        "cachedInputTokens": 621861,
+        "costUsd": 0.0,
+        "inputTokens": 876085,
+        "outputTokens": 76342,
+        "sessions": 60,
+        "tokens": 952427
+      }
+    }
+  ]
+}
