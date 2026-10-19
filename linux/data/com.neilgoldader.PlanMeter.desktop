@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=PlanMeter
+GenericName=AI Usage Meter
+Comment=See spend, tokens, and limits for your AI coding agents
+Exec=planmeter
+Icon=com.neilgoldader.PlanMeter
+Terminal=false
+Categories=Development;
+Keywords=AI;Codex;Claude;OpenCode;tokens;usage;spend;cost;limits;
+StartupNotify=true
+X-GNOME-UsesNotifications=true
