@@ -9,8 +9,10 @@ public struct T3ProviderInstance: Hashable, Sendable {
     public var enabled: Bool
     public var homePath: String?
     public var shadowHomePath: String?
+    public var authMethod: String?
+    public var gcpProject: String?
 
-    public init(id: String, driver: String, displayName: String? = nil, accentColorHex: String? = nil, enabled: Bool = true, homePath: String? = nil, shadowHomePath: String? = nil) {
+    public init(id: String, driver: String, displayName: String? = nil, accentColorHex: String? = nil, enabled: Bool = true, homePath: String? = nil, shadowHomePath: String? = nil, authMethod: String? = nil, gcpProject: String? = nil) {
         self.id = id
         self.driver = driver
         self.displayName = displayName
@@ -18,6 +20,8 @@ public struct T3ProviderInstance: Hashable, Sendable {
         self.enabled = enabled
         self.homePath = homePath
         self.shadowHomePath = shadowHomePath
+        self.authMethod = authMethod
+        self.gcpProject = gcpProject
     }
 
     /// The default slot for a driver has the driver kind as its id.
@@ -58,7 +62,9 @@ public struct T3Settings: Sendable {
                     accentColorHex: JSON.string(entry["accentColor"]),
                     enabled: JSON.bool(entry["enabled"]) ?? true,
                     homePath: JSON.string(config["homePath"]),
-                    shadowHomePath: JSON.string(config["shadowHomePath"])
+                    shadowHomePath: JSON.string(config["shadowHomePath"]),
+                    authMethod: JSON.string(config["authMethod"]),
+                    gcpProject: JSON.string(config["gcpProject"])
                 ))
             }
         }
@@ -71,7 +77,9 @@ public struct T3Settings: Sendable {
                 driver: driver,
                 enabled: JSON.bool(entry["enabled"]) ?? true,
                 homePath: JSON.string(entry["homePath"]),
-                shadowHomePath: JSON.string(entry["shadowHomePath"])
+                shadowHomePath: JSON.string(entry["shadowHomePath"]),
+                authMethod: JSON.string(entry["authMethod"]),
+                gcpProject: JSON.string(entry["gcpProject"])
             ))
         }
 

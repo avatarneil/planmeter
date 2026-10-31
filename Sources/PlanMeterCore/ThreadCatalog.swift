@@ -14,27 +14,61 @@ public enum ThreadCatalog {
                 catalog["codex:\(columns[0])"] = ThreadLink(title: columns[1], chatId: nil)
             }
         }
-        read(path: t3Database, sql: """
-            SELECT s.provider_name, s.provider_session_id, s.provider_thread_id, t.thread_id, t.title
-            FROM projection_thread_sessions s JOIN projection_threads t ON t.thread_id = s.thread_id
-            """) { columns in
-            guard columns.count == 5, let provider = ProviderKind.from(t3Driver: columns[0]) else { return }
-            for session in Set([columns[1], columns[2]]) where !session.isEmpty {
-                catalog["\(provider.rawValue):\(session)"] = ThreadLink(title: columns[4], chatId: columns[3])
+        var summaryDatabases: Set<String> = []
+        for source in discovery.sources where source.provider == .antigravity {
+            let rootURL = URL(fileURLWithPath: source.rootDir)
+            summaryDatabases.insert(rootURL.appendingPathComponent("conversation_summaries.db").path)
+            summaryDatabases.insert(rootURL.deletingLastPathComponent().appendingPathComponent("conversation_summaries.db").path)
+        }
+        for dbPath in summaryDatabases.sorted() {
+            read(path: dbPath, sql: "SELECT conversation_id, title FROM conversation_summaries") { columns in
+                guard columns.count == 2, !columns[0].isEmpty, !columns[1].isEmpty else { return }
+                catalog["antigravity:\(columns[0])"] = ThreadLink(title: columns[1], chatId: nil)
             }
         }
-        // Current T3 versions keep the provider resume ID in the runtime
-        // cursor rather than projection_thread_sessions.
-        read(path: t3Database, sql: """
-            SELECT s.provider_name, s.resume_cursor_json, t.thread_id, t.title
-            FROM provider_session_runtime s JOIN projection_threads t ON t.thread_id = s.thread_id
-            """) { columns in
-            guard columns.count == 4, let provider = ProviderKind.from(t3Driver: columns[0]),
-                  let cursor = JSON.object(Data(columns[1].utf8)) else { return }
-            for key in ["threadId", "sessionId"] {
-                if let session = JSON.string(cursor[key]) {
-                    catalog["\(provider.rawValue):\(session)"] = ThreadLink(title: columns[3], chatId: columns[2])
+        var t3Databases = [t3Database]
+        if t3Database.hasSuffix("/state.sqlite") {
+            let v2Path = URL(fileURLWithPath: t3Database).deletingLastPathComponent().appendingPathComponent("statev2.sqlite").path
+            if !t3Databases.contains(v2Path) { t3Databases.append(v2Path) }
+        }
+        for dbPath in t3Databases {
+            read(path: dbPath, sql: """
+                SELECT s.provider_name, s.provider_session_id, s.provider_thread_id, t.thread_id, t.title
+                FROM projection_thread_sessions s JOIN projection_threads t ON t.thread_id = s.thread_id
+                """) { columns in
+                guard columns.count == 5, let provider = ProviderKind.from(t3Driver: columns[0]) else { return }
+                for session in Set([columns[1], columns[2]]) where !session.isEmpty {
+                    catalog["\(provider.rawValue):\(session)"] = ThreadLink(title: columns[4], chatId: columns[3])
                 }
+            }
+            // Current T3 versions keep the provider resume ID in the runtime
+            // cursor rather than projection_thread_sessions.
+            read(path: dbPath, sql: """
+                SELECT s.provider_name, s.resume_cursor_json, t.thread_id, t.title
+                FROM provider_session_runtime s JOIN projection_threads t ON t.thread_id = s.thread_id
+                """) { columns in
+                guard columns.count == 4, let provider = ProviderKind.from(t3Driver: columns[0]),
+                      let cursor = JSON.object(Data(columns[1].utf8)) else { return }
+                for key in ["threadId", "sessionId"] {
+                    if let session = JSON.string(cursor[key]) {
+                        catalog["\(provider.rawValue):\(session)"] = ThreadLink(title: columns[3], chatId: columns[2])
+                    }
+                }
+            }
+            // T3 orchestration v2 stores provider thread mappings in
+            // orchestration_v2_projection_provider_threads.
+            read(path: dbPath, sql: """
+                SELECT p.payload_json, t.thread_id, t.title
+                FROM orchestration_v2_projection_provider_threads p
+                JOIN orchestration_v2_projection_threads t ON t.thread_id = p.thread_id
+                """) { columns in
+                guard columns.count == 3,
+                      let payload = JSON.object(Data(columns[0].utf8)),
+                      let nativeRef = JSON.object(payload["nativeThreadRef"]),
+                      let driver = JSON.string(nativeRef["driver"]),
+                      let nativeId = JSON.string(nativeRef["nativeId"]),
+                      let provider = ProviderKind.from(t3Driver: driver) else { return }
+                catalog["\(provider.rawValue):\(nativeId)"] = ThreadLink(title: columns[2], chatId: columns[1])
             }
         }
         return catalog

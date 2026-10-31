@@ -44,6 +44,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
     case claude
     case grok
     case opencode
+    case antigravity
 
     public var displayName: String {
         switch self {
@@ -51,6 +52,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .claude: return "Claude Code"
         case .grok: return "Grok Build"
         case .opencode: return "OpenCode"
+        case .antigravity: return "Antigravity"
         }
     }
 
@@ -61,6 +63,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .claude: return "claudeAgent"
         case .grok: return "grok"
         case .opencode: return "opencode"
+        case .antigravity: return "antigravity"
         }
     }
 
@@ -115,6 +118,7 @@ public struct Account: Identifiable, Hashable, Codable, Sendable {
 
     public static func codexId(planType: String) -> String { "codex:plan:\(planType)" }
     public static func claudeId(transcriptDir: String) -> String { "claude:home:\(transcriptDir)" }
+    public static func antigravityId(conversationsDir: String) -> String { "antigravity:home:\(conversationsDir)" }
     public static let grokDefaultId = "grok:default"
     public static let openCodeLocalId = "opencode:local"
 
@@ -130,6 +134,9 @@ public struct Account: Identifiable, Hashable, Codable, Sendable {
         } else if id.hasPrefix("claude:") {
             provider = .claude
             name = "Claude Code (unattributed)"
+        } else if id.hasPrefix("antigravity:") {
+            provider = .antigravity
+            name = "Antigravity"
         } else if id.hasPrefix("grok:") {
             provider = .grok
             name = "Grok Build"

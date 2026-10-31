@@ -1,7 +1,7 @@
 # PlanMeter
 
 A native macOS app that shows local AI coding-agent usage split by subscription: personal plans on
-one side and work plans on the other. It reads Codex, Claude Code, Grok Build, and OpenCode usage,
+one side and work plans on the other. It reads Codex, Claude Code, Antigravity, Grok Build, and OpenCode usage,
 and includes a CLI, a read-only MCP server, and optional iPhone, iPad, Apple Watch, and web clients.
 
 **T3 Code is optional.** PlanMeter works by itself with each provider's standard home directory and
@@ -93,21 +93,22 @@ testing. Sparkle's private EdDSA update key remains in the release maintainer's 
 | --- | --- | --- |
 | Codex | `$CODEX_HOME`, otherwise `~/.codex`; reads `sessions` and `archived_sessions` | `rate_limits.plan_type` on every usage event, matched to the plan in `auth.json` |
 | Claude Code | `$CLAUDE_CONFIG_DIR`, otherwise the standard `~/.claude` data | The transcript directory; identity from `.claude.json` when available |
+| Antigravity | `$ANTIGRAVITY_DATA_DIR`, otherwise `~/.gemini/antigravity*` and `~/.config/antigravity` `conversations/*.db` | Each conversation directory or T3 instance profile; identity from `settings.json` / `google_accounts.json` |
 | Grok Build | `$GROK_HOME`, otherwise `~/.grok`; reads `sessions/*/updates.jsonl` | One local account |
 | OpenCode | `$XDG_DATA_HOME/opencode/opencode.db`, otherwise `~/.local/share/opencode/opencode.db` | One local account; token counts and cost per assistant message |
 
 In standalone mode PlanMeter discovers one configured home per provider. If
 `$T3CODE_HOME/userdata/settings.json` or `~/.t3/userdata/settings.json` contains T3 Code
-`providerInstances`, those instances take precedence. This enables multiple Codex or Claude homes,
-custom display names, colors, and disabled-provider settings. Cursor and Antigravity have no local
-usage data and are listed as unsupported when they appear in T3 settings.
+`providerInstances`, those instances take precedence. This enables multiple Codex, Claude, or
+Antigravity homes, custom display names, colors, and disabled-provider settings. Cursor has no local
+usage data and is listed as unsupported when it appears in T3 settings.
 
 Environment overrides are naturally available to the CLI and MCP server. To use them with the Mac
 app, launch the `PlanMeter` executable from that environment or expose the variables to GUI apps
 with `launchctl setenv`; apps opened from Finder otherwise use the standard home locations.
 
-Parsers are ports of T3 Code's `usageTranscripts.ts` (fork-copy suppression, duplicate token_count
-suppression, per-content-block dedup for Claude, Grok cost pro-rating), so totals match T3's Usage
+Parsers are ports of T3 Code's `usageTranscripts.ts` and `antigravityUsageReader.ts` (fork-copy suppression, duplicate token_count
+suppression, per-content-block dedup for Claude, Antigravity protobuf trajectory decoding and deduplication, Grok cost pro-rating), so totals match T3's Usage
 page where the inputs overlap. Pricing uses LiteLLM's `model_prices_and_context_window.json`, read
 from T3 Code's cached copy when present and fetched directly otherwise.
 
@@ -180,8 +181,8 @@ from T3 Code's cached copy when present and fetched directly otherwise.
 - Distinct configured Codex logins on the same plan retain separate account-wide
   readings, but their shared transcript attribution cannot be reconciled to one login.
   Historical switches between same-plan logins are also indistinguishable locally.
-- Known threads across Codex, Claude Code, Grok Build, and OpenCode retain their
-  provider session IDs and spend. Codex titles and explicit T3 provider/session mappings
+- Known threads across Codex, Claude Code, Antigravity, Grok Build, and OpenCode retain their
+  provider session IDs and spend. Codex/Antigravity titles and explicit T3 provider/session mappings
   add chat names and T3 chat IDs when available; matching titles never merge sessions.
   Open chat links target the Codex app's thread IDs. This is not a complete dots task inventory.
 

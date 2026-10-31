@@ -7,7 +7,7 @@ import PlanMeterCore
 // agents actually use: initialize, ping, tools/list, tools/call. Everything is
 // read-only against the same transcripts and cache the app uses.
 
-let serverVersion = "0.3.6"
+let serverVersion = "0.3.7"
 let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 struct Tool {
@@ -33,7 +33,7 @@ let tools: [Tool] = [
     ),
     Tool(
         name: "usage_by_model",
-        description: "Per-model usage rows (account, model, cost, tokens, cache share, sessions), sorted by cost. Optionally filter to one account by id, name substring, or provider (codex, claude, grok, opencode).",
+        description: "Per-model usage rows (account, model, cost, tokens, cache share, sessions), sorted by cost. Optionally filter to one account by id, name substring, or provider (codex, claude, antigravity, grok, opencode).",
         schema: ["type": "object", "properties": ["days": daysProperty, "account": ["type": "string", "description": "Account id, display-name substring, or provider key to filter on."]], "additionalProperties": false]
     ),
     Tool(

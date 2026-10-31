@@ -76,6 +76,15 @@ public struct RateTable: Sendable {
         return String(key[..<bracket])
     }
 
+    /// Drops an Antigravity effort suffix (`-low`, `-medium`, `-high`) so model
+    /// variants price against their base model rate, matching T3's `withRateModel`.
+    static func stripEffort(_ key: String) -> String {
+        for suffix in ["-low", "-medium", "-high"] where key.hasSuffix(suffix) {
+            return String(key.dropLast(suffix.count))
+        }
+        return key
+    }
+
     public func lookup(_ model: String) -> ModelRate? {
         let key = Self.stripVariant(Self.normalizeKey(model))
         let bare = Self.bareName(key)
@@ -83,7 +92,15 @@ public struct RateTable: Sendable {
         if let exact = rates[key] { return exact }
         // Transcripts may carry `provider/model` for a provider LiteLLM files
         // under a different prefix; fall back to the bare name alias.
-        return rates[bare]
+        if let aliased = rates[bare] { return aliased }
+        let rateKey = Self.stripEffort(key)
+        if rateKey != key {
+            let rateBare = Self.bareName(rateKey)
+            if !rateBare.isEmpty, !Self.unpriceable.contains(rateBare) {
+                return rates[rateKey] ?? rates[rateBare]
+            }
+        }
+        return nil
     }
 
     public func price(model: String, totals: TokenTotals) -> Double? {

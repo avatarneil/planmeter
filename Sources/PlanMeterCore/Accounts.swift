@@ -1,7 +1,8 @@
+import CryptoKit
 import Foundation
 
 /// A transcript directory to scan, already attributed where the directory alone
-/// decides the account (Claude, Grok). Codex is attributed per record instead.
+/// decides the account (Claude, Grok, Antigravity). Codex is attributed per record instead.
 public struct ScanSource: Hashable, Sendable {
     public var provider: ProviderKind
     public var rootDir: String
@@ -166,6 +167,94 @@ public enum AccountDiscovery {
             }
         }
 
+        // Antigravity ---------------------------------------------------
+        let antigravityInstances = instances.filter { $0.driver == "antigravity" && $0.enabled }
+        var seenAntigravityDirs: Set<String> = []
+        if usesT3Configuration {
+            let stateDir = settings?.settingsPath.deletingLastPathComponent().path
+                ?? T3Settings.defaultHome().appendingPathComponent("userdata").path
+            for instance in antigravityInstances {
+                let acpDir = instance.homePath.map(PathUtil.expand)
+                    ?? "\(stateDir)/providers/antigravity/\(AntigravityIdentity.sha256Hex(instance.id))/antigravity-acp"
+                let conversationsDir = AntigravityIdentity.resolveConversationsDir(root: acpDir)
+                let normalizedDir = URL(fileURLWithPath: conversationsDir).standardizedFileURL.path
+                guard seenAntigravityDirs.insert(normalizedDir).inserted else { continue }
+
+                let profileDir = normalizedDir.hasSuffix("/conversations")
+                    ? URL(fileURLWithPath: normalizedDir).deletingLastPathComponent().path
+                    : acpDir
+                let identity = AntigravityIdentity.read(
+                    profileDir: profileDir,
+                    fallbackAuthMethod: instance.authMethod,
+                    fallbackGcpProject: instance.gcpProject,
+                    includeGlobalGoogleAccounts: false
+                )
+                let name = instance.displayName ?? (instance.isDefaultForDriver ? "Antigravity" : instance.id)
+                let id = Account.antigravityId(conversationsDir: normalizedDir)
+                result.accounts.append(Account(
+                    id: id,
+                    provider: .antigravity,
+                    displayName: name,
+                    email: identity.email,
+                    planLabel: identity.planLabel,
+                    organization: identity.gcpProject,
+                    accentColorHex: instance.accentColorHex,
+                    suggestedGroup: GroupHeuristics.suggest(displayName: name, email: identity.email, plan: identity.authType),
+                    sourceDescription: normalizedDir
+                ))
+                result.sources.append(ScanSource(provider: .antigravity, rootDir: normalizedDir, fixedAccountId: id))
+            }
+        } else {
+            let envDirs = (environment["ANTIGRAVITY_DATA_DIR"] ?? "")
+                .split(separator: ",")
+                .compactMap { nonEmptyPath(String($0)) }
+            let dirs: [String]
+            if !envDirs.isEmpty {
+                dirs = envDirs.map { AntigravityIdentity.resolveConversationsDir(root: $0, preferDirectWhenNoSubdir: true) }
+            } else {
+                let candidateRoots = [
+                    "\(home)/.gemini/antigravity",
+                    "\(home)/.gemini/antigravity-cli",
+                    "\(home)/.gemini/antigravity-ide",
+                    "\(home)/.gemini/antigravity-backup",
+                    "\(home)/.config/antigravity",
+                ]
+                let existing = candidateRoots
+                    .map { "\($0)/conversations" }
+                    .filter { PathUtil.isDirectory($0) }
+                dirs = existing.isEmpty ? ["\(home)/.gemini/antigravity/conversations"] : existing
+            }
+            let uniqueDirs = dirs.filter { seenAntigravityDirs.insert(URL(fileURLWithPath: $0).standardizedFileURL.path).inserted }
+            if let primaryDir = uniqueDirs.first {
+                let profileDir = primaryDir.hasSuffix("/conversations")
+                    ? URL(fileURLWithPath: primaryDir).deletingLastPathComponent().path
+                    : primaryDir
+                let identity = AntigravityIdentity.read(
+                    profileDir: profileDir,
+                    fallbackAuthMethod: nil,
+                    fallbackGcpProject: nil,
+                    includeGlobalGoogleAccounts: true,
+                    home: home
+                )
+                let name = "Antigravity"
+                let id = Account.antigravityId(conversationsDir: primaryDir)
+                result.accounts.append(Account(
+                    id: id,
+                    provider: .antigravity,
+                    displayName: name,
+                    email: identity.email,
+                    planLabel: identity.planLabel,
+                    organization: identity.gcpProject,
+                    accentColorHex: nil,
+                    suggestedGroup: GroupHeuristics.suggest(displayName: name, email: identity.email, plan: identity.authType),
+                    sourceDescription: uniqueDirs.joined(separator: "; ")
+                ))
+                for dir in uniqueDirs {
+                    result.sources.append(ScanSource(provider: .antigravity, rootDir: dir, fixedAccountId: id))
+                }
+            }
+        }
+
         // Grok Build ----------------------------------------------------
         let grok = instances.first(where: { $0.driver == "grok" && $0.enabled })
             ?? (!usesT3Configuration ? T3ProviderInstance(id: "grok", driver: "grok") : nil)
@@ -203,7 +292,7 @@ public enum AccountDiscovery {
         }
 
         // Everything else -----------------------------------------------
-        for instance in instances where !["codex", "claudeAgent", "grok", "opencode"].contains(instance.driver) {
+        for instance in instances where !["codex", "claudeAgent", "antigravity", "grok", "opencode"].contains(instance.driver) {
             result.unsupported.append(UnsupportedInstance(
                 id: instance.id,
                 driver: instance.driver,
@@ -300,6 +389,72 @@ public struct ClaudeIdentity: Sendable {
     }
 }
 
+public struct AntigravityIdentity: Sendable {
+    public var email: String?
+    public var authType: String?
+    public var gcpProject: String?
+
+    public var planLabel: String? {
+        guard let authType else { return nil }
+        switch authType {
+        case "oauth-personal": return nil
+        case "oauth-business": return "Enterprise"
+        case "gemini-api-key": return "API key"
+        case "agent-platform": return "Vertex AI"
+        default: return authType
+        }
+    }
+
+    public static func sha256Hex(_ string: String) -> String {
+        let digest = SHA256.hash(data: Data(string.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    public static func resolveConversationsDir(root: String, preferDirectWhenNoSubdir: Bool = false) -> String {
+        if root.hasSuffix("/conversations") { return root }
+        let sub = "\(root)/conversations"
+        if PathUtil.isDirectory(sub) { return sub }
+        if preferDirectWhenNoSubdir && PathUtil.isDirectory(root) { return root }
+        return sub
+    }
+
+    public static func read(
+        profileDir: String,
+        fallbackAuthMethod: String?,
+        fallbackGcpProject: String?,
+        includeGlobalGoogleAccounts: Bool,
+        home: String = NSHomeDirectory()
+    ) -> AntigravityIdentity {
+        var authType = fallbackAuthMethod
+        var gcpProject = fallbackGcpProject
+        var email: String?
+
+        let settingsURL = URL(fileURLWithPath: "\(profileDir)/settings.json")
+        if let data = try? Data(contentsOf: settingsURL), let root = JSON.object(data) {
+            if let auth = JSON.object(root["auth"]), let type = JSON.string(auth["type"]) {
+                authType = type
+            }
+            if let gcp = JSON.object(root["gcp"]), let project = JSON.string(gcp["project"]) {
+                gcpProject = project
+            }
+        }
+
+        var accountPaths = ["\(profileDir)/google_accounts.json"]
+        if includeGlobalGoogleAccounts {
+            accountPaths.append("\(home)/.gemini/google_accounts.json")
+        }
+        for path in accountPaths where email == nil {
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+               let root = JSON.object(data),
+               let active = JSON.string(root["active"]) {
+                email = active
+            }
+        }
+
+        return AntigravityIdentity(email: email, authType: authType, gcpProject: gcpProject)
+    }
+}
+
 public enum GroupHeuristics {
     static let personalDomains: Set<String> = [
         "gmail.com", "googlemail.com", "icloud.com", "me.com", "mac.com", "outlook.com", "hotmail.com",
@@ -315,8 +470,8 @@ public enum GroupHeuristics {
             return personalDomains.contains(domain) ? .personal : .work
         }
         switch plan?.lowercased() {
-        case "business", "enterprise", "team", "claude_enterprise", "claude_team": return .work
-        case "pro", "plus", "free", "claude_max", "claude_pro", "claude_free": return .personal
+        case "business", "enterprise", "team", "claude_enterprise", "claude_team", "oauth-business", "agent-platform": return .work
+        case "pro", "plus", "free", "claude_max", "claude_pro", "claude_free", "oauth-personal": return .personal
         default: return .other
         }
     }
