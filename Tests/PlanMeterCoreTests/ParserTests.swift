@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 @testable import PlanMeterCore
 
@@ -150,6 +151,7 @@ final class AccountDiscoveryTests: XCTestCase {
             environment: [
                 "CODEX_HOME": "/tmp/planmeter-codex",
                 "CLAUDE_CONFIG_DIR": "/tmp/planmeter-claude",
+                "ANTIGRAVITY_DATA_DIR": "/tmp/planmeter-antigravity",
                 "GROK_HOME": "/tmp/planmeter-grok",
                 "XDG_DATA_HOME": "/tmp/planmeter-data",
             ]
@@ -165,11 +167,221 @@ final class AccountDiscoveryTests: XCTestCase {
             "/tmp/planmeter-claude/projects"
         )
         XCTAssertEqual(
+            discovery.sources.first { $0.provider == .antigravity }?.rootDir,
+            "/tmp/planmeter-antigravity/conversations"
+        )
+        XCTAssertEqual(
             discovery.sources.first { $0.provider == .grok }?.rootDir,
             "/tmp/planmeter-grok/sessions"
         )
         XCTAssertEqual(discovery.openCodeDatabase, "/tmp/planmeter-data/opencode/opencode.db")
         XCTAssertTrue(discovery.notes.contains { $0.contains("T3 Code is not required") })
+    }
+
+    func testT3AntigravityInstancesResolveIsolatedProfilesAndIdentity() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let instanceId = "antigravity_personal_antigravity"
+        let hash = AntigravityIdentity.sha256Hex(instanceId)
+        XCTAssertEqual(hash, "4f20aa79804c2288c23e9a352ffe0def4c8676e75c537951cc33173f676850e6")
+
+        let acpDir = tempDir
+            .appendingPathComponent("providers/antigravity")
+            .appendingPathComponent(hash)
+            .appendingPathComponent("antigravity-acp")
+        let conversationsDir = acpDir.appendingPathComponent("conversations")
+        try FileManager.default.createDirectory(at: conversationsDir, withIntermediateDirectories: true)
+        try Data("""
+        {"auth":{"type":"oauth-personal"},"gcp":{"project":"personal-gcp"}}
+        """.utf8).write(to: acpDir.appendingPathComponent("settings.json"))
+        try Data("""
+        {"active":"dev@gmail.com"}
+        """.utf8).write(to: acpDir.appendingPathComponent("google_accounts.json"))
+
+        let settings = T3Settings(
+            instances: [
+                T3ProviderInstance(
+                    id: instanceId,
+                    driver: "antigravity",
+                    displayName: "Personal Antigravity",
+                    accentColorHex: "#f66286",
+                    authMethod: "oauth-personal"
+                ),
+            ],
+            settingsPath: tempDir.appendingPathComponent("settings.json")
+        )
+
+        let discovery = AccountDiscovery.discover(settings: settings, environment: [:])
+        let account = try XCTUnwrap(discovery.accounts.first { $0.provider == .antigravity })
+        XCTAssertEqual(account.displayName, "Personal Antigravity")
+        XCTAssertEqual(account.email, "dev@gmail.com")
+        XCTAssertEqual(account.organization, "personal-gcp")
+        XCTAssertEqual(account.accentColorHex, "#f66286")
+        XCTAssertEqual(account.suggestedGroup, .personal)
+        XCTAssertTrue(discovery.unsupported.isEmpty)
+        XCTAssertEqual(
+            discovery.sources.filter { $0.provider == .antigravity }.map(\.rootDir),
+            [conversationsDir.standardizedFileURL.path]
+        )
+    }
+
+    func testAntigravityReaderAndScannerParseProtoTrajectoryAndEffortPricing() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let conversationsDir = tempDir.appendingPathComponent("conversations")
+        try FileManager.default.createDirectory(at: conversationsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sessionId = "9d856927-db31-4527-baa5-9d7b52f35023"
+        let dbURL = conversationsDir.appendingPathComponent("\(sessionId).db")
+
+        // Build protobuf wire helper functions for test fixture construction.
+        func varintField(_ field: Int, _ value: UInt64) -> Data {
+            var out = Data()
+            func appendVarint(_ v: UInt64) {
+                var n = v
+                while n >= 0x80 {
+                    out.append(UInt8((n & 0x7F) | 0x80))
+                    n >>= 7
+                }
+                out.append(UInt8(n))
+            }
+            appendVarint(UInt64((field << 3) | 0))
+            appendVarint(value)
+            return out
+        }
+        func bytesField(_ field: Int, _ payload: Data) -> Data {
+            var out = Data()
+            func appendVarint(_ v: UInt64) {
+                var n = v
+                while n >= 0x80 {
+                    out.append(UInt8((n & 0x7F) | 0x80))
+                    n >>= 7
+                }
+                out.append(UInt8(n))
+            }
+            appendVarint(UInt64((field << 3) | 2))
+            appendVarint(UInt64(payload.count))
+            out.append(payload)
+            return out
+        }
+        func stringField(_ field: Int, _ text: String) -> Data {
+            bytesField(field, Data(text.utf8))
+        }
+
+        func concat(_ parts: [Data]) -> Data {
+            var out = Data()
+            for part in parts { out.append(part) }
+            return out
+        }
+
+        // Timestamp proto: 1_760_000_000 seconds -> 1_760_000_000_000 ms
+        let timestampProto = varintField(1, 1_760_000_000)
+
+        // Usage proto:
+        // field 1: modelId (1026 -> claude-opus-4-6)
+        // field 2: uncachedInput (1200)
+        // field 3: output (300)
+        // field 4: cacheCreation (100)
+        // field 5: cachedInput (400)
+        // field 9: reasoning (50)
+        // field 10: responseOutput (250)
+        // field 11: requestId ("req-1")
+        let usage1 = concat([
+            varintField(1, 1026),
+            varintField(2, 1200),
+            varintField(3, 300),
+            varintField(4, 100),
+            varintField(5, 400),
+            varintField(9, 50),
+            varintField(10, 250),
+            stringField(11, "req-1"),
+        ])
+
+        // Matching step usage with higher counts for the same requestId ("req-1");
+        // union-find merges generation + step candidates sharing key 11 ("req-1") and takes max.
+        let usage1Step = concat([
+            varintField(1, 1026),
+            varintField(2, 1500),
+            varintField(3, 350),
+            varintField(4, 100),
+            varintField(5, 500),
+            varintField(9, 50),
+            varintField(10, 300),
+            stringField(11, "req-1"),
+        ])
+
+        let genInner = concat([
+            varintField(3, 1026),
+            bytesField(4, usage1),
+            stringField(19, "MODEL_PLACEHOLDER_M26"),
+        ])
+        let genRoot = bytesField(1, genInner)
+
+        let stepRoot = concat([
+            bytesField(8, timestampProto),
+            bytesField(9, usage1Step),
+            bytesField(24, varintField(1, 1026)),
+        ])
+
+        // Create SQLite database with gen_metadata and steps tables
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(dbURL.path, &db), SQLITE_OK)
+        let createSQL = """
+        CREATE TABLE gen_metadata (idx INTEGER, data BLOB);
+        CREATE TABLE steps (idx INTEGER, metadata BLOB);
+        """
+        XCTAssertEqual(sqlite3_exec(db, createSQL, nil, nil, nil), SQLITE_OK)
+        func insertBlob(_ table: String, _ column: String, _ idx: Int, _ blob: Data) {
+            var stmt: OpaquePointer?
+            sqlite3_prepare_v2(db, "INSERT INTO \(table) (idx, \(column)) VALUES (?, ?);", -1, &stmt, nil)
+            sqlite3_bind_int64(stmt, 1, Int64(idx))
+            _ = blob.withUnsafeBytes { rawBuffer in
+                sqlite3_bind_blob(stmt, 2, rawBuffer.baseAddress, Int32(blob.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+            }
+            XCTAssertEqual(sqlite3_step(stmt), SQLITE_DONE)
+            sqlite3_finalize(stmt)
+        }
+        insertBlob("gen_metadata", "data", 5, genRoot)
+        insertBlob("steps", "metadata", 5, stepRoot)
+        sqlite3_close(db)
+
+        let records = try XCTUnwrap(AntigravityReader.parseDatabase(path: dbURL.path, fallbackTimestampMs: 1_700_000_000_000))
+        XCTAssertEqual(records.count, 1)
+        let rec = records[0]
+        XCTAssertEqual(rec.provider, .antigravity)
+        XCTAssertEqual(rec.sessionId, sessionId)
+        XCTAssertEqual(rec.model, "claude-opus-4-6")
+        XCTAssertEqual(rec.timestampMs, 1_760_000_000_000)
+        XCTAssertEqual(rec.totals.uncachedInput, 1500)
+        XCTAssertEqual(rec.totals.cachedInput, 500)
+        XCTAssertEqual(rec.totals.cacheCreation, 100)
+        XCTAssertEqual(rec.totals.output, 350)
+
+        // Verify RateTable strips effort suffixes (-low, -medium, -high)
+        let table = RateTable(rates: [
+            "gemini-3.1-pro": ModelRate(input: 0.00000125, output: 0.000005, cacheRead: 0.0000003, cacheCreation: 0),
+        ], source: "test")
+        XCTAssertNotNil(table.lookup("gemini-3.1-pro-high"))
+        XCTAssertNotNil(table.lookup("gemini-3.1-pro-low"))
+
+        // Verify Scanner + ThreadCatalog integration
+        let summaryDBURL = tempDir.appendingPathComponent("conversation_summaries.db")
+        var sumDB: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(summaryDBURL.path, &sumDB), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(sumDB, "CREATE TABLE conversation_summaries (conversation_id TEXT, title TEXT); INSERT INTO conversation_summaries VALUES ('\(sessionId)', 'Antigravity Test Thread');", nil, nil, nil), SQLITE_OK)
+        sqlite3_close(sumDB)
+
+        let accountId = Account.antigravityId(conversationsDir: conversationsDir.path)
+        let source = ScanSource(provider: .antigravity, rootDir: conversationsDir.path, fixedAccountId: accountId)
+        let cache = ScanCache(url: tempDir.appendingPathComponent("cache.json"))
+        let scanOut = await Scanner.scan(sources: [source], openCodeDatabase: nil, sinceMs: 0, cache: cache)
+        XCTAssertEqual(scanOut.cells.count, 1)
+        XCTAssertEqual(scanOut.threads.count, 1)
+
+        let discovery = Discovery(accounts: [], sources: [source])
+        let catalog = ThreadCatalog.load(discovery: discovery, t3Database: tempDir.appendingPathComponent("nonexistent.sqlite").path)
+        XCTAssertEqual(catalog["antigravity:\(sessionId)"]?.title, "Antigravity Test Thread")
     }
 
     func testConfiguredCodexInstancesIgnoreInheritedCodexHome() {

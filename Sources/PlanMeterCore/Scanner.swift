@@ -33,8 +33,8 @@ struct ScanCacheDocument: Codable {
 public actor ScanCache {
     /// Bump whenever parser output changes shape or semantics; cached entries
     /// are keyed only on file size and mtime, so stale logic would otherwise
-    /// survive a rebuild. Version 6 keys cells by minute instead of hour.
-    static let version = 6
+    /// survive a rebuild. Version 7 adds Antigravity SQLite conversation parsing.
+    static let version = 7
     let url: URL
     var files: [String: FileScanEntry] = [:]
     var dirty = false
@@ -99,6 +99,7 @@ struct TranscriptFile: Sendable {
     var path: String
     var size: Int64
     var mtimeMs: Int64
+    var dbMtimeMs: Int64?
 }
 
 /// Walks provider transcript directories, parses what changed, and folds the
@@ -109,7 +110,7 @@ public enum Scanner {
         var live: Set<String> = []
 
         for source in sources {
-            let files = listFiles(root: source.rootDir, sinceMs: sinceMs, fileName: source.fileName)
+            let files = listFiles(root: source.rootDir, sinceMs: sinceMs, fileName: source.fileName, provider: source.provider)
             if files == nil {
                 output.sources.append(SourceReport(provider: source.provider, path: source.rootDir, status: .missing, scannedFiles: 0, reusedFiles: 0, skippedFiles: 0, message: "Directory not found."))
                 continue
@@ -196,37 +197,53 @@ public enum Scanner {
         return output
     }
 
-    /// Lists `.jsonl` files under `root` modified at or after `sinceMs`.
-    /// Returns nil when the root does not exist.
-    static func listFiles(root: String, sinceMs: Int64, fileName: String?) -> [TranscriptFile]? {
+    /// Lists transcript files (`.jsonl` or Antigravity `.db`) under `root`
+    /// modified at or after `sinceMs`. Returns nil when the root does not exist.
+    static func listFiles(root: String, sinceMs: Int64, fileName: String?, provider: ProviderKind = .claude) -> [TranscriptFile]? {
         let fm = FileManager.default
         guard PathUtil.isDirectory(root) else { return nil }
         let rootURL = URL(fileURLWithPath: root)
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]
         guard let enumerator = fm.enumerator(at: rootURL, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return [] }
         var out: [TranscriptFile] = []
+        var seenPaths: Set<String> = []
         for case let url as URL in enumerator {
             let name = url.lastPathComponent
             if let fileName {
                 if name != fileName { continue }
+            } else if provider == .antigravity {
+                if !name.hasSuffix(".db") || name == "conversation_summaries.db" { continue }
             } else if !name.hasSuffix(".jsonl") {
                 continue
             }
-            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
-            let mtimeMs = Int64(((values.contentModificationDate ?? .distantPast).timeIntervalSince1970 * 1000).rounded())
+            let targetURL = (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+                ? url.resolvingSymlinksInPath()
+                : url
+            guard let values = try? targetURL.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+            let dbMtimeMs = Int64(((values.contentModificationDate ?? .distantPast).timeIntervalSince1970 * 1000).rounded())
+            var size = Int64(values.fileSize ?? 0)
+            var mtimeMs = dbMtimeMs
+            if provider == .antigravity {
+                let walURL = URL(fileURLWithPath: targetURL.path + "-wal")
+                if let walValues = try? walURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]),
+                   walValues.isRegularFile == true {
+                    size += Int64(walValues.fileSize ?? 0)
+                    let walMtimeMs = Int64(((walValues.contentModificationDate ?? .distantPast).timeIntervalSince1970 * 1000).rounded())
+                    if walMtimeMs > mtimeMs { mtimeMs = walMtimeMs }
+                }
+                guard seenPaths.insert(targetURL.path).inserted else { continue }
+            }
             if mtimeMs < sinceMs { continue }
-            out.append(TranscriptFile(path: url.path, size: Int64(values.fileSize ?? 0), mtimeMs: mtimeMs))
+            out.append(TranscriptFile(path: provider == .antigravity ? targetURL.path : url.path, size: size, mtimeMs: mtimeMs, dbMtimeMs: dbMtimeMs))
         }
         return out
     }
 
     static func parseFile(_ file: TranscriptFile, source: ScanSource) -> FileScanEntry? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: file.path), options: [.mappedIfSafe]) else { return nil }
         var cells: [CellKey: Cell] = [:]
         struct ThreadKey: Hashable { var session: String; var cell: CellKey }
         var threadCells: [ThreadKey: Cell] = [:]
         var seenKeys: Set<String> = []
-        var codexState = source.provider == .codex ? CodexParser.preparedState(data: data) : CodexScanState()
         // Parsers drop unreadable lines silently; the count is kept in the
         // entry so a future parser can start reporting it without a cache bump.
         let malformed = 0
@@ -255,6 +272,25 @@ public enum Scanner {
             }
         }
 
+        if source.provider == .antigravity {
+            guard let records = AntigravityReader.parseDatabase(path: file.path, fallbackTimestampMs: file.dbMtimeMs ?? file.mtimeMs) else {
+                return nil
+            }
+            for record in records { fold(record) }
+            var entry = FileScanEntry(
+                size: file.size,
+                mtimeMs: file.mtimeMs,
+                cells: cells.map { CellEntry(key: $0.key, cell: $0.value) },
+                rateLimits: nil,
+                malformed: malformed
+            )
+            entry.threads = threadCells.map { ThreadCellEntry(sessionId: $0.key.session, key: $0.key.cell, cell: $0.value, sourcePath: file.path) }
+            return entry
+        }
+
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: file.path), options: [.mappedIfSafe]) else { return nil }
+        var codexState = source.provider == .codex ? CodexParser.preparedState(data: data) : CodexScanState()
+
         data.forEachLine { line in
             switch source.provider {
             case .claude:
@@ -263,7 +299,7 @@ public enum Scanner {
                 if let r = CodexParser.parse(line: line, state: &codexState) { fold(r) }
             case .grok:
                 for r in GrokParser.parse(line: line) { fold(r) }
-            case .opencode:
+            case .antigravity, .opencode:
                 break
             }
         }
