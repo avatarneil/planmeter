@@ -259,11 +259,19 @@ public enum AntigravityReader {
         for (idx, entry) in generations {
             generationModels[idx] = entry.model
         }
+        let defaultModel = generations.compactMap { nonEmpty($0.entry.model) }.first
+            ?? steps.compactMap { nonEmpty($0.entry.model) }.first
 
         for (source, entries) in [("step", steps), ("generation", generations)] {
+            var lastKnownModel: String? = defaultModel
             for (index, item) in entries.enumerated() {
                 let idx = item.idx
                 let entry = item.entry
+                if let entryModel = nonEmpty(entry.model) {
+                    lastKnownModel = entryModel
+                } else if source == "step", let genModel = nonEmpty(generationModels[idx]) {
+                    lastKnownModel = genModel
+                }
                 for (usageIndex, usage) in entry.usages.enumerated() {
                     let outputTokens = max(numberAt(usage, 3), numberAt(usage, 9) + numberAt(usage, 10))
                     let totals = TokenTotals(
@@ -288,7 +296,9 @@ public enum AntigravityReader {
                         ?? nonEmpty(entry.model)
                         ?? (source == "step" ? nonEmpty(generationModels[idx]) : nil)
                         ?? nonEmpty(modelName(name: "", id: usageModelId))
+                        ?? lastKnownModel
                         ?? "antigravity-unknown"
+                    lastKnownModel = resolvedModel
 
                     let timestampMs = entry.timestampMs ?? trajectoryTimestamp ?? fallbackTimestamp
                     let dedupeKey = keys.first ?? "antigravity:\(sessionId):\(source):\(index):\(usageIndex)"
