@@ -33,8 +33,8 @@ struct ScanCacheDocument: Codable {
 public actor ScanCache {
     /// Bump whenever parser output changes shape or semantics; cached entries
     /// are keyed only on file size and mtime, so stale logic would otherwise
-    /// survive a rebuild. Version 7 adds Antigravity SQLite conversation parsing.
-    static let version = 7
+    /// survive a rebuild. Version 8 updates Antigravity SQLite conversation parsing.
+    static let version = 8
     let url: URL
     var files: [String: FileScanEntry] = [:]
     var dirty = false

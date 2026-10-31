@@ -43,8 +43,9 @@ public struct RateTable: Sendable {
             // First writer wins on exact duplicates after normalization.
             if table[key] == nil { table[key] = rate }
         }
-        // Alias bare names ("gpt-5") only when every provider-prefixed entry
-        // agrees on the rate; conflicting rates leave the bare name unpriced.
+        // Alias bare names ("gpt-5") when every provider-prefixed entry agrees
+        // on the rate, or fall back to an authoritative first-party provider
+        // prefix when third-party resellers (e.g. kyma/) report different rates.
         var aliasCandidates: [String: ModelRate?] = [:]
         for (key, rate) in table {
             let alias = bareName(key)
@@ -56,9 +57,30 @@ public struct RateTable: Sendable {
             }
         }
         for (alias, rate) in aliasCandidates {
-            if let rate { table[alias] = rate }
+            if let rate {
+                table[alias] = rate
+            } else if let preferred = preferredProviderRate(for: alias, in: table) {
+                table[alias] = preferred
+            }
         }
         return RateTable(rates: table, source: source, fetchedAt: fetchedAt)
+    }
+
+    static let authoritativePrefixes: [String] = [
+        "gemini/",
+        "vertex_ai/",
+        "anthropic/",
+        "openai/",
+        "xai/",
+    ]
+
+    static func preferredProviderRate(for bare: String, in table: [String: ModelRate]) -> ModelRate? {
+        for prefix in authoritativePrefixes {
+            if let rate = table[prefix + bare] {
+                return rate
+            }
+        }
+        return nil
     }
 
     static func normalizeKey(_ model: String) -> String {
@@ -76,28 +98,45 @@ public struct RateTable: Sendable {
         return String(key[..<bracket])
     }
 
-    /// Drops an Antigravity effort suffix (`-low`, `-medium`, `-high`) so model
-    /// variants price against their base model rate, matching T3's `withRateModel`.
+    /// Drops an Antigravity effort or tier suffix (`-low`, `-medium`, `-high`,
+    /// `-trial`, `-thinking`) so model variants price against their base model rate.
     static func stripEffort(_ key: String) -> String {
-        for suffix in ["-low", "-medium", "-high"] where key.hasSuffix(suffix) {
-            return String(key.dropLast(suffix.count))
+        var result = key
+        var changed = true
+        while changed {
+            changed = false
+            for suffix in ["-low", "-medium", "-high", "-trial", "-thinking"] where result.hasSuffix(suffix) {
+                result = String(result.dropLast(suffix.count))
+                changed = true
+                break
+            }
         }
-        return key
+        return result
     }
 
     public func lookup(_ model: String) -> ModelRate? {
         let key = Self.stripVariant(Self.normalizeKey(model))
+        if let resolved = resolveKey(key) { return resolved }
+        let rateKey = Self.stripEffort(key)
+        if rateKey != key, let resolved = resolveKey(rateKey) {
+            return resolved
+        }
+        return nil
+    }
+
+    private func resolveKey(_ key: String) -> ModelRate? {
         let bare = Self.bareName(key)
         if bare.isEmpty || Self.unpriceable.contains(bare) { return nil }
         if let exact = rates[key] { return exact }
         // Transcripts may carry `provider/model` for a provider LiteLLM files
         // under a different prefix; fall back to the bare name alias.
         if let aliased = rates[bare] { return aliased }
-        let rateKey = Self.stripEffort(key)
-        if rateKey != key {
-            let rateBare = Self.bareName(rateKey)
-            if !rateBare.isEmpty, !Self.unpriceable.contains(rateBare) {
-                return rates[rateKey] ?? rates[rateBare]
+        // LiteLLM often lists current Gemini/Claude releases only under a
+        // `-preview` key (e.g. `gemini-3.1-pro-preview`).
+        if !bare.hasSuffix("-preview") {
+            let previewBare = bare + "-preview"
+            if let preview = rates[previewBare] ?? Self.preferredProviderRate(for: previewBare, in: rates) {
+                return preview
             }
         }
         return nil

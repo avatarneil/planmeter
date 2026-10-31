@@ -98,12 +98,22 @@ final class PricingTests: XCTestCase {
     func testAliasesBareNamesWhenUnambiguous() {
         let doc: [String: Any] = [
             "openai/gpt-5.6-luna": ["input_cost_per_token": 0.000001, "output_cost_per_token": 0.000008, "cache_read_input_token_cost": 0.0000001],
+            "provider_a/custom-model": ["input_cost_per_token": 0.00001, "output_cost_per_token": 0.00005],
+            "provider_b/custom-model": ["input_cost_per_token": 0.00002, "output_cost_per_token": 0.00005],
+            "gemini/gemini-4-argon": ["input_cost_per_token": 0.000002, "output_cost_per_token": 0.00001, "cache_read_input_token_cost": 0.0000001],
+            "kyma/gemini-4-argon": ["input_cost_per_token": 0.0000054, "output_cost_per_token": 0.000027, "cache_read_input_token_cost": 0.00000027],
+            "gemini-3.1-pro-preview": ["input_cost_per_token": 0.000002, "output_cost_per_token": 0.000012, "cache_read_input_token_cost": 0.0000002],
+            "kyma/gemini-3.1-pro": ["input_cost_per_token": 0.0000027, "output_cost_per_token": 0.0000162, "cache_read_input_token_cost": 0.00000027],
+            "deepinfra/google/gemini-3.1-pro": ["input_cost_per_token": 0.000002, "output_cost_per_token": 0.000012],
             "anthropic/claude-fable-5-1": ["input_cost_per_token": 0.00001, "output_cost_per_token": 0.00005],
-            "other/claude-fable-5-1": ["input_cost_per_token": 0.00002, "output_cost_per_token": 0.00005],
         ]
         let table = RateTable.from(liteLLMDocument: doc, source: "test", fetchedAt: nil)
         XCTAssertNotNil(table.lookup("gpt-5.6-luna"))
-        XCTAssertNil(table.lookup("claude-fable-5-1"), "conflicting rates must not alias")
+        XCTAssertNil(table.lookup("custom-model"), "conflicting third-party rates without an authoritative prefix must not alias")
+        XCTAssertEqual(table.lookup("gemini-4-argon")?.input, 0.000002)
+        XCTAssertEqual(table.lookup("gemini-4-argon-trial")?.input, 0.000002)
+        XCTAssertEqual(table.lookup("gemini-4-argon-high")?.input, 0.000002)
+        XCTAssertEqual(table.lookup("gemini-3.1-pro")?.cacheRead, 0.0000002)
         XCTAssertNotNil(table.lookup("anthropic/claude-fable-5-1[1m]"))
         XCTAssertNil(table.lookup("<synthetic>"))
         let cost = table.price(model: "gpt-5.6-luna", totals: TokenTotals(uncachedInput: 1_000_000, cachedInput: 1_000_000, output: 1000))
