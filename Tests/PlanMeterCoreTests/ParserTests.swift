@@ -269,6 +269,12 @@ final class AccountDiscoveryTests: XCTestCase {
             bytesField(field, Data(text.utf8))
         }
 
+        func concat(_ parts: [Data]) -> Data {
+            var out = Data()
+            for part in parts { out.append(part) }
+            return out
+        }
+
         // Timestamp proto: 1_760_000_000 seconds -> 1_760_000_000_000 ms
         let timestampProto = varintField(1, 1_760_000_000)
 
@@ -281,34 +287,42 @@ final class AccountDiscoveryTests: XCTestCase {
         // field 9: reasoning (50)
         // field 10: responseOutput (250)
         // field 11: requestId ("req-1")
-        let usage1 = varintField(1, 1026)
-            + varintField(2, 1200)
-            + varintField(3, 300)
-            + varintField(4, 100)
-            + varintField(5, 400)
-            + varintField(9, 50)
-            + varintField(10, 250)
-            + stringField(11, "req-1")
+        let usage1 = concat([
+            varintField(1, 1026),
+            varintField(2, 1200),
+            varintField(3, 300),
+            varintField(4, 100),
+            varintField(5, 400),
+            varintField(9, 50),
+            varintField(10, 250),
+            stringField(11, "req-1"),
+        ])
 
         // Matching step usage with higher counts for the same requestId ("req-1");
         // union-find merges generation + step candidates sharing key 11 ("req-1") and takes max.
-        let usage1Step = varintField(1, 1026)
-            + varintField(2, 1500)
-            + varintField(3, 350)
-            + varintField(4, 100)
-            + varintField(5, 500)
-            + varintField(9, 50)
-            + varintField(10, 300)
-            + stringField(11, "req-1")
+        let usage1Step = concat([
+            varintField(1, 1026),
+            varintField(2, 1500),
+            varintField(3, 350),
+            varintField(4, 100),
+            varintField(5, 500),
+            varintField(9, 50),
+            varintField(10, 300),
+            stringField(11, "req-1"),
+        ])
 
-        let genInner = varintField(3, 1026)
-            + bytesField(4, usage1)
-            + stringField(19, "MODEL_PLACEHOLDER_M26")
+        let genInner = concat([
+            varintField(3, 1026),
+            bytesField(4, usage1),
+            stringField(19, "MODEL_PLACEHOLDER_M26"),
+        ])
         let genRoot = bytesField(1, genInner)
 
-        let stepRoot = bytesField(8, timestampProto)
-            + bytesField(9, usage1Step)
-            + bytesField(24, varintField(1, 1026))
+        let stepRoot = concat([
+            bytesField(8, timestampProto),
+            bytesField(9, usage1Step),
+            bytesField(24, varintField(1, 1026)),
+        ])
 
         // Create SQLite database with gen_metadata and steps tables
         var db: OpaquePointer?
