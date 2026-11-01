@@ -1,5 +1,14 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
 
 /// A login whose subscription windows are read from the provider rather than
 /// from transcripts (Codex writes its own windows into each session).
@@ -145,7 +154,7 @@ public enum ClaudePlanLimits {
     ]
 
     static func executable(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
-        let home = NSHomeDirectory()
+        let home = PlanMeterPaths.homeDirectory(environment: environment)
         let paths = (environment["PATH"] ?? "").split(separator: ":").map { "\($0)/claude" } + [
             "\(home)/.local/bin/claude", "\(home)/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude",
         ]
@@ -382,7 +391,7 @@ public enum AntigravityPlanLimits {
             .map { "\($0)=\($1.addingPercentEncoding(withAllowedCharacters: unreserved) ?? "")" }
             .joined(separator: "&")
         request.httpBody = Data(form.utf8)
-        let (data, response) = try await session.data(for: request, delegate: NoRedirects.shared)
+        let (data, response) = try await session.portableDataWithoutRedirects(for: request)
         guard let http = response as? HTTPURLResponse else { throw PlanLimitError.http }
         if http.statusCode == 400 || http.statusCode == 401 { throw PlanLimitError.signedOut }
         guard http.statusCode == 200, let body = JSON.object(data), let token = JSON.string(body["access_token"]) else { throw PlanLimitError.http }
@@ -402,7 +411,7 @@ public enum AntigravityPlanLimits {
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                     request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
                     request.setValue("antigravity/hub/1.0.0 (aidev_client; os_type=darwin; arch=arm64)", forHTTPHeaderField: "User-Agent")
-                    guard let (data, response) = try? await session.data(for: request, delegate: NoRedirects.shared),
+                    guard let (data, response) = try? await session.portableDataWithoutRedirects(for: request),
                           (response as? HTTPURLResponse)?.statusCode == 200, let json = JSON.object(data) else { return [] }
                     return parse(json)
                 }
@@ -474,15 +483,5 @@ public enum AntigravityPlanLimits {
             groups.append(found)
         }
         return merge(groups)
-    }
-}
-
-/// Bearer tokens must not follow a redirect to another host.
-private final class NoRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    static let shared = NoRedirects()
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
     }
 }

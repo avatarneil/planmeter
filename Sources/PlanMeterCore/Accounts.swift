@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// A transcript directory to scan, already attributed where the directory alone
@@ -431,7 +435,7 @@ public struct AntigravityIdentity: Sendable {
         fallbackAuthMethod: String?,
         fallbackGcpProject: String?,
         includeGlobalGoogleAccounts: Bool,
-        home: String = NSHomeDirectory()
+        home: String = PlanMeterPaths.homeDirectory()
     ) -> AntigravityIdentity {
         var authType = fallbackAuthMethod
         var gcpProject = fallbackGcpProject

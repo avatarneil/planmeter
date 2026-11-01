@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 
 /// Reads Antigravity conversation SQLite databases (`<session-id>.db`).
 ///

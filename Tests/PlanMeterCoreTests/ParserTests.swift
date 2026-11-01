@@ -1,5 +1,9 @@
-import SQLite3
 import XCTest
+#if canImport(SQLite3)
+import SQLite3
+#else
+import CSQLite
+#endif
 @testable import PlanMeterCore
 
 final class ClaudeParserTests: XCTestCase {

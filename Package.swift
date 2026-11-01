@@ -49,7 +49,7 @@ let portableProducts: [Product] = [
 let portableTargets: [Target] = [
     .target(
         name: "PlanMeterCore",
-        dependencies: sqliteDependencies,
+        dependencies: sqliteDependencies + cryptoDependencies,
         swiftSettings: swift5,
         linkerSettings: [.linkedLibrary("sqlite3")]
     ),
