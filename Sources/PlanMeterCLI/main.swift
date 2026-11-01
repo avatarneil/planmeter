@@ -16,6 +16,7 @@ while let arg = args.next() {
     case "--json": json = true
     case "--account-usage": report = "coverage"
     case "--threads": report = "threads"
+    case "--limits": report = "limits"
     case "--utc": utc = true
     case "--date":
         guard let date = args.next() else {
@@ -23,7 +24,7 @@ while let arg = args.next() {
         }
         dailyDate = date
     case "-h", "--help":
-        print("usage: planmeter-cli [--days N] [--json] [--account-usage [--date YYYY-MM-DD] | --threads [--utc]]")
+        print("usage: planmeter-cli [--days N] [--json] [--account-usage [--date YYYY-MM-DD] | --threads [--utc] | --limits]")
         exit(0)
     default:
         FileHandle.standardError.write("unknown argument \(arg)\n".data(using: .utf8)!)
@@ -47,8 +48,10 @@ func tokens(_ v: Int) -> String {
 let semaphore = DispatchSemaphore(value: 0)
 Task {
     if report != "summary" {
-        let ctx = await Report.load(days: days, dailyDate: dailyDate)
-        let payload = report == "coverage" ? Report.coverage(ctx, days: days, date: dailyDate) : Report.threads(ctx, days: days, accountFilter: nil, utc: utc)
+        let ctx = await Report.load(days: days, dailyDate: dailyDate, planLimits: report == "limits")
+        let payload = report == "coverage" ? Report.coverage(ctx, days: days, date: dailyDate)
+            : report == "limits" ? Report.limits(ctx)
+            : Report.threads(ctx, days: days, accountFilter: nil, utc: utc)
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
         print(String(decoding: data, as: UTF8.self))
         semaphore.signal()

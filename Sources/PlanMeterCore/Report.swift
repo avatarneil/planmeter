@@ -13,6 +13,7 @@ public struct ReportContext: Sendable {
     public var accountUsage: [AccountUsageSnapshot] = []
     public var dailyUsage: [CodexDailyUsageSnapshot] = []
     public var cloudUsage: [CodexCloudUsageSnapshot] = []
+    public var planLimits: [PlanLimitSnapshot] = []
     public var threadCatalog: [String: ThreadLink] = [:]
 
     public init(discovery: Discovery, accounts: [Account], rates: RateTable, scan: ScanOutput, overrides: [String: PlanGroup]) {
@@ -34,7 +35,9 @@ public struct ReportContext: Sendable {
 }
 
 public enum Report {
-    public static func load(days: Int, cache: ScanCache? = nil, dailyDate: String? = nil) async -> ReportContext {
+    /// `planLimits` asks Claude Code and Antigravity for their subscription
+    /// windows, which starts a CLI or network request; only limit reports need it.
+    public static func load(days: Int, cache: ScanCache? = nil, dailyDate: String? = nil, planLimits: Bool = false) async -> ReportContext {
         let settings = T3Settings.load()
         let discovery = AccountDiscovery.discover(settings: settings)
         let rates = PricingLoader.loadCached() ?? RateTable()
@@ -51,9 +54,11 @@ public enum Report {
         var context = ReportContext(discovery: discovery, accounts: accounts, rates: rates, scan: scan, overrides: GroupOverrides.load())
         async let daily = loadDaily(targets: discovery.codexUsageTargets, date: dailyDate)
         async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets)
+        async let limits = planLimits ? PlanLimits.shared.load(targets: discovery.planLimitTargets) : []
         context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
         context.dailyUsage = await daily
         context.cloudUsage = await cloud
+        context.planLimits = await limits
         context.scan = CodexCloudProjection.merging(context.cloudUsage, into: scan)
         context.threadCatalog = CodexCloudProjection.catalog(context.cloudUsage, local: ThreadCatalog.load(discovery: discovery))
         return context
@@ -341,9 +346,25 @@ public enum Report {
             }
             rows.append(row)
         }
+        var plans: [[String: Any]] = []
+        for snapshot in ctx.planLimits {
+            var row = accountJSON(ctx.account(for: snapshot.target.accountId), group: ctx.group(for: ctx.account(for: snapshot.target.accountId)))
+            row["status"] = snapshot.status.rawValue
+            if let plan = snapshot.plan { row["subscription"] = plan }
+            if let fetchedAt = snapshot.fetchedAt { row["asOf"] = iso(fetchedAt) }
+            if let message = snapshot.message { row["message"] = message }
+            row["windows"] = snapshot.windows.map { w -> [String: Any] in
+                var window: [String: Any] = ["id": w.id, "label": w.label, "usedPercent": w.usedPercent]
+                if let minutes = w.windowMinutes { window["windowMinutes"] = minutes }
+                if let resetsAt = w.resetsAt { window["resetsAt"] = iso(resetsAt) }
+                return window
+            }
+            plans.append(row)
+        }
         return [
             "codex": rows,
-            "note": "Codex writes rate-limit windows into every session transcript; readings reflect the last turn each account ran. Claude Code does not store limits locally.",
+            "plans": plans,
+            "note": "Codex writes rate-limit windows into every session transcript; readings reflect the last turn each account ran. Claude Code limits come from its CLI (get_usage) and Antigravity quotas from Google's Cloud Code API, at most once per five minutes per login.",
         ]
     }
 

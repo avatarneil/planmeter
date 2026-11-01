@@ -225,7 +225,7 @@ struct LimitsPage: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Codex limits").font(.headline)
+                Text("Plan limits").font(.headline)
                 if payload.limits.isEmpty {
                     Text("No usage windows reported.").font(.footnote).foregroundStyle(.secondary)
                 }

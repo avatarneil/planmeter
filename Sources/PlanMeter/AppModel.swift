@@ -139,6 +139,8 @@ final class AppModel {
     var cloudUsage: [CodexCloudUsageSnapshot] = []
     var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
+    /// Claude Code and Antigravity windows read from the provider, by account id.
+    var planLimits: [String: PlanLimitSnapshot] = [:]
     var sources: [SourceReport] = []
     var rates = RateTable()
     var buckets: [Bucket] = []
@@ -289,9 +291,11 @@ final class AppModel {
         recompute()
         async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
+        async let limits = PlanLimits.shared.load(targets: discovery.planLimitTargets, force: forceAccountUsage)
         accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         dailyUsage = await daily
         cloudUsage = await cloud
+        planLimits = Dictionary((await limits).map { ($0.target.accountId, $0) }, uniquingKeysWith: { first, _ in first })
         let combined = CodexCloudProjection.merging(cloudUsage, into: output)
         cells = combined.cells
         threadCells = combined.threads

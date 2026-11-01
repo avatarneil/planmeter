@@ -167,7 +167,19 @@ enum RemoteReportBuilder {
             }
             rows.append(RemoteAccountLimits(account: account(a, model: model), windows: windows, note: note, asOf: asOf))
         }
-        return RemoteLimits(accounts: rows, note: "Codex windows come from the last session each account ran. Claude Code does not store limits locally.")
+        for a in model.accounts {
+            guard let snapshot = model.planLimits[a.id] else { continue }
+            // Older clients require a reset time, so untimed quotas stay on the Mac.
+            let windows = snapshot.windows.compactMap { w in
+                w.resetsAt.map { RemoteLimitWindow(label: w.label, usedPercent: w.usedPercent, windowMinutes: w.windowMinutes ?? 0, resetsAt: $0) }
+            }
+            var note = snapshot.message
+            if windows.count < snapshot.windows.count {
+                note = [note, "Quotas without a reset time are shown on the Mac."].compactMap { $0 }.joined(separator: " ")
+            }
+            rows.append(RemoteAccountLimits(account: account(a, model: model), windows: windows, note: note, asOf: snapshot.fetchedAt))
+        }
+        return RemoteLimits(accounts: rows, note: "Codex windows come from the last session each account ran; Claude Code and Antigravity windows are read from the provider.")
     }
 
     static func accounts(model: AppModel) -> RemoteAccounts {

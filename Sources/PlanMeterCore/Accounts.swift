@@ -34,6 +34,7 @@ public struct Discovery: Sendable {
     public var unsupported: [UnsupportedInstance]
     public var notes: [String]
     public var codexUsageTargets: [CodexUsageTarget] = []
+    public var planLimitTargets: [PlanLimitTarget] = []
 
     public init(accounts: [Account] = [], sources: [ScanSource] = [], openCodeDatabase: String? = nil, unsupported: [UnsupportedInstance] = [], notes: [String] = []) {
         self.accounts = accounts
@@ -165,6 +166,9 @@ public enum AccountDiscovery {
             for dir in dirs {
                 result.sources.append(ScanSource(provider: .claude, rootDir: dir, fixedAccountId: id))
             }
+            // T3's `homePath` is the instance's CLAUDE_CONFIG_DIR.
+            result.planLimitTargets.append(PlanLimitTarget(
+                accountId: id, provider: .claude, configDir: instance.homePath.map(PathUtil.expand), email: identity.email))
         }
 
         // Antigravity ---------------------------------------------------
@@ -203,6 +207,8 @@ public enum AccountDiscovery {
                     sourceDescription: normalizedDir
                 ))
                 result.sources.append(ScanSource(provider: .antigravity, rootDir: normalizedDir, fixedAccountId: id))
+                result.planLimitTargets.append(PlanLimitTarget(
+                    accountId: id, provider: .antigravity, tokenPath: "\(profileDir)/acp_token.json", authMethod: identity.authType))
             }
         } else {
             let envDirs = (environment["ANTIGRAVITY_DATA_DIR"] ?? "")
@@ -252,6 +258,8 @@ public enum AccountDiscovery {
                 for dir in uniqueDirs {
                     result.sources.append(ScanSource(provider: .antigravity, rootDir: dir, fixedAccountId: id))
                 }
+                result.planLimitTargets.append(PlanLimitTarget(
+                    accountId: id, provider: .antigravity, tokenPath: "\(profileDir)/acp_token.json", authMethod: identity.authType))
             }
         }
 
