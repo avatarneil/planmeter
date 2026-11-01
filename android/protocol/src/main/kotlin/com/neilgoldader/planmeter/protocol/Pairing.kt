@@ -81,7 +81,11 @@ class PairingInvite(
             val port = map["p"]?.let(::parseSwiftInt)?.takeIf { it in 1..65535 }?.toInt() ?: return null
             val key = map["k"]?.let(Base64Url::decode)?.takeIf { it.size == 65 } ?: return null
             val token = map["t"]?.takeIf { it.isNotEmpty() } ?: return null
-            val expires = map["e"]?.let(::parseSwiftInt) ?: return null
+            // Swift turns any Int64 into a Date. Instant's range is narrower and
+            // ofEpochSecond throws outside it, so clamp: an extreme expiry reads as
+            // never (or long since) expired, as it does on iOS.
+            val expires = map["e"]?.let(::parseSwiftInt)?.coerceIn(Instant.MIN.epochSecond, Instant.MAX.epochSecond)
+                ?: return null
             return PairingInvite(
                 serverHost = h,
                 port = port,

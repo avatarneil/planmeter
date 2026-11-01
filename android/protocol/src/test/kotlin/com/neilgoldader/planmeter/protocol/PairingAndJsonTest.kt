@@ -2,6 +2,7 @@ package com.neilgoldader.planmeter.protocol
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,6 +26,18 @@ class PairingAndJsonTest {
     fun inviteSchemeIsCaseInsensitive() {
         val url = PairingInvite("h", 1, "n", key, "t", Instant.EPOCH).toUrl()
         assertEquals("h", PairingInvite.parse(url.replace("planmeter://pair", "PlanMeter://PAIR"))?.serverHost)
+    }
+
+    @Test
+    fun extremeExpiriesParseInsteadOfThrowing() {
+        val url = PairingInvite("h", 7787, "n", key, "t", Instant.ofEpochSecond(1792411500)).toUrl()
+        val far = PairingInvite.parse(url.replace("e=1792411500", "e=${Long.MAX_VALUE}"))
+        assertEquals(Instant.MAX, far?.expiresAt)
+        assertFalse(far!!.isExpired())
+        val past = PairingInvite.parse(url.replace("e=1792411500", "e=${Long.MIN_VALUE}"))
+        assertEquals(Instant.MIN, past?.expiresAt)
+        assertTrue(past!!.isExpired())
+        assertNull(PairingInvite.parse(url.replace("e=1792411500", "e=9223372036854775808")))
     }
 
     @Test
