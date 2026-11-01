@@ -136,7 +136,7 @@ final class HostEngineTests: XCTestCase {
         // Untimed quotas stay out of remote replies, as from the Mac.
         XCTAssertEqual(row.windows.map(\.label), ["5-hour"])
         XCTAssertEqual(row.asOf, resetsAt)
-        XCTAssertNotNil(row.note)
+        XCTAssertEqual(row.note, "Quotas without a reset time aren't shown here.")
     }
 
     func testRepliesWaitForTheFirstScan() async throws {
