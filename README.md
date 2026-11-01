@@ -528,7 +528,7 @@ Building needs the Swift 6 toolchain and `libsqlite3-dev`. Settings live in
 files, and flags.
 
 The desktop app in [`linux/`](linux/README.md) is written in Rust with GTK 4 and libadwaita. It
-shows the dashboard, accounts, Codex limits, spend limits with desktop notifications, and the
+shows the dashboard, accounts, plan limits, spend limits with desktop notifications, and the
 Remote page for pairing phones. It reads everything from `planmeterd`. Build it with `cargo build
 --release` in `linux/` (needs `libgtk-4-dev` and `libadwaita-1-dev`).
 
@@ -545,7 +545,7 @@ On Linux:
 
 [`android/`](android/README.md) is a native Kotlin and Jetpack Compose app with the iPhone app's
 Tailscale mode: QR or link pairing, the dashboard with ranges, group and account totals, a
-per-account chart, models, Codex limits, and accounts, plus a home-screen widget and an optional
+per-account chart, models, plan limits, and accounts, plus a home-screen widget and an optional
 biometric lock. It uses the same protocol and security model as the iPhone. The device key is a
 P-256 key in the Android Keystore (StrongBox when available), and requests go only to Tailscale
 addresses. It pairs with the Mac app or `planmeterd`. There is no iCloud mode.

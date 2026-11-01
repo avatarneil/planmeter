@@ -281,7 +281,7 @@ readings. On macOS the daemon is a development tool and keeps its files in
   code to resolve to 100.64.0.0/10 or fd7a:115c:a1e0::/48. Headscale tailnets with custom
   ranges are refused for now.
 - The UI is a Compose dashboard matching the iPhone: range picker, totals, per-group and
-  per-account breakdown, timeline chart (Compose Canvas), models, Codex limits, and accounts.
+  per-account breakdown, timeline chart (Compose Canvas), models, plan limits, and accounts.
   It uses Material 3 with dynamic color, light and dark themes, and an optional biometric lock.
 - A Glance home-screen widget shows today's spend and the Personal/Work split, refreshed by
   WorkManager (the platform minimum is 15 minutes).
