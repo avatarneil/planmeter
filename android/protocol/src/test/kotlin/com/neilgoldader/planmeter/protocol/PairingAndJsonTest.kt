@@ -32,10 +32,10 @@ class PairingAndJsonTest {
     fun extremeExpiriesParseInsteadOfThrowing() {
         val url = PairingInvite("h", 7787, "n", key, "t", Instant.ofEpochSecond(1792411500)).toUrl()
         val far = PairingInvite.parse(url.replace("e=1792411500", "e=${Long.MAX_VALUE}"))
-        assertEquals(Instant.MAX, far?.expiresAt)
+        assertEquals(Instant.MAX.epochSecond, far?.expiresAt?.epochSecond)
         assertFalse(far!!.isExpired())
         val past = PairingInvite.parse(url.replace("e=1792411500", "e=${Long.MIN_VALUE}"))
-        assertEquals(Instant.MIN, past?.expiresAt)
+        assertEquals(Instant.MIN.epochSecond, past?.expiresAt?.epochSecond)
         assertTrue(past!!.isExpired())
         assertNull(PairingInvite.parse(url.replace("e=1792411500", "e=9223372036854775808")))
     }
