@@ -86,7 +86,7 @@ class ScreenshotTest {
     fun dashboardPhoneFullLight() {
         dashboard()
         compose.onNodeWithText("Cost over time").assertExists()
-        compose.onNodeWithText("Codex limits").assertExists()
+        compose.onNodeWithText("Plan limits").assertExists()
         compose.onNodeWithText("By model").assertExists()
         compose.onNodeWithText("Accounts & sources").assertExists()
         capture("dashboard-phone-full-light")

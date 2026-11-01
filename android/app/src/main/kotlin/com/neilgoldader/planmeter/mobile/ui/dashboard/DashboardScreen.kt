@@ -437,7 +437,7 @@ private fun TimelineCard(
 @Composable
 private fun LimitsCard(limits: RemoteLimits, now: Instant) {
     PlanCard {
-        CardTitle("Codex limits")
+        CardTitle("Plan limits")
         for (entry in limits.accounts) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
