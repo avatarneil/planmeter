@@ -1,2 +1,2 @@
 /// Kept in step with VERSION by scripts/check-version.sh.
-let daemonVersion = "0.3.9"
+let daemonVersion = "0.4.0"
