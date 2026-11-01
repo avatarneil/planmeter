@@ -103,6 +103,25 @@ In standalone mode PlanMeter discovers one configured home per provider. If
 Antigravity homes, custom display names, colors, and disabled-provider settings. Cursor has no local
 usage data and is listed as unsupported when it appears in T3 settings.
 
+### Plan limits
+
+Codex writes its rate-limit windows into each session transcript, so its readings reflect the last
+turn each account ran. Claude Code and Antigravity do not store limits locally, so PlanMeter asks the
+provider, at most once per five minutes per login (**Refresh** forces a new reading):
+
+- **Claude Code**: PlanMeter runs the installed `claude` CLI with that login's `CLAUDE_CONFIG_DIR` and
+  sends only the `initialize` and `get_usage` control requests. No prompt is sent, so no model turn
+  runs. Settings, hooks, MCP servers, and session persistence are disabled. The CLI handles its own
+  authentication, so PlanMeter never reads Claude credentials. If the CLI reports a different login
+  than the discovered account, no limits are shown.
+- **Antigravity**: for a profile with an `acp_token.json` (T3 Code's Antigravity profiles), PlanMeter
+  exchanges its refresh token for a short-lived access token and reads the quota summary from Google's
+  Cloud Code API, as T3 Code does. The token file is never modified and the access token is not
+  stored. The standalone `agy` CLI keeps its login in the Keychain, which PlanMeter does not read.
+
+The iPhone, watch, and web clients receive windows that have a reset time; quotas without one are
+shown only on the Mac. `planmeter-cli --limits` prints the same readings as JSON.
+
 Environment overrides are naturally available to the CLI and MCP server. To use them with the Mac
 app, launch the `PlanMeter` executable from that environment or expose the variables to GUI apps
 with `launchctl setenv`; apps opened from Finder otherwise use the standard home locations.
@@ -311,7 +330,7 @@ without leaving the terminal. Tools:
 | `usage_summary`  | `days` (default 30)             | Totals by group (personal/work/other) and by account        |
 | `usage_by_model` | `days`, `account` filter        | Per account × model rows sorted by cost                     |
 | `usage_timeline` | `days`, `resolution` day/hour   | Cost and tokens per period with per-account breakdown       |
-| `codex_limits`   | none                            | Latest Codex rate-limit windows per account                 |
+| `plan_limits`    | none                            | Codex, Claude Code, and Antigravity limit windows per account |
 | `accounts`       | none                            | Discovered accounts, scanned sources, and their status      |
 
 `make install-mcp` registers it with Claude Code (user scope, both the default home and
@@ -455,7 +474,7 @@ plan breakdown or progress toward the daily target. The circular complication sh
 currency amount and an optional target gauge. Settings apply to complications using the default
 **Use iPhone watch settings** option. iPhone widgets retain their own Edit Widget settings.
 
-The watch app shows today, 30-day totals after an iCloud fetch, Codex limits, accounts, and sync
+The watch app shows today, 30-day totals after an iCloud fetch, plan limits, accounts, and sync
 status. All targets use `group.com.neilgoldader.planmeter` for their local widget caches. Apple
 controls background and timeline refresh timing; a 15-minute refresh request is not a guarantee.
 Stale complications prompt a refresh, and watchOS privacy settings remain respected.
@@ -507,7 +526,7 @@ unit suite does not require provider credentials or T3 Code.
 
 - `Sources/PlanMeterCore` – account discovery, transcript parsers, pricing, scan cache, aggregation.
 - `Sources/PlanMeter` – SwiftUI app: summary cards, Swift Charts timeline, model breakdown table,
-  Codex limits, sources panel, account grouping sheet, menu bar popover.
+  plan limits, sources panel, account grouping sheet, menu bar popover.
 - `Sources/PlanMeterRemote` – platform-neutral wire models, pairing, Secure Enclave key wrappers,
   and the encrypted request/response channel shared by the Mac server and the iOS app.
 - `Sources/PlanMeter/Remote` – the Mac's tailnet-bound HTTP server, pairing state, and Remote sheet.

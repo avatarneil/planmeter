@@ -7,7 +7,7 @@ import PlanMeterCore
 // agents actually use: initialize, ping, tools/list, tools/call. Everything is
 // read-only against the same transcripts and cache the app uses.
 
-let serverVersion = "0.3.8"
+let serverVersion = "0.3.9"
 let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 struct Tool {
@@ -46,8 +46,8 @@ let tools: [Tool] = [
         ], "additionalProperties": false]
     ),
     Tool(
-        name: "codex_limits",
-        description: "Latest Codex subscription rate-limit windows (weekly / 5-hour used percent and reset time) per Codex account, read from the most recent session each account ran.",
+        name: "plan_limits",
+        description: "Subscription limit windows (used percent and reset time) per account: Codex windows from the most recent session each account ran (codex), and Claude Code and Antigravity windows read from the provider (plans). Provider readings are refreshed at most once per five minutes.",
         schema: ["type": "object", "properties": [:], "additionalProperties": false]
     ),
     Tool(
@@ -125,8 +125,8 @@ func callTool(name: String, arguments: [String: Any]) async -> [String: Any] {
         let resolution = (arguments["resolution"] as? String).flatMap(Resolution.init(rawValue:)) ?? .day
         let ctx = await Report.load(days: minutes == nil ? days : 2, cache: cache)
         return textResult(Report.timeline(ctx, days: days, resolution: resolution, minutes: minutes))
-    case "codex_limits":
-        let ctx = await Report.load(days: 7, cache: cache)
+    case "plan_limits", "codex_limits":
+        let ctx = await Report.load(days: 7, cache: cache, planLimits: true)
         return textResult(Report.limits(ctx))
     case "accounts":
         let ctx = await Report.load(days: 7, cache: cache)

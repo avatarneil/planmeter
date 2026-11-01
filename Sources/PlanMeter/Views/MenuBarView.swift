@@ -106,21 +106,26 @@ struct MenuBarView: View {
                     Text(model.isScanning ? "Scanning…" : "No usage found.").font(.caption).foregroundStyle(.secondary)
                 }
 
-                let codexLimits = model.accounts.filter { $0.provider == .codex }.compactMap { account -> (Account, RateLimitWindow)? in
-                    let plan = account.id.replacingOccurrences(of: "codex:plan:", with: "")
-                    guard let w = model.rateLimits[plan]?.primary else { return nil }
-                    return (account, w)
+                // Codex's primary window, else the provider window closest to its limit.
+                let limits = model.accounts.compactMap { account -> (account: Account, label: String, usedPercent: Double, resetDate: Date?)? in
+                    if account.provider == .codex {
+                        let plan = account.id.replacingOccurrences(of: "codex:plan:", with: "")
+                        guard let w = model.rateLimits[plan]?.primary else { return nil }
+                        return (account, Format.windowName(minutes: w.windowMinutes), w.usedPercent, w.resetDate)
+                    }
+                    guard let w = model.planLimits[account.id]?.tightest else { return nil }
+                    return (account, w.label, w.usedPercent, w.resetsAt)
                 }
-                if !codexLimits.isEmpty {
+                if !limits.isEmpty {
                     Divider()
-                    ForEach(codexLimits, id: \.0.id) { account, window in
+                    ForEach(limits, id: \.account.id) { account, label, usedPercent, resetDate in
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
-                                Text("\(account.displayName) · \(Format.windowName(minutes: window.windowMinutes))").font(.caption)
+                                Text("\(account.displayName) · \(label)").font(.caption).lineLimit(1)
                                 Spacer()
-                                Text("\(Int(window.usedPercent.rounded()))% · \(window.resetDate > Date() ? "resets \(Format.relative(window.resetDate))" : "reset pending")").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                                Text("\(Int(usedPercent.rounded()))%\(resetDate.map { " · " + ($0 > Date() ? "resets \(Format.relative($0))" : "reset pending") } ?? "")").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                             }
-                            ShareBar(fraction: window.usedPercent / 100, color: window.usedPercent > 90 ? .red : window.usedPercent > 70 ? .orange : .accentColor)
+                            ShareBar(fraction: usedPercent / 100, color: usedPercent > 90 ? .red : usedPercent > 70 ? .orange : .accentColor)
                         }
                     }
                 }

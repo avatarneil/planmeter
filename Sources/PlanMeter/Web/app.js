@@ -736,7 +736,7 @@
     const l = state.limits;
     if (!l || !l.accounts.length) { card.classList.add("hidden"); return; }
     card.classList.remove("hidden");
-    card.append(el("h2", "", "Codex limits"));
+    card.append(el("h2", "", "Plan limits"));
     for (const entry of l.accounts) {
       const box = el("div", "limit");
       const row = el("div", "row");

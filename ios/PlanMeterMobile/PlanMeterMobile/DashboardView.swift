@@ -249,7 +249,7 @@ struct LimitsCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Codex limits").font(.headline)
+            Text("Plan limits").font(.headline)
             ForEach(limits.accounts) { entry in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
