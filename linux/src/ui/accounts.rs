@@ -24,6 +24,7 @@ fn provider_name(raw: &str) -> &str {
         "claude" => "Claude Code",
         "grok" => "Grok Build",
         "opencode" => "OpenCode",
+        "antigravity" => "Antigravity",
         other => other,
     }
 }

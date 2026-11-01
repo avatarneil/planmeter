@@ -22,7 +22,7 @@ Run `planmeterd` as a systemd user service, or use the bundled mock daemon for d
   (1 min to 1 day, at most about 1,500 bars per range, as on the Mac and iPhone), hover
   highlight, tooltips, a legend, and a screen-reader summary. Untimed workspace credits
   are drawn as lighter bars.
-- **Models** (cost, tokens, cached share, unpriced marker) and **Codex limits** with reset
+- **Models** (cost, tokens, cached share, unpriced marker) and **Plan limits** with reset
   times.
 - **Accounts** with their plan group, the scanned sources, and the daemon's status.
 - **Remote**: turn the tailnet listener on or off, see the tailnet address and MagicDNS

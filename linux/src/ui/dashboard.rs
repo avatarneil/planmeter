@@ -1,5 +1,5 @@
 //! The dashboard: total spend, spend-limit progress, Personal / Work / Other
-//! cards, the timeline chart, models, and Codex limits.
+//! cards, the timeline chart, models, and plan limits.
 
 use super::chart::ChartView;
 use super::widgets::*;
@@ -236,7 +236,7 @@ impl DashboardPage {
         // Explicit, so the boxed list inside does not make it grab space.
         limits_column.set_hexpand(false);
         let limits_group = adw::PreferencesGroup::builder()
-            .title("Codex Limits")
+            .title("Plan Limits")
             .valign(gtk::Align::Start)
             .build();
         let limits_list = boxed_list();
