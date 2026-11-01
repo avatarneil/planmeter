@@ -292,6 +292,44 @@ final class ControlAPITests: XCTestCase {
         XCTAssertEqual(h.service.events.filter { $0.contains("Could not start") }.count, 1, "an unchanged failure is logged once")
     }
 
+    /// Waits off the main actor; synchronous so the wait is allowed.
+    nonisolated private static func block(on semaphore: DispatchSemaphore) { semaphore.wait() }
+
+    /// Shutdown cancels the 30-second tick and stops the controller while the
+    /// tick may be waiting on `tailscale status`; it must not bind afterwards.
+    func testStopWinsOverAnApplyWaitingOnTailscale() async throws {
+        let h = try await ControlHarness.make()
+        defer { h.cleanUp() }
+        h.remote.stop()
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        var gated = RemoteController.Environment.fake(addresses: ["100.64.0.10"])
+        gated.tailnet = {
+            entered.signal()
+            release.wait()
+            return .init(addresses: ["100.64.0.10"], dnsName: nil)
+        }
+        h.remote.environment = gated
+        var binds = 0
+        h.remote.listenerFactory = { _, addresses, _ in
+            binds += 1
+            return FakeListener(addresses: addresses)
+        }
+        let pending = Task { await h.remote.apply() }
+        await Task.detached { Self.block(on: entered) }.value
+        h.remote.stop()
+        release.signal()
+        await pending.value
+        XCTAssertEqual(h.remote.state, .off)
+        XCTAssertTrue(h.remote.boundAddresses.isEmpty)
+        XCTAssertEqual(binds, 0)
+
+        h.remote.environment = .fake(addresses: ["100.64.0.10"])
+        await h.remote.apply()
+        XCTAssertEqual(h.remote.state, .listening)
+        XCTAssertEqual(binds, 1)
+    }
+
     func testUnknownRoutesAndMethods() async throws {
         let h = try await ControlHarness.make()
         defer { h.cleanUp() }

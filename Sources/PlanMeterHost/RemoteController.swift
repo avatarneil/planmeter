@@ -94,6 +94,10 @@ public final class RemoteController {
     /// stops the unwanted ones, so an address that failed to bind is retried
     /// without disturbing the others (or cancelling the invite).
     private var listeners: [String: RemoteListener] = [:]
+    /// Bumped by `stop()`. An `apply()` or HTTPS refresh that was waiting on
+    /// Tailscale across a stop finds a newer generation when it resumes and
+    /// changes nothing, so a tick in flight cannot undo shutdown.
+    private var generation = 0
 
     public init(service: RemoteService, settings: HostSettingsStore, environment: Environment = .live,
                 listenerFactory: ListenerFactory? = nil, bindLoopback: Bool) {
@@ -140,9 +144,11 @@ public final class RemoteController {
     /// picked up.
     public func apply() async {
         let environment = self.environment
+        let generation = self.generation
         let probe = await Task.detached(priority: .utility) { () -> (TailscaleInfo.Node, Bool) in
             (environment.tailnet(), environment.tailscaleAvailable())
         }.value
+        guard generation == self.generation, !Task.isCancelled else { return }
         tailnetAddresses = probe.0.addresses
         dnsName = probe.0.dnsName
         tailscaleAvailable = probe.1
@@ -210,8 +216,10 @@ public final class RemoteController {
     }
 
     public func stop() {
+        generation += 1
         stopListener()
         state = .off
+        httpsActive = false
     }
 
     private func stopListener() {
@@ -264,6 +272,7 @@ public final class RemoteController {
         }
         let port = self.port
         let environment = self.environment
+        let generation = self.generation
         let (domain, active, message) = await Task.detached(priority: .utility) { () -> (String?, Bool, String?) in
             guard environment.tailscaleAvailable() else { return (nil, false, "Tailscale CLI not found. Install the tailscale package.") }
             let certificate = environment.certificateStatus()
@@ -277,6 +286,7 @@ public final class RemoteController {
             }
             return (domain, active, message)
         }.value
+        guard generation == self.generation else { return }
         let changed = active != httpsActive || message != httpsMessage
         httpsDomain = domain
         httpsActive = active
