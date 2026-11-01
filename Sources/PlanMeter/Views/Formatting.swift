@@ -1,5 +1,6 @@
 import SwiftUI
 import PlanMeterCore
+import PlanMeterHost
 
 enum Format {
     static func usd(_ value: Double) -> String {
@@ -39,16 +40,7 @@ enum Format {
     }
 
     static func windowName(minutes: Int) -> String {
-        switch minutes {
-        case 10080: return "Weekly"
-        case 300: return "5-hour"
-        case 60: return "Hourly"
-        case 1440: return "Daily"
-        default:
-            if minutes % 1440 == 0 { return "\(minutes / 1440)-day" }
-            if minutes % 60 == 0 { return "\(minutes / 60)-hour" }
-            return "\(minutes)-minute"
-        }
+        RateLimitLabel.windowName(minutes: minutes)
     }
 }
 

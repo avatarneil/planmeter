@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker preview for launchers before Android 12 (later ones render the live widget). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="180dp"
+    android:viewportWidth="180"
+    android:viewportHeight="180">
+    <path android:fillColor="#FFF8FAFB" android:pathData="M24,0 L156,0 Q180,0 180,24 L180,156 Q180,180 156,180 L24,180 Q0,180 0,156 L0,24 Q0,0 24,0 Z" />
+    <path android:fillColor="#0891B2" android:pathData="M20,20 L26,20 L26,34 L20,34 Z M29,26 L35,26 L35,34 L29,34 Z" />
+    <path android:fillColor="#7C3AED" android:pathData="M38,16 L46,16 L46,34 L38,34 Z" />
+    <path android:fillColor="#FFB0B5BE" android:pathData="M20,56 L80,56 L80,64 L20,64 Z" />
+    <path android:fillColor="#FF1C1E26" android:pathData="M20,72 L120,72 L120,100 L20,100 Z" />
+    <path android:fillColor="#0891B2" android:pathData="M20,120 L28,120 L28,128 L20,128 Z" />
+    <path android:fillColor="#FFB0B5BE" android:pathData="M34,120 L100,120 L100,128 L34,128 Z" />
+    <path android:fillColor="#7C3AED" android:pathData="M20,136 L28,136 L28,144 L20,144 Z" />
+    <path android:fillColor="#FFB0B5BE" android:pathData="M34,136 L90,136 L90,144 L34,144 Z" />
+</vector>

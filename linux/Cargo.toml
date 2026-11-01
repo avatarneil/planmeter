@@ -1,0 +1,43 @@
+[package]
+name = "planmeter"
+version = "0.4.0"
+edition = "2021"
+rust-version = "1.83"
+description = "GNOME client for planmeterd: AI coding-agent spend, tokens, and limits"
+license = "MIT"
+repository = "https://github.com/avatarneil/planmeter"
+default-run = "planmeter"
+publish = false
+
+[lib]
+name = "planmeter"
+path = "src/lib.rs"
+
+[[bin]]
+name = "planmeter"
+path = "src/main.rs"
+
+[[bin]]
+name = "mock-planmeterd"
+path = "src/bin/mock-planmeterd.rs"
+
+[dependencies]
+# The runtime floor is Ubuntu 24.04 LTS: GTK 4.14 and libadwaita 1.5.
+gtk = { package = "gtk4", version = "0.10", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
+pangocairo = "0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+qrcode = { version = "0.14", default-features = false }
+libc = "0.2"
+
+[build-dependencies]
+glib-build-tools = "0.21"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4

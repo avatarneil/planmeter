@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import XCTest
 @testable import PlanMeterCore
 
@@ -61,19 +64,27 @@ final class PricingRefreshTests: XCTestCase {
     }
 
     private func session(status: Int, body: String) -> URLSession {
+        // FoundationNetworking does not copy `httpAdditionalHeaders` into the
+        // request a URLProtocol sees, so the stub reads its reply from here.
+        PricingResponseStub.reply = (status, body)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [PricingResponseStub.self]
-        config.httpAdditionalHeaders = ["X-Test-Status": String(status), "X-Test-Body": body]
         return URLSession(configuration: config)
     }
 }
 
 private final class PricingResponseStub: URLProtocol {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var stored: (status: Int, body: String) = (500, "")
+    static var reply: (status: Int, body: String) {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); defer { lock.unlock() }; stored = newValue }
+    }
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let status = Int(request.value(forHTTPHeaderField: "X-Test-Status") ?? "500") ?? 500
-        let body = request.value(forHTTPHeaderField: "X-Test-Body") ?? ""
+        let (status, body) = Self.reply
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))

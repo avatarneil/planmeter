@@ -1,0 +1,115 @@
+{
+  "description" : "planmeter://pair invite URLs. Valid URLs list the parsed fields; invalid URLs must be rejected.",
+  "invalid" : [
+    {
+      "reason" : "scheme must be planmeter",
+      "url" : "https://ada-mbp.tail1234.ts.net/pair?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "host must be pair",
+      "url" : "planmeter://invite?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "h missing",
+      "url" : "planmeter://pair?p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "h empty",
+      "url" : "planmeter://pair?h=&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "p missing",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "p below 1",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=0&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "p above 65535",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=65536&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "p not a decimal integer",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=http&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "k missing",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "k decodes to 64 bytes, not a 65-byte X9.63 point",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONLw&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "k is not base64url",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&k=not*base64&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "reason" : "t missing",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&e=1792500300"
+    },
+    {
+      "reason" : "t empty",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=&e=1792500300"
+    },
+    {
+      "reason" : "e missing",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+    },
+    {
+      "reason" : "e not an integer",
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300.5"
+    }
+  ],
+  "valid" : [
+    {
+      "description" : "As the Mac generates it. The key is base64url without padding; the name is percent-encoded UTF-8.",
+      "expected" : {
+        "expiresAt" : 1792500300,
+        "port" : 7787,
+        "serverHost" : "ada-mbp.tail1234.ts.net",
+        "serverName" : "Ada’s MacBook Pro",
+        "serverPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+        "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+      },
+      "url" : "planmeter://pair?h=ada-mbp.tail1234.ts.net&p=7787&n=Ada%E2%80%99s%20MacBook%20Pro&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "description" : "`n` is optional and defaults to the host.",
+      "expected" : {
+        "expiresAt" : 1792500300,
+        "port" : 7787,
+        "serverHost" : "100.101.102.103",
+        "serverName" : "100.101.102.103",
+        "serverPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+        "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+      },
+      "url" : "planmeter://pair?h=100.101.102.103&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300"
+    },
+    {
+      "description" : "Parameter order does not matter and unknown parameters are ignored.",
+      "expected" : {
+        "expiresAt" : 1792500300,
+        "port" : 443,
+        "serverHost" : "build.tail1234.ts.net",
+        "serverName" : "Build Box",
+        "serverPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+        "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+      },
+      "url" : "planmeter://pair?v=2&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1792500300&n=Build%20Box&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&p=443&h=build.tail1234.ts.net"
+    },
+    {
+      "description" : "An expired invite still parses; clients check `expiresAt` against the clock before pairing.",
+      "expected" : {
+        "expiresAt" : 1,
+        "port" : 7787,
+        "serverHost" : "old.tail1234.ts.net",
+        "serverName" : "old.tail1234.ts.net",
+        "serverPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+        "token" : "AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno"
+      },
+      "url" : "planmeter://pair?h=old.tail1234.ts.net&p=7787&k=BIXc_xHxf7Pu7LIgjiAFH3cfSP-ht0rsbdrmIcoMXAj90RsLyfpuBqH-rOYoCYrdM8XC1k9UdvaNI5woRxONL4g&t=AyxTHyFcn7YlJYEZFStySZHSCbH_uvyNAlpfKrmzPno&e=1"
+    }
+  ]
+}

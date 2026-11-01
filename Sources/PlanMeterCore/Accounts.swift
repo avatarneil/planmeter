@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 
 /// A transcript directory to scan, already attributed where the directory alone
@@ -51,7 +55,7 @@ public struct Discovery: Sendable {
 public enum AccountDiscovery {
     public static func discover(settings: T3Settings?, environment: [String: String] = ProcessInfo.processInfo.environment) -> Discovery {
         var result = Discovery()
-        let home = NSHomeDirectory()
+        let home = PlanMeterPaths.homeDirectory(environment: environment)
         let instances = settings?.instances ?? []
         let usesT3Configuration = !instances.isEmpty
 
@@ -431,7 +435,7 @@ public struct AntigravityIdentity: Sendable {
         fallbackAuthMethod: String?,
         fallbackGcpProject: String?,
         includeGlobalGoogleAccounts: Bool,
-        home: String = NSHomeDirectory()
+        home: String = PlanMeterPaths.homeDirectory()
     ) -> AntigravityIdentity {
         var authType = fallbackAuthMethod
         var gcpProject = fallbackGcpProject

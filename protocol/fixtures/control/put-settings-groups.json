@@ -1,0 +1,28 @@
+{
+  "request" : {
+    "body" : {
+      "group" : "personal"
+    },
+    "method" : "PUT",
+    "path" : "/v1/settings/groups/codex%3Aplan%3Abusiness"
+  },
+  "response" : {
+    "body" : {
+      "groupOverrides" : {
+        "claude:home:/home/dev/.claude/projects" : "work",
+        "codex:plan:business" : "personal"
+      },
+      "spendGroups" : [
+        "personal",
+        "work"
+      ],
+      "spendThresholds" : {
+        "today" : {
+          "limit" : 25,
+          "warningPercent" : 80
+        }
+      }
+    },
+    "status" : 200
+  }
+}

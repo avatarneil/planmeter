@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A provider turn, dated by its completion (or start while it is running).
 /// The provider does not expose the individual response timestamps here.
@@ -280,12 +283,29 @@ public actor CodexCloudUsage {
         } catch CloudUsageError.identity {
             snapshot = CodexCloudUsageSnapshot(target: target)
             snapshot.message = "Codex login changed or differs from the discovered account. Refresh account discovery."
+        } catch where isWebSocketUnsupported(error) {
+            snapshot = CodexCloudUsageSnapshot(target: target)
+            snapshot.message = webSocketUnavailableMessage
         } catch {
             snapshot = CodexCloudUsageSnapshot(target: target)
             snapshot.status = .failed
             snapshot.message = "Cloud usage could not be read with this Codex login."
         }
         return snapshot
+    }
+
+    static let webSocketUnavailableMessage = "Codex cloud usage is unavailable on this platform: the system's libcurl has no WebSocket support. Local usage is unaffected."
+
+    /// FoundationNetworking implements `URLSessionWebSocketTask` with libcurl,
+    /// and most distributions build libcurl without WebSockets. The task then
+    /// fails immediately with `unsupportedURL`, before any network traffic.
+    static func isWebSocketUnsupported(_ error: Error) -> Bool {
+        #if canImport(Darwin)
+        return false
+        #else
+        let error = error as NSError
+        return error.domain == NSURLErrorDomain && error.code == NSURLErrorUnsupportedURL
+        #endif
     }
 
     static func decodeReferences(_ result: [String: Any]) throws -> [CodexThreadReference] {
@@ -386,7 +406,7 @@ public actor CodexCloudUsage {
         guard let value, !(value is NSNull) else { return nil }
         let number: Double?
         if let text = value as? String, text.utf8.count <= 100 { number = Double(text) }
-        else if let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID() { number = value.doubleValue }
+        else if let value = value as? NSNumber, !JSON.isBoolean(value) { number = value.doubleValue }
         else { throw CloudUsageError.invalid }
         guard let number, number.isFinite, number >= 0 else { throw CloudUsageError.invalid }
         return number
@@ -402,14 +422,14 @@ public actor CodexCloudUsage {
     }
     private static func count(_ value: Any?) throws -> Int? {
         guard let value, !(value is NSNull) else { return nil }
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+        guard let number = value as? NSNumber, !JSON.isBoolean(number),
               number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue < Double(Int.max),
               number.doubleValue.rounded(.down) == number.doubleValue else { throw CloudUsageError.invalid }
         return number.intValue
     }
     private static func timestamp(_ value: Any?) throws -> Date? {
         guard let value, !(value is NSNull) else { return nil }
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+        guard let number = value as? NSNumber, !JSON.isBoolean(number),
               number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 32_503_680_000 else { throw CloudUsageError.invalid }
         return Date(timeIntervalSince1970: number.doubleValue)
     }
@@ -516,15 +536,26 @@ private final class CloudUsageRPC: @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        #if canImport(Darwin)
         let (bytes, response) = try await session.bytes(for: request)
+        #else
+        // FoundationNetworking has no `bytes(for:)`: buffer the body, then
+        // apply the same size limit below.
+        let (bytes, response) = try await session.portableData(for: request)
+        #endif
         guard let response = response as? HTTPURLResponse else { throw CloudUsageError.invalid }
         if response.statusCode == 401 || response.statusCode == 403 { throw CloudUsageError.permission }
         guard response.statusCode == 200 else { throw CloudUsageError.invalid }
+        #if canImport(Darwin)
         var data = Data()
         for try await byte in bytes {
             guard data.count < 4_000_000 else { throw CloudUsageError.invalid }
             data.append(byte)
         }
+        #else
+        guard bytes.count <= 4_000_000 else { throw CloudUsageError.invalid }
+        let data = bytes
+        #endif
         guard let result = JSON.object(data) else { throw CloudUsageError.invalid }
         return result
     }

@@ -1,0 +1,50 @@
+{
+  "limits" : {
+    "accounts" : [
+      {
+        "account" : {
+          "accentColorHex" : "#10A37F",
+          "email" : "ada@example.com",
+          "group" : "personal",
+          "id" : "codex:plan:pro",
+          "name" : "Personal Codex",
+          "plan" : "Pro",
+          "provider" : "codex",
+          "providerName" : "Codex"
+        },
+        "asOf" : "2026-10-19T15:58:41Z",
+        "windows" : [
+          {
+            "label" : "5-hour",
+            "resetsAt" : "2026-10-19T18:12:00Z",
+            "usedPercent" : 42.5,
+            "windowMinutes" : 300
+          },
+          {
+            "label" : "Weekly",
+            "resetsAt" : "2026-10-23T09:00:00Z",
+            "usedPercent" : 18,
+            "windowMinutes" : 10080
+          }
+        ]
+      },
+      {
+        "account" : {
+          "email" : "ada.lovelace@example.org",
+          "group" : "work",
+          "id" : "codex:plan:business",
+          "name" : "Work Codex",
+          "plan" : "Business",
+          "provider" : "codex",
+          "providerName" : "Codex"
+        },
+        "asOf" : "2026-10-19T14:20:07Z",
+        "note" : "Billed against credits; no usage windows.",
+        "windows" : [
+
+        ]
+      }
+    ],
+    "note" : "Codex windows come from the last session each account ran. Claude Code does not store limits locally."
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "models" : [
+    {
+      "accountId" : "codex:plan:business",
+      "accountName" : "Work Codex",
+      "group" : "work",
+      "model" : "gpt-5.5-codex",
+      "priced" : true,
+      "provider" : "codex",
+      "totals" : {
+        "cacheSavingsUsd" : 120.5,
+        "cachedInputTokens" : 131002880,
+        "costUsd" : 96.125,
+        "inputTokens" : 140663012,
+        "outputTokens" : 911402,
+        "sessions" : 22,
+        "tokens" : 141574414
+      }
+    },
+    {
+      "accountId" : "codex:plan:pro",
+      "accountName" : "Personal Codex",
+      "group" : "personal",
+      "model" : "gpt-5.5-codex",
+      "priced" : true,
+      "provider" : "codex",
+      "totals" : {
+        "cacheSavingsUsd" : 62.875,
+        "cachedInputTokens" : 55871232,
+        "costUsd" : 48.25,
+        "inputTokens" : 61204880,
+        "outputTokens" : 402118,
+        "sessions" : 14,
+        "tokens" : 61606998
+      }
+    },
+    {
+      "accountId" : "claude:home:/Users/ada/.claude/projects",
+      "accountName" : "Work Claude",
+      "group" : "work",
+      "model" : "claude-opus-5-5",
+      "priced" : true,
+      "provider" : "claude",
+      "totals" : {
+        "cacheSavingsUsd" : 51.125,
+        "cachedInputTokens" : 38004118,
+        "costUsd" : 31.875,
+        "inputTokens" : 40118660,
+        "outputTokens" : 210975,
+        "sessions" : 9,
+        "tokens" : 40329635
+      }
+    },
+    {
+      "accountId" : "claude:home:/Users/ada/.claude-personal/projects",
+      "accountName" : "Personal Claude",
+      "group" : "personal",
+      "model" : "claude-sonnet-5",
+      "priced" : true,
+      "provider" : "claude",
+      "totals" : {
+        "cacheSavingsUsd" : 23.25,
+        "cachedInputTokens" : 17310220,
+        "costUsd" : 12.5,
+        "inputTokens" : 18220406,
+        "outputTokens" : 96531,
+        "sessions" : 6,
+        "tokens" : 18316937
+      }
+    },
+    {
+      "accountId" : "opencode:local",
+      "accountName" : "OpenCode",
+      "group" : "other",
+      "model" : "local/qwen3-coder",
+      "priced" : false,
+      "provider" : "opencode",
+      "totals" : {
+        "cacheSavingsUsd" : 0,
+        "cachedInputTokens" : 0,
+        "costUsd" : 0,
+        "inputTokens" : 1204332,
+        "outputTokens" : 30118,
+        "sessions" : 2,
+        "tokens" : 1234450
+      }
+    }
+  ]
+}

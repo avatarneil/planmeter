@@ -1,0 +1,25 @@
+{
+  "request" : {
+    "body" : null,
+    "method" : "GET",
+    "path" : "/v1/settings"
+  },
+  "response" : {
+    "body" : {
+      "groupOverrides" : {
+        "claude:home:/home/dev/.claude/projects" : "work"
+      },
+      "spendGroups" : [
+        "personal",
+        "work"
+      ],
+      "spendThresholds" : {
+        "today" : {
+          "limit" : 25,
+          "warningPercent" : 80
+        }
+      }
+    },
+    "status" : 200
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "aadHex" : "ef45cd5c1ff0d901dd7d41b4",
+  "cipher" : "aes-256-gcm",
+  "ciphertextHex" : "ef45cd5c1ff0d901dd7d41b4ea79ecd15c48eaf1e9719994f2383a2c3ee260680714ccaf847ad011c671f4218bd5ffda6be75d91e5a90a7096745bb04493a02411a56e25016ae45dfd16f1111a791aba34e9fd0ebe58eb07ccc1ece50e1be63766c1b336243c2718abb177deed5fef5cfef24df902c85a52211eaa928ab2d0b4c1fd1bd06b07d1376c0e92dc8d89ef377d2e928e7bced115c2053e3f667942a2e730d5078aa6b303c899cf37afc3c0b4ff11092aa47d877d0c51068fc23a340ebb9c3f0f7f9f9b78864ceb41bc069aba5a439abad6d1f51e0870ede37b9cddf81ec3aa2cfc64e0bef33df480c1c9b8e39450bbf6b146e94ec2061edb9b1c6de6473b4fd1bfd3625e8fc9816793822a3ba7e13f308a83d34339ca872adacde719743a0eae7264b2fa0c409d7ef52b6c0e0ca7ffcbac8376b8f0185773be8fa38d5b26a9f4c30defec2d8e36cec0c90c945b4af37ac6cf098e6ea53f0273861cd2b117008aa9ef6c5786214a81a7fb972ac7d78dc4d225504d79aa0dff0f9e57b6722e7f92df57e33f9b05bbc7cd5d969550cfbf999155e4b4989c865e3b2e7c78da6745c03e0f5c96e29e537f036228d964e8d166576afb7cf17b0a1126a74ee6d1f71e8714213b1bfba0295e85e43933a5c8dd591b910015ff607f093811ac980a1a8f2a1245fe083f3da5aade429847083f542ce72da37f0c6756a74fd4e277e288da3b4b83b5dc411faec88853af969ae2b0664d847e95386f20cd5f1b04937b42271554ffe231ef4fcde1ca0621018c4b52d6e0c12ba9158c1d2fe1036e9081d04f7d9fbdb2855ca603964da00e2ddd641d03d1da11a1a0c64180d32de36250b7b6676381202366ae539bf6e6c3377f78e04231f032c783db916a210e0fbb25e9bcfe596f3244eb857c7df3a9c46a42bdfa3076de66b0dc7f958deca5c31726340e86eb0bfa7973d30fd94581859223267140d94476d7fba98e3b2a68bdcdcf71f87c6782b82e71c56374cdba864f598099dedf942d40d42dd342712c93d4625b7403e877395ec86d44bff58ca01c29bb749ff97f3a362d4fe8140d3192c2f5433244af96b238525ff2d7629384f651b0aaab1e069f7bba14373f63e3c4d9dac95eff8bfd0dde3f98f0dfffe957b7034efa8e5099d42709ce403e4b6d8d19fa5ef607a44014b9ad39",
+  "description" : "The server's reply to aes-256-gcm-request.json, sealed under the response key with a fresh nonce.",
+  "deviceId" : "0nfkgpQ6iVXlNxiZqqW0aF",
+  "deviceSigningPrivateKeyHex" : "fdec7569ca94b6fe3f97675c012a3c0c361366735756069c0e125afc768019bd",
+  "deviceSigningPublicKeyHex" : "0496c3cf7e3454917be771ab1e6434812a82c834bc81a9ec987a4616f21cae63c3d7d8f5674c99662a3e2c445dd1a56040abc6af7c3eddc9141d2e63ac3e36ca7c",
+  "ephemeralPrivateKeyHex" : "8e6fa9e2c580d00f21dff1359887b4f72cef5540eada96b858c8ea3c8673f452",
+  "ephemeralPublicKeyHex" : "04f96dc895cf555523c796e0c7d8a47a9d8b41a0ec97ebb359a737c94f75612ff4073f59484eec086d1e21e570434d8c38a8101c39834d20f5e4f7d0ecf822946d",
+  "name" : "aes-256-gcm-response",
+  "plaintext" : "{\"limits\":{\"accounts\":[{\"account\":{\"accentColorHex\":\"#10A37F\",\"email\":\"ada@example.com\",\"group\":\"personal\",\"id\":\"codex:plan:pro\",\"name\":\"Personal Codex\",\"plan\":\"Pro\",\"provider\":\"codex\",\"providerName\":\"Codex\"},\"asOf\":\"2026-10-19T15:58:41Z\",\"windows\":[{\"label\":\"5-hour\",\"resetsAt\":\"2026-10-19T18:12:00Z\",\"usedPercent\":42.5,\"windowMinutes\":300},{\"label\":\"Weekly\",\"resetsAt\":\"2026-10-23T09:00:00Z\",\"usedPercent\":18,\"windowMinutes\":10080}]},{\"account\":{\"email\":\"ada.lovelace@example.org\",\"group\":\"work\",\"id\":\"codex:plan:business\",\"name\":\"Work Codex\",\"plan\":\"Business\",\"provider\":\"codex\",\"providerName\":\"Codex\"},\"asOf\":\"2026-10-19T14:20:07Z\",\"note\":\"Billed against credits; no usage windows.\",\"windows\":[]}],\"note\":\"Codex windows come from the last session each account ran. Claude Code does not store limits locally.\"}}",
+  "requestKeyHex" : "2c81cc5fc97b5b9979592a3bc58b0b35261b8b1f949403ce686bf2f76d57e629",
+  "requestKeyInfo" : "planmeter-remote-v1|0nfkgpQ6iVXlNxiZqqW0aF|request",
+  "requestNonceHex" : "1a02481d3f856b6129074425",
+  "requestVector" : "aes-256-gcm-request.json",
+  "responseKeyHex" : "a8bc626eb4f188eb21b7e4b3a9388f9729c1d59f3dd3f965f0924bbec66fe1f4",
+  "responseKeyInfo" : "planmeter-remote-v1|0nfkgpQ6iVXlNxiZqqW0aF|response",
+  "responseNonceHex" : "ef45cd5c1ff0d901dd7d41b4",
+  "sealedResponse" : {
+    "cipher" : "aes-256-gcm",
+    "ciphertext" : "70XNXB/w2QHdfUG06nns0VxI6vHpcZmU8jg6LD7iYGgHFMyvhHrQEcZx9CGL1f/aa+ddkeWpCnCWdFuwRJOgJBGlbiUBauRd/RbxERp5Gro06f0OvljrB8zB7OUOG+Y3ZsGzNiQ8JxirsXfe7V/vXP7yTfkCyFpSIR6qkoqy0LTB/RvQawfRN2wOktyNie83fS6SjnvO0RXCBT4/ZnlCoucw1QeKprMDyJnPN6/DwLT/EQkqpH2HfQxRBo/COjQOu5w/D3+fm3iGTOtBvAaaulpDmrrW0fUeCHDt43uc3fgew6os/GTgvvM99IDBybjjlFC79rFG6U7CBh7bmxxt5kc7T9G/02Jej8mBZ5OCKjun4T8wioPTQznKhyrazecZdDoOrnJksvoMQJ1+9StsDgyn/8usg3a48BhXc76Po41bJqn0ww3v7C2ONs7AyQyUW0rzesbPCY5upT8Cc4Yc0rEXAIqp72xXhiFKgaf7lyrH143E0iVQTXmqDf8Pnle2ci5/kt9X4z+bBbvHzV2WlVDPv5mRVeS0mJyGXjsufHjaZ0XAPg9cluKeU38DYijZZOjRZldq+3zxewoRJqdO5tH3HocUITsb+6ApXoXkOTOlyN1ZG5EAFf9gfwk4EayYChqPKhJF/gg/PaWq3kKYRwg/VCznLaN/DGdWp0/U4nfiiNo7S4O13EEfrsiIU6+WmuKwZk2EfpU4byDNXxsEk3tCJxVU/+Ix70/N4coGIQGMS1LW4MErqRWMHS/hA26QgdBPfZ+9soVcpgOWTaAOLd1kHQPR2hGhoMZBgNMt42JQt7ZnY4EgI2auU5v25sM3f3jgQjHwMseD25FqIQ4PuyXpvP5ZbzJE64V8ffOpxGpCvfowdt5msNx/lY3spcMXJjQOhusL+nlz0w/ZRYGFkiMmcUDZRHbX+6mOOypovc3Pcfh8Z4K4LnHFY3TNuoZPWYCZ3t+ULUDULdNCcSyT1GJbdAPodzleyG1Ev/WMoBwpu3Sf+X86Ni1P6BQNMZLC9UMyRK+WsjhSX/LXYpOE9lGwqqseBp97uhQ3P2PjxNnayV7/i/0N3j+Y8N//6Ve3A076jlCZ1CcJzkA+S22NGfpe9gekQBS5rTk=",
+    "nonce" : "70XNXB/w2QHdfUG0"
+  },
+  "serverStaticPrivateKeyHex" : "91e6c142d6c43dde7827329081920ac0c2b402aaa1fa6261ab782bdfd66b237e",
+  "serverStaticPublicKeyHex" : "0485dcff11f17fb3eeecb2208e20051f771f48ffa1b74aec6ddae621ca0c5c08fdd11b0bc9fa6e06a1feace628098add33c5c2d64f5476f68d239c2847138d2f88",
+  "sharedSecretHex" : "79808dd85d8573b75750599bab3f3e680ccb3dc05c52bcf6e31a7f500f781fb7"
+}

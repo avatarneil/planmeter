@@ -1,0 +1,113 @@
+/* PlanMeter: small additions to libadwaita's stylesheet. Named colors keep
+   libadwaita 1.5 (Ubuntu 24.04) support. */
+
+.dashboard-card {
+  padding: 18px;
+}
+
+.hero-card {
+  padding: 22px 24px;
+}
+
+.hero-amount {
+  font-size: 30pt;
+  font-weight: 800;
+}
+
+.group-amount {
+  font-size: 20pt;
+  font-weight: 750;
+}
+
+.stat-value {
+  font-size: 13pt;
+  font-weight: 700;
+}
+
+.limit-panel {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background-color: alpha(currentColor, 0.045);
+}
+
+.tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background-color: alpha(currentColor, 0.09);
+  font-size: 0.82em;
+  font-weight: 600;
+}
+
+.tag.unpriced {
+  color: @warning_color;
+  background-color: alpha(@warning_color, 0.12);
+}
+
+.tag.group-personal { color: #0e7f9d; background-color: alpha(#0891b2, 0.13); }
+.tag.group-work { color: #6d32d1; background-color: alpha(#7c3aed, 0.13); }
+.tag.group-other { color: alpha(currentColor, 0.75); }
+
+progressbar.thin > trough,
+progressbar.thin > trough > progress {
+  min-height: 6px;
+}
+
+progressbar.group-personal > trough > progress { background-color: #0891b2; }
+progressbar.group-work > trough > progress { background-color: #7c3aed; }
+progressbar.group-other > trough > progress { background-color: #8b8f98; }
+
+progressbar.spend-comfortable > trough > progress { background-color: #1ab8a1; }
+progressbar.spend-approaching > trough > progress { background-color: #f5a129; }
+progressbar.spend-reached > trough > progress { background-color: #f55766; }
+
+label.spend-comfortable, image.spend-comfortable { color: #0f9c88; }
+label.spend-approaching, image.spend-approaching { color: #c97a08; }
+label.spend-reached, image.spend-reached { color: #e0404f; }
+
+progressbar.limit-warning > trough > progress { background-color: #f5a129; }
+progressbar.limit-critical > trough > progress { background-color: #f55766; }
+
+.status-dot {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 999px;
+  background-color: alpha(currentColor, 0.35);
+}
+
+.status-dot.ok { background-color: @success_color; }
+.status-dot.warning { background-color: @warning_color; }
+.status-dot.error { background-color: @error_color; }
+
+.qr-frame {
+  background-color: white;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 0 0 1px alpha(black, 0.08);
+}
+
+.web-code {
+  font-family: monospace;
+  font-size: 18pt;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.log-text {
+  font-family: monospace;
+  font-size: 0.85em;
+}
+
+flowbox.plain > flowboxchild {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  outline: none;
+}
+
+.legend {
+  line-height: 1.6;
+}
+
+.chart {
+  min-height: 230px;
+}

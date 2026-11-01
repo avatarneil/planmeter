@@ -45,3 +45,93 @@ jobs:
           -archivePath "$RUNNER_TEMP/PlanMeter.xcarchive"
           CODE_SIGNING_ALLOWED=NO
           archive
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container: swift:6.2-noble
+
+    steps:
+      - name: Install system libraries
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends libsqlite3-dev python3
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build portable targets
+        run: swift build
+
+      - name: Run Swift tests
+        run: swift test
+
+  linux-app:
+    # The GTK app's runtime floor: GTK 4.14 and libadwaita 1.5.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: linux
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install GTK 4 and libadwaita
+        run: >-
+          sudo apt-get update &&
+          sudo apt-get install -y --no-install-recommends
+          libgtk-4-dev libadwaita-1-dev desktop-file-utils appstream
+
+      - name: Set up Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy && rustup default stable
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Build release binaries
+        run: cargo build --locked --release
+
+      - name: Validate desktop entry and AppStream metadata
+        run: >-
+          desktop-file-validate data/com.neilgoldader.PlanMeter.desktop &&
+          appstreamcli validate --no-net data/com.neilgoldader.PlanMeter.metainfo.xml
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK packages
+        run: scripts/ensure-android-sdk.sh
+
+      - name: Test, lint, and build the Android app
+        run: ./gradlew --console=plain :protocol:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: planmeter-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

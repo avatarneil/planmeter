@@ -32,6 +32,18 @@ if ! grep -Fq "let serverVersion = \"$VERSION\"" "$ROOT/Sources/PlanMeterMCP/mai
   exit 1
 fi
 
+if ! grep -Fq "let daemonVersion = \"$VERSION\"" "$ROOT/Sources/planmeterd/Version.swift"; then
+  echo "Sources/planmeterd/Version.swift does not use version $VERSION" >&2
+  exit 1
+fi
+
+# The Linux app's package version (and its Cargo.lock entry) is what its
+# About dialog and --version report.
+if ! grep -Eq "^version = \"$VERSION\"$" "$ROOT/linux/Cargo.toml"; then
+  echo "linux/Cargo.toml does not use version $VERSION" >&2
+  exit 1
+fi
+
 IOS_VERSIONS="$(grep -E 'MARKETING_VERSION = ' "$ROOT/ios/PlanMeterMobile/PlanMeterMobile.xcodeproj/project.pbxproj" || true)"
 if [ -z "$IOS_VERSIONS" ]; then
   echo "No iOS or watchOS marketing versions found" >&2

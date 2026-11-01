@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PlanMeter</string>
+    <string name="widget_name">AI spend</string>
+    <string name="widget_description">Today\'s AI coding spend from PlanMeter on your computer, split by Personal and Work.</string>
+</resources>

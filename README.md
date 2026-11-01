@@ -3,6 +3,8 @@
 A native macOS app that shows local AI coding-agent usage split by subscription: personal plans on
 one side and work plans on the other. It reads Codex, Claude Code, Antigravity, Grok Build, and OpenCode usage,
 and includes a CLI, a read-only MCP server, and optional iPhone, iPad, Apple Watch, and web clients.
+On Linux, the headless `planmeterd` host and a native GNOME app do the same job, and an Android
+companion joins the iPhone over Tailscale.
 
 **T3 Code is optional.** PlanMeter works by itself with each provider's standard home directory and
 environment variables. When it finds T3 Code settings, it uses T3's provider instances to discover
@@ -15,10 +17,16 @@ fetched from LiteLLM and cached locally; remote access is off by default.
 
 | Component | Supported platform | Notes |
 | --- | --- | --- |
-| Mac app, CLI, MCP server | macOS 14 or newer on Apple silicon | This is the required host. Intel Macs, Windows, and Linux are not currently supported. |
-| iPhone/iPad companion | iOS/iPadOS 17 or newer | Optional; requires the Mac app, with iCloud or Tailscale. |
+| Mac app, CLI, MCP server | macOS 14 or newer on Apple silicon | A host. Intel Macs are not currently supported. |
+| `planmeterd`, CLI, MCP server | Linux (x86-64, arm64) with glibc, e.g. Ubuntu 24.04 or Debian 13 | A headless host, run as a systemd user service. See [Linux](#linux). |
+| Linux desktop app | GTK 4.14 and libadwaita 1.5 or newer | Optional; a native GNOME client of `planmeterd`. |
+| iPhone/iPad companion | iOS/iPadOS 17 or newer | Optional; requires a host, with iCloud (Mac only) or Tailscale. |
 | Apple Watch app and complication | watchOS 10 or newer | Optional; reads iCloud directly, with an iPhone relay fallback. |
-| Web client | A current browser with WebCrypto and IndexedDB | Optional; intended for a Tailscale HTTPS URL served by the Mac app. |
+| Android companion | Android 9 (API 28) or newer | Optional; requires a host and Tailscale. See [Android](#android-companion-over-tailscale). |
+| Web client | A current browser with WebCrypto and IndexedDB | Optional; intended for a Tailscale HTTPS URL served by a host. |
+
+Windows is not supported yet; [docs/cross-platform.md](docs/cross-platform.md) describes the
+cross-platform architecture and the path to it.
 
 ## Requirements
 
@@ -499,6 +507,52 @@ same token; a debug build of the iOS app accepts `--pair-url <url>` at launch so
 without the system's "Open in PlanMeter?" prompt. If codesign complains about "detritus", run
 `xattr -cr .` to strip extended attributes from source files.
 
+## Linux
+
+`planmeterd` is the Linux host: the same Swift core as the Mac app, without a UI. It scans
+transcripts every 30 seconds, serves a control API on a Unix socket for desktop apps, and, when
+remote access is on, the same end-to-end encrypted API the iPhone, Android, and web clients use
+over Tailscale. It also runs on headless dev boxes and servers, so a phone can see usage from
+agents running there.
+
+```sh
+swift build -c release   # planmeterd, planmeter-cli, planmeter-mcp
+install -Dm755 .build/release/planmeterd ~/.local/bin/planmeterd
+install -Dm644 packaging/linux/planmeterd.service ~/.config/systemd/user/planmeterd.service
+systemctl --user enable --now planmeterd
+```
+
+Building needs the Swift 6 toolchain and `libsqlite3-dev`. Settings live in
+`~/.config/planmeter`, state (caches, the server key, paired devices) in
+`~/.local/state/planmeter`. See [packaging/linux](packaging/linux/README.md) for remote access,
+files, and flags.
+
+The desktop app in [`linux/`](linux/README.md) is written in Rust with GTK 4 and libadwaita. It
+shows the dashboard, accounts, plan limits, spend limits with desktop notifications, and the
+Remote page for pairing phones. It reads everything from `planmeterd`. Build it with `cargo build
+--release` in `linux/` (needs `libgtk-4-dev` and `libadwaita-1-dev`).
+
+On Linux:
+
+- Codex account-wide readings use the Codex CLI from `PATH` or common install locations.
+  Dated cloud turns need libcurl WebSocket support, which Ubuntu's libcurl lacks, so that
+  reading is shown as unavailable there.
+- iCloud sync is Apple-only. Remote access uses Tailscale; the web client over HTTPS also needs
+  `sudo tailscale set --operator=$USER` so the daemon can run `tailscale serve`.
+- There is no tray icon or desktop widget yet.
+
+## Android companion over Tailscale
+
+[`android/`](android/README.md) is a native Kotlin and Jetpack Compose app with the iPhone app's
+Tailscale mode: QR or link pairing, the dashboard with ranges, group and account totals, a
+per-account chart, models, plan limits, and accounts, plus a home-screen widget and an optional
+biometric lock. It uses the same protocol and security model as the iPhone. The device key is a
+P-256 key in the Android Keystore (StrongBox when available), and requests go only to Tailscale
+addresses. It pairs with the Mac app or `planmeterd`. There is no iCloud mode.
+
+Build the APKs in Docker with `android/scripts/docker-gradle.sh`; no local JDK or Android SDK is
+needed. There is no Play Store listing; sideload the APK (see the Android README).
+
 ## Build and development
 
 ```sh
@@ -509,7 +563,15 @@ ICLOUD_PROVISIONING_PROFILE='/path/to/PlanMeter.provisionprofile' make release-m
 make run          # build and open
 make install      # copy to /Applications (quits a running copy first)
 make install-mcp  # register the bundled MCP server with Claude Code, Codex, OpenCode
+make linux-test   # the portable Swift targets and planmeterd on Linux, in Docker
+make linux-smoke  # run planmeterd in Docker and exercise its control and remote APIs
+linux/docker/dev.sh cargo test        # the Linux desktop app, in Docker
+android/scripts/docker-gradle.sh      # Android tests, lint, and APK, in Docker
 ```
+
+The remote protocol is specified in [protocol/README.md](protocol/README.md). Its golden fixtures
+in `protocol/fixtures/` are generated by the Swift tests and checked by the Kotlin and Rust
+suites, so every implementation stays byte-compatible.
 
 Release ZIPs keep AppleDouble metadata outside the signed app and must pass signature,
 notarization, and Gatekeeper checks after both `ditto` and `unzip` extraction.
@@ -519,7 +581,8 @@ exits; `--snapshot-menu out.png` renders the menu bar popover. `planmeter-cli --
 prints the same numbers in the terminal.
 
 CI runs the Swift test suite, produces the macOS app bundle, and compiles the iOS/watchOS project for
-the simulator. Tests can read locally installed provider data only when explicitly exercised; the
+the simulator. Separate jobs build and test the Swift targets on Linux, the Linux desktop app on
+Ubuntu 24.04 (its GTK and libadwaita floor), and the Android app. Tests can read locally installed provider data only when explicitly exercised; the
 unit suite does not require provider credentials or T3 Code.
 
 ## Layout
@@ -533,6 +596,12 @@ unit suite does not require provider credentials or T3 Code.
 - `ios/PlanMeterMobile` – the iOS companion, watchOS app, and watch complication (one Xcode
   project referencing this package). `Sources/PlanMeterWatchShared` – the phone-to-watch payload.
 - `Sources/PlanMeterMCP` – stdio MCP server. `Sources/PlanMeterCLI` – terminal report.
+- `Sources/PlanMeterHost` – the host side shared by the Mac app and `planmeterd`: report building,
+  pairing and RPC handling, the portable HTTP listener, the control API, and the daemon's engine.
+- `Sources/planmeterd` – the headless Linux host. `packaging/linux` – its systemd user unit.
+- `linux/` – the GTK 4 / libadwaita desktop app (Rust). `android/` – the Android companion (Kotlin).
+- `protocol/` – the remote protocol specification and golden fixtures shared by every client.
+- `docs/cross-platform.md` – the cross-platform design.
 - `Tests/PlanMeterCoreTests` – parser and pricing fixtures.
 - `scripts/bundle.sh` – wraps the three binaries in an `.app`; `scripts/install-mcp.sh` registers
   the MCP server with each agent; `scripts/release-macos.sh` signs, notarizes, and packages an
@@ -542,7 +611,7 @@ unit suite does not require provider credentials or T3 Code.
 
 PlanMeter reads local transcript and identity files to attribute usage. It stores its scan cache,
 pricing cache, group choices, and remote-pairing state under the current user's Application Support
-directory. Do not publish those local files or pairing links. Remote access is opt-in and restricted
+directory (on Linux, `~/.local/state/planmeter` and `~/.config/planmeter`). Do not publish those local files or pairing links. Remote access is opt-in and restricted
 to Tailscale or loopback peers. Optional iCloud sync uploads aggregate snapshots to your private
 CloudKit database; see the separate data scope and deletion controls above.
 
