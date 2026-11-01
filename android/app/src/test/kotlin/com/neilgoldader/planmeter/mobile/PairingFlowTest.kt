@@ -97,9 +97,9 @@ class PairingFlowTest {
             )))
             assertEquals(FakeData.models.size, state.dashboard.data!!.models.size)
 
-            // Persisted, along with a widget snapshot.
+            // Persisted, along with a widget snapshot (saved just after the data is shown).
             assertEquals(server, io { app.graph.store.current().server })
-            assertNotNull(io { app.graph.store.widgetSnapshot() })
+            await("widget snapshot") { io { app.graph.store.widgetSnapshot() } != null }
 
             // The last hour asks for a sub-day window plus a day for the widget.
             vm.setRange(MobileRange.HOUR)
