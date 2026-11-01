@@ -15,8 +15,10 @@ import Foundation
 /// header + hash of ciphertext with its device key. The server verifies the
 /// signature against the paired key, checks the clock window and nonce,
 /// decrypts, and answers under the response key. Each request has its own
-/// ephemeral key, so recorded traffic cannot be decrypted later even if a
-/// static key leaks.
+/// ephemeral key, so requests' keys are independent. The server's half is its
+/// static key, though: anyone who later obtains the server's private key can
+/// decrypt recorded traffic (no forward secrecy; see protocol/README.md).
+/// Device keys only sign, so a leaked device key exposes no recorded traffic.
 ///
 /// The AEAD is negotiated per request: native clients use ChaCha20-Poly1305,
 /// browsers use AES-256-GCM because WebCrypto has no ChaCha. Both use a

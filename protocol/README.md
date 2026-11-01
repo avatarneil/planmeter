@@ -283,8 +283,13 @@ Error responses (any status other than `200`) are **not** encrypted; see
 
 ### Security properties (informative)
 
-- Each request uses a fresh ephemeral key, so recorded traffic stays confidential even if the
-  server static key or a device key later leaks.
+- Device keys only sign, so a leaked device key exposes no recorded traffic; it lets the holder
+  send requests as that device until it is removed.
+- v1 has **no forward secrecy against the server's static key**. Every request and response key
+  comes from ECDH between the request's ephemeral key, which travels in the clear, and the
+  server's static key. Anyone who records traffic and later obtains the server's private key can
+  decrypt it. The fresh ephemeral key per request only keeps requests' keys independent of each
+  other. Closing this would need a server ephemeral key, which is a protocol change.
 - The header binds the method, path, device id, timestamp, nonce, ephemeral key, and cipher into
   both the AEAD and the signature. Changing any of them, or relabelling the cipher, fails both.
 - The signature proves possession of the paired device key; the AEAD alone does not, because
