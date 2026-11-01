@@ -108,6 +108,37 @@ final class HostEngineTests: XCTestCase {
         await background.value
     }
 
+    func testPlanLimitsReachTheLimitsReply() async throws {
+        let dir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let claude = Account(id: "claude:home:/h/.claude/projects", provider: .claude, displayName: "Claude Max", suggestedGroup: .personal, sourceDescription: "test")
+        var discovery = Discovery(accounts: [claude])
+        discovery.planLimitTargets = [PlanLimitTarget(accountId: claude.id, provider: .claude)]
+        var loader = HostEngine.Loader.fixed(discovery: discovery, scan: ScanOutput(), rates: RateTable(source: "cached"))
+        let resetsAt = Date(timeIntervalSince1970: 1_800_000_000)
+        loader.planLimits = { targets, _ in
+            targets.map { target in
+                var snapshot = PlanLimitSnapshot(target: target)
+                snapshot.windows = [
+                    PlanLimitWindow(id: "five_hour", label: "5-hour", usedPercent: 42, windowMinutes: 300, resetsAt: resetsAt),
+                    PlanLimitWindow(id: "credits", label: "Credits", usedPercent: 10),
+                ]
+                snapshot.status = .ok
+                snapshot.fetchedAt = resetsAt
+                return snapshot
+            }
+        }
+        let engine = HostEngine(serverName: "box", scanCache: dir.appendingPathComponent("scan-cache.json"), loader: loader)
+        await engine.refresh()
+        XCTAssertEqual(engine.planLimits[claude.id]?.windows.count, 2)
+        let limits = await engine.reply(for: RemoteRequest(method: .limits)).limits
+        let row = try XCTUnwrap(limits?.accounts.first { $0.id == claude.id })
+        // Untimed quotas stay out of remote replies, as from the Mac.
+        XCTAssertEqual(row.windows.map(\.label), ["5-hour"])
+        XCTAssertEqual(row.asOf, resetsAt)
+        XCTAssertNotNil(row.note)
+    }
+
     func testRepliesWaitForTheFirstScan() async throws {
         let gate = ScanGate()
         let now = nowMs

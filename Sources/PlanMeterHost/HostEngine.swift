@@ -24,6 +24,7 @@ public final class HostEngine: RemoteReportSource {
         public var accountUsage: @Sendable ([CodexUsageTarget], Bool) async -> [AccountUsageSnapshot]
         public var dailyUsage: @Sendable ([CodexUsageTarget], Bool) async -> [CodexDailyUsageSnapshot]
         public var cloudUsage: @Sendable ([CodexUsageTarget], Bool) async -> [CodexCloudUsageSnapshot]
+        public var planLimits: @Sendable ([PlanLimitTarget], Bool) async -> [PlanLimitSnapshot]
         public var loadCachedRates: @Sendable () -> RateTable?
         public var fetchRates: @Sendable () async throws -> RateTable
 
@@ -34,20 +35,23 @@ public final class HostEngine: RemoteReportSource {
                     dailyUsage: @escaping @Sendable ([CodexUsageTarget], Bool) async -> [CodexDailyUsageSnapshot],
                     cloudUsage: @escaping @Sendable ([CodexUsageTarget], Bool) async -> [CodexCloudUsageSnapshot],
                     loadCachedRates: @escaping @Sendable () -> RateTable?,
-                    fetchRates: @escaping @Sendable () async throws -> RateTable) {
+                    fetchRates: @escaping @Sendable () async throws -> RateTable,
+                    planLimits: @escaping @Sendable ([PlanLimitTarget], Bool) async -> [PlanLimitSnapshot] = { _, _ in [] }) {
             self.discover = discover
             self.scan = scan
             self.threadCatalog = threadCatalog
             self.accountUsage = accountUsage
             self.dailyUsage = dailyUsage
             self.cloudUsage = cloudUsage
+            self.planLimits = planLimits
             self.loadCachedRates = loadCachedRates
             self.fetchRates = fetchRates
         }
 
         /// The real thing. `pricingCache` is where fetched prices are kept;
-        /// `offline` skips every network call (Codex account-wide readings and
-        /// the pricing refresh) and reports from local data only.
+        /// `offline` skips every network call (Codex account-wide readings,
+        /// Claude Code and Antigravity plan limits, and the pricing refresh)
+        /// and reports from local data only.
         public static func live(pricingCache: URL, offline: Bool = false) -> Loader {
             Loader(
                 discover: { AccountDiscovery.discover(settings: T3Settings.load()) },
@@ -62,7 +66,8 @@ public final class HostEngine: RemoteReportSource {
                 fetchRates: {
                     if offline { throw HostEngineError.offline }
                     return try await PricingLoader.fetch(cacheURL: pricingCache)
-                }
+                },
+                planLimits: { targets, force in offline ? [] : await PlanLimits.shared.load(targets: targets, force: force) }
             )
         }
     }
@@ -92,6 +97,8 @@ public final class HostEngine: RemoteReportSource {
     public var cloudUsage: [CodexCloudUsageSnapshot] = []
     public var threadCatalog: [String: ThreadLink] = [:]
     public var rateLimits: [String: RateLimitSnapshot] = [:]
+    /// Claude Code and Antigravity windows read from the provider, by account id.
+    public var planLimits: [String: PlanLimitSnapshot] = [:]
     public var sources: [SourceReport] = []
     public var rates = RateTable()
     public var groupOverrides: [String: PlanGroup]
@@ -212,9 +219,11 @@ public final class HostEngine: RemoteReportSource {
         lastScan = output.scannedAt
         async let daily = loader.dailyUsage(targets, forceAccountUsage)
         async let cloud = loader.cloudUsage(targets, forceAccountUsage)
+        async let limits = loader.planLimits(discovery.planLimitTargets, forceAccountUsage)
         accountUsage = await loader.accountUsage(targets, forceAccountUsage)
         dailyUsage = await daily
         cloudUsage = await cloud
+        planLimits = Dictionary((await limits).map { ($0.target.accountId, $0) }, uniquingKeysWith: { first, _ in first })
         let combined = CodexCloudProjection.merging(cloudUsage, into: output)
         cells = combined.cells
         threadCells = combined.threads

@@ -19,6 +19,8 @@ public protocol RemoteReportSource: AnyObject {
     var lastScan: Date? { get }
     var rates: RateTable { get }
     var rateLimits: [String: RateLimitSnapshot] { get }
+    /// Claude Code and Antigravity windows read from the provider, by account id.
+    var planLimits: [String: PlanLimitSnapshot] { get }
     var sources: [SourceReport] { get }
     /// The name remote clients show for this host.
     var reportServerName: String { get }
