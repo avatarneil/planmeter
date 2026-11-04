@@ -94,26 +94,37 @@ public enum TailscaleServe {
         process.terminationHandler = { _ in exited.signal() }
         do { try process.run() } catch { return Result(ok: false, standardError: error.localizedDescription) }
         let deadline = DispatchTime.now() + timeout
-        // Drain both streams as data arrives so neither pipe can block the
-        // child. Diagnostics stay separate from the JSON on stdout.
-        let capture = PipeCapture([out.fileHandleForReading, err.fileHandleForReading])
-        // Once the child has exited, its output is at most moments behind,
-        // even right at the deadline.
-        let finished = exited.wait(timeout: deadline) == .success
-            && capture.waitForEnd(until: max(deadline, .now() + 0.5))
-        if !finished {
-            if process.isRunning {
-                process.terminate()
-                // Bound teardown even if the child ignores SIGTERM.
-                if exited.wait(timeout: .now() + 0.5) != .success, process.isRunning {
-                    kill(process.processIdentifier, SIGKILL)
-                    _ = exited.wait(timeout: .now() + 0.5)
-                }
-            }
-            // Let the readers collect what the child wrote before it stopped.
-            _ = capture.waitForEnd(until: .now() + 0.2)
+        // Read both streams as data arrives so neither pipe can block the
+        // child. Diagnostics stay separate from the JSON on stdout. Polling
+        // on this thread, not blocking reads elsewhere: a descendant that
+        // inherited a pipe can hold it open forever, and a reader blocked on
+        // it could never be stopped.
+        var reader = PipeReader([out.fileHandleForReading.fileDescriptor, err.fileHandleForReading.fileDescriptor])
+        var reachedEnd = reader.drain(until: deadline)
+        // A child that exited right at the deadline is at most moments behind.
+        if !reachedEnd, !process.isRunning { reachedEnd = reader.drain(until: .now() + 0.2) }
+        var didExit = false
+        if reachedEnd {
+            // The pipes close as the child exits, so this is near-immediate.
+            didExit = exited.wait(timeout: max(deadline, .now()) + 0.5) == .success
         }
-        let streams = capture.data.map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let finished = reachedEnd && didExit
+        if !didExit {
+            if process.isRunning { process.terminate() }
+            didExit = exited.wait(timeout: .now() + 0.5) == .success
+            // Bound teardown even if the child ignores SIGTERM.
+            if !didExit, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                didExit = exited.wait(timeout: .now() + 0.5) == .success
+            }
+        }
+        // Collect what a stopped child wrote before it went.
+        if !finished { _ = reader.drain(until: .now() + 0.2) }
+        // Returns at once after the termination handler ran, and lets
+        // swift-corelibs-foundation release the child's run-loop source,
+        // which otherwise leaks descriptors on every call.
+        if didExit { process.waitUntilExit() }
+        let streams = reader.buffers.map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
         guard finished else {
             let note = "The Tailscale CLI did not finish within \(Int(timeout)) seconds."
             return Result(ok: false, standardOutput: streams[0], standardError: [streams[1], note].filter { !$0.isEmpty }.joined(separator: "\n"))
@@ -297,38 +308,41 @@ public enum TailscaleInfo {
     }
 }
 
-/// Reads a child's output streams on background threads. Blocking reads
-/// rather than readability handlers: on Linux a handler can miss end of file.
-/// A reader stays blocked only while something still holds the pipe open,
-/// such as a descendant of a child that was stopped.
-private final class PipeCapture: @unchecked Sendable {
-    private let lock = NSLock()
-    private var buffers: [Data]
-    private let readers = DispatchGroup()
+/// Reads a child's output pipes with `poll`, so reading can stop at a
+/// deadline even when something still holds a pipe open.
+private struct PipeReader {
+    private let descriptors: [Int32]
+    private var open: [Bool]
+    private(set) var buffers: [Data]
 
-    init(_ handles: [FileHandle]) {
-        buffers = Array(repeating: Data(), count: handles.count)
-        for (index, handle) in handles.enumerated() {
-            readers.enter()
-            DispatchQueue.global(qos: .utility).async { [self] in
-                while case let data = handle.availableData, !data.isEmpty {
-                    lock.lock()
-                    buffers[index].append(data)
-                    lock.unlock()
+    init(_ descriptors: [Int32]) {
+        self.descriptors = descriptors
+        open = Array(repeating: true, count: descriptors.count)
+        buffers = Array(repeating: Data(), count: descriptors.count)
+    }
+
+    /// True once every stream reached end of file; false at `deadline`.
+    mutating func drain(until deadline: DispatchTime) -> Bool {
+        var chunk = [UInt8](repeating: 0, count: 64 * 1024)
+        while open.contains(true) {
+            let now = DispatchTime.now()
+            guard now < deadline else { return false }
+            let milliseconds = Int32(min((deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000 + 1, 1000))
+            let waiting = descriptors.indices.filter { open[$0] }
+            var entries = waiting.map { pollfd(fd: descriptors[$0], events: Int16(POLLIN), revents: 0) }
+            if poll(&entries, nfds_t(entries.count), milliseconds) < 0 {
+                if errno == EINTR { continue }
+                return false
+            }
+            for (index, entry) in zip(waiting, entries) where entry.revents != 0 {
+                let count = chunk.withUnsafeMutableBytes { read(entry.fd, $0.baseAddress, $0.count) }
+                if count > 0 {
+                    buffers[index].append(contentsOf: chunk[..<count])
+                } else if count == 0 || (errno != EINTR && errno != EAGAIN) {
+                    open[index] = false
                 }
-                readers.leave()
             }
         }
-    }
-
-    /// True once every stream reached end of file before `deadline`.
-    func waitForEnd(until deadline: DispatchTime) -> Bool {
-        readers.wait(timeout: deadline) == .success
-    }
-
-    var data: [Data] {
-        lock.lock()
-        defer { lock.unlock() }
-        return buffers
+        return true
     }
 }

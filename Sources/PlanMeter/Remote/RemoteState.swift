@@ -85,7 +85,9 @@ final class RemoteState {
         bindAddress = TailscaleInfo.ipv4()
         // The MagicDNS name comes from the Tailscale CLI, which must never
         // run on the main actor (this runs during app launch), so
-        // `refreshHTTPSStatus` fills it in.
+        // `refreshHTTPSStatus` fills it in. Until then invites use the
+        // address, never a name from before the restart.
+        magicDNSName = nil
         guard let bindAddress else {
             status = "Tailscale is not connected. Remote access only listens on the tailnet."
             isListening = false

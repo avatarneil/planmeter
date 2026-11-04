@@ -60,6 +60,21 @@ final class TailscaleServeTests: XCTestCase {
         XCTAssertEqual(result.standardOutput, "started")
     }
 
+    #if os(Linux)
+    /// swift-corelibs-foundation releases a finished child's resources in
+    /// `waitUntilExit`; skipping it leaked descriptors on every call, and
+    /// the daemon probes Tailscale every 30 seconds.
+    func testRepeatedRunsDoNotLeakDescriptors() throws {
+        func openDescriptors() throws -> Int { try FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd").count }
+        _ = TailscaleServe.run(["-c", "echo warm"], executableURL: URL(fileURLWithPath: "/bin/sh"))
+        let before = try openDescriptors()
+        for _ in 0..<10 {
+            XCTAssertTrue(TailscaleServe.run(["-c", "echo ok"], executableURL: URL(fileURLWithPath: "/bin/sh")).ok)
+        }
+        XCTAssertLessThan(try openDescriptors() - before, 5)
+    }
+    #endif
+
     func testLargeOutputOnBothStreamsIsDrained() {
         let result = TailscaleServe.run([
             "-c", "head -c 300000 /dev/zero | tr '\\0' a; head -c 300000 /dev/zero | tr '\\0' b >&2",
