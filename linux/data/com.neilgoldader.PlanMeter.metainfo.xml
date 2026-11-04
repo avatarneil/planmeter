@@ -54,6 +54,11 @@
   </branding>
 
   <releases>
+    <release version="0.4.2" date="2026-11-03">
+      <description>
+        <p>Redesigned Apple Watch app and a new overview on iPhone.</p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-11-03">
       <description>
         <p>Tailscale commands now time out instead of waiting forever.</p>

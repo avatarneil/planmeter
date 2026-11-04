@@ -31,6 +31,7 @@ struct DashboardView: View {
                                 .font(.caption).foregroundStyle(.orange)
                         }
                     }
+                    OverviewCard(summary: summary, timeline: model.timeline)
                     ForEach(summary.groups) { group in
                         GroupCardView(group: group, total: summary.total)
                     }
@@ -60,6 +61,7 @@ struct DashboardView: View {
             .padding()
         }
         .background(Color(.systemGroupedBackground))
+        .animation(.snappy, value: model.summary?.total.costUsd)
         .refreshable { await model.refresh() }
     }
 }
@@ -88,6 +90,7 @@ struct GroupCardView: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(Fmt.usd(group.totals.costUsd)).font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .contentTransition(.numericText(value: group.totals.costUsd))
                 Text("\(Fmt.tokens(group.totals.tokens)) tokens").foregroundStyle(.secondary)
             }
             GeometryReader { geo in
@@ -133,6 +136,9 @@ struct GroupCardView: View {
 struct TimelineCard: View {
     @Environment(MobileModel.self) private var model
     var timeline: RemoteTimeline
+    /// Sticky: Swift Charts clears its selection when the finger lifts.
+    @State private var selection: Date?
+    @State private var scrubbing: Date?
 
     private struct Segment: Identifiable {
         var id: String
@@ -178,6 +184,22 @@ struct TimelineCard: View {
         return first...max(end, first.addingTimeInterval(60))
     }
 
+    /// The bucket under the finger, with its span and total.
+    private func selected(_ date: Date?) -> (start: Date, end: Date, cost: Double)? {
+        guard let date, let start = timeline.periods.last(where: { $0 <= date }) ?? timeline.points.map(\.period).filter({ $0 <= date }).max() else { return nil }
+        let end = RemoteTimeline.stepSeconds(timeline.resolution).map { start.addingTimeInterval($0) }
+            ?? Calendar.current.dateInterval(of: .day, for: start)?.end ?? start.addingTimeInterval(86_400)
+        guard date < end else { return nil }
+        return (start, end, timeline.points.filter { $0.period == start }.reduce(0) { $0 + $1.costUsd })
+    }
+
+    private func detail(_ date: Date) -> String {
+        switch timeline.resolution {
+        case "minute", "5m", "15m", "hour": return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        default: return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        }
+    }
+
     private func label(_ date: Date) -> String {
         switch timeline.resolution {
         case "minute", "5m": return date.formatted(.dateTime.hour().minute())
@@ -190,9 +212,25 @@ struct TimelineCard: View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Cost over time").font(.headline)
-                Spacer()
-                if model.availableGranularities.count > 1 {
+                if let picked = selected(selection) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(detail(picked.start)).font(.caption).foregroundStyle(.secondary)
+                        Text(Fmt.usd(picked.cost)).font(.system(.title3, design: .rounded, weight: .semibold)).monospacedDigit()
+                            .contentTransition(.numericText(value: picked.cost))
+                    }
+                    Spacer()
+                    Button { selection = nil } label: { Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary) }
+                        .accessibilityLabel("Clear selection")
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Cost over time").font(.headline)
+                        if !timeline.points.isEmpty {
+                            Text("Tap a bar for details").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                }
+                if selected(selection) == nil, model.availableGranularities.count > 1 {
                     Picker("Bucket size", selection: $model.granularity) {
                         ForEach(model.availableGranularities, id: \.self) { Text(MobileRange.label(granularity: $0)).tag($0) }
                     }
@@ -203,16 +241,32 @@ struct TimelineCard: View {
             if timeline.points.isEmpty {
                 Text("No usage in this range.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
             } else {
-                Chart(segments) { segment in
-                    RectangleMark(
-                        xStart: .value("Start", segment.start),
-                        xEnd: .value("End", segment.end),
-                        yStart: .value("Cost", segment.low),
-                        yEnd: .value("Cost", segment.high)
-                    )
-                    .foregroundStyle(by: .value("Account", segment.account))
-                    .opacity(segment.baseline ? 0.35 : 1)
+                let picked = selected(selection)
+                Chart {
+                    ForEach(segments) { segment in
+                        RectangleMark(
+                            xStart: .value("Start", segment.start),
+                            xEnd: .value("End", segment.end),
+                            yStart: .value("Cost", segment.low),
+                            yEnd: .value("Cost", segment.high)
+                        )
+                        .foregroundStyle(by: .value("Account", segment.account))
+                        .opacity(picked == nil || picked?.start == segment.start ? (segment.baseline ? 0.35 : 1) : 0.3)
+                    }
+                    if let picked {
+                        RuleMark(x: .value("Selected", picked.start.addingTimeInterval(picked.end.timeIntervalSince(picked.start) * 0.44)))
+                            .foregroundStyle(Color.primary.opacity(0.25))
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                    }
                 }
+                .chartXSelection(value: $scrubbing)
+                // A tap, rather than the default long-press drag, which fights the scroll view.
+                .chartGesture { proxy in
+                    SpatialTapGesture().onEnded { proxy.selectXValue(at: $0.location.x) }
+                }
+                .onChange(of: scrubbing) { _, date in if let date, selected(date) != nil { selection = date } }
+                .onChange(of: timeline) { selection = nil }
+                .sensoryFeedback(.selection, trigger: picked?.start)
                 .chartForegroundStyleScale(domain: timeline.accounts.map(\.name), range: timeline.accounts.map { model.color(for: $0.id) })
                 .chartXScale(domain: domain)
                 .chartXAxis {
@@ -249,7 +303,17 @@ struct LimitsCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Plan limits").font(.headline)
+            HStack {
+                Text("Plan limits").font(.headline)
+                Spacer()
+                let near = limits.accounts.flatMap(\.windows).filter { $0.usedPercent >= 90 }.count
+                if near > 0 {
+                    Label("\(near) near limit", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.red)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.red.opacity(0.12), in: Capsule())
+                }
+            }
             ForEach(limits.accounts) { entry in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -264,12 +328,13 @@ struct LimitsCardView: View {
                             HStack {
                                 Text(w.label).font(.caption)
                                 Spacer()
-                                Text("\(Int(w.usedPercent.rounded()))% · resets \(Fmt.relative(w.resetsAt))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                                Text("\(Int(w.usedPercent.rounded()))%").font(.caption.weight(.semibold)).foregroundStyle(Palette.usage(w.usedPercent)).monospacedDigit()
+                                Text("· resets \(Fmt.relative(w.resetsAt))").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                             }
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
                                     Capsule().fill(Color.secondary.opacity(0.15))
-                                    Capsule().fill(w.usedPercent > 90 ? Color.red : w.usedPercent > 70 ? Color.orange : Color.accentColor)
+                                    Capsule().fill(Palette.usage(w.usedPercent))
                                         .frame(width: max(0, min(1, w.usedPercent / 100)) * geo.size.width)
                                 }
                             }
@@ -299,6 +364,7 @@ struct ModelsCard: View {
                     Button(showAll ? "Show less" : "Show all \(rows.count)") { showAll.toggle() }.font(.caption)
                 }
             }
+            let top = rows.map(\.totals.costUsd).max() ?? 0
             ForEach(showAll ? rows : Array(rows.prefix(6))) { row in
                 HStack(spacing: 8) {
                     Circle().fill(Palette.group(row.group)).frame(width: 7, height: 7)
@@ -311,6 +377,16 @@ struct ModelsCard: View {
                         Text(row.priced ? Fmt.usd(row.totals.costUsd) : "unpriced").font(.callout).monospacedDigit()
                         Text(Fmt.tokens(row.totals.tokens)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                     }
+                }
+                .padding(.vertical, 2)
+                .background(alignment: .bottomLeading) {
+                    // Share of the top model, as a faint underline.
+                    GeometryReader { geo in
+                        Capsule().fill(Palette.group(row.group).opacity(0.35))
+                            .frame(width: geo.size.width * (top > 0 && row.priced ? row.totals.costUsd / top : 0), height: 2)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                    .offset(y: 3)
                 }
             }
         }
