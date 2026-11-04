@@ -25,7 +25,6 @@ struct WatchRootView: View {
                     SourcePage(payload: payload).tag(4)
                 }
                 .tabViewStyle(.verticalPage)
-                .navigationTitle("PlanMeter")
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
@@ -39,7 +38,6 @@ struct WatchRootView: View {
                 .sensoryFeedback(.success, trigger: payload.updatedAt)
             } else {
                 EmptyStateView()
-                    .navigationTitle("PlanMeter")
             }
         }
     }
@@ -55,12 +53,6 @@ struct SummaryPage: View {
         TimelineView(.everyMinute) { context in
             content(now: context.date)
         }
-        .containerBackground(Palette.glow(Palette.group(dominantGroup)), for: .tabView)
-    }
-
-    private var dominantGroup: String {
-        let groups = payload.todayCostByGroup ?? ["personal": payload.personalCostUsd, "work": payload.workCostUsd, "other": payload.otherCostUsd]
-        return groups.max { $0.value < $1.value }?.key ?? "personal"
     }
 
     private func content(now: Date) -> some View {
@@ -159,9 +151,8 @@ struct SpendRing<Center: View>: View {
                     let to = max(from + 0.0001, arc.to - inset)
                     Circle()
                         .trim(from: from * drawn, to: to * drawn)
-                        .stroke(arc.color.gradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .stroke(arc.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .shadow(color: arc.color.opacity(0.6), radius: 4)
                 }
                 center
             }
@@ -233,7 +224,7 @@ struct ShareBar: View {
             HStack(spacing: spacing) {
                 if total > 0 {
                     ForEach(Array(visible.enumerated()), id: \.offset) { _, part in
-                        Capsule().fill(part.color.gradient).frame(width: max(geo.size.height, width * part.value / total))
+                        Capsule().fill(part.color).frame(width: max(geo.size.height, width * part.value / total))
                     }
                 } else {
                     Capsule().fill(.white.opacity(0.14))
@@ -333,7 +324,7 @@ struct ActivityPage: View {
                         ForEach(segments) { segment in
                             RectangleMark(xStart: .value("Start", segment.start), xEnd: .value("End", segment.end),
                                           yStart: .value("Cost", segment.low), yEnd: .value("Cost", segment.high))
-                                .foregroundStyle(Palette.group(segment.group).gradient.opacity(segment.baseline ? 0.35 : 1))
+                                .foregroundStyle(Palette.group(segment.group).opacity(segment.baseline ? 0.35 : 1))
                                 .cornerRadius(1.5)
                         }
                         if bars.count > 1 {
@@ -368,8 +359,6 @@ struct ActivityPage: View {
             .padding(.horizontal, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .containerBackground(LinearGradient(colors: [Palette.work.opacity(0.45), Palette.personal.opacity(0.2), .black],
-                                            startPoint: .top, endPoint: .bottom), for: .tabView)
     }
 
     private func pace(_ total: Double, now: Date) -> String {
@@ -458,7 +447,6 @@ struct LimitsPage: View {
                 .padding(.horizontal, 4)
             }
         }
-        .containerBackground(Palette.glow(payload.limits.isEmpty ? .gray : Palette.usage(worst)), for: .tabView)
     }
 
     private func group(for account: String) -> String {
@@ -485,7 +473,7 @@ struct UsageRing: View {
             Circle().stroke(color.opacity(0.2), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: min(1, max(0.005, percent / 100)) * drawn)
-                .stroke(color.gradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Text("\(Int(percent.rounded()))%")
                 .font(.system(size: 13, weight: .bold, design: .rounded))
@@ -530,7 +518,7 @@ struct AccountsPage: View {
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(.white.opacity(0.1))
-                                Capsule().fill(color.gradient)
+                                Capsule().fill(color)
                                     .frame(width: max(3, geo.size.width * (top > 0 ? account.costUsd / top : 0)))
                             }
                         }
@@ -542,7 +530,6 @@ struct AccountsPage: View {
             }
             .padding(.horizontal, 4)
         }
-        .containerBackground(Palette.glow(Palette.work), for: .tabView)
     }
 }
 
@@ -592,7 +579,6 @@ struct SourcePage: View {
             }
             .padding(.horizontal, 4)
         }
-        .containerBackground(Palette.glow(Palette.personal), for: .tabView)
     }
 }
 
@@ -618,7 +604,6 @@ struct EmptyStateView: View {
             }
             .padding(.horizontal, 4)
         }
-        .containerBackground(Palette.glow(Palette.personal), for: .navigation)
     }
 }
 
@@ -659,10 +644,5 @@ enum Palette {
         case "antigravity": return "arrow.up.forward"
         default: return "cpu"
         }
-    }
-
-    /// A soft top glow fading to black, the watchOS 10 page background.
-    static func glow(_ color: Color) -> LinearGradient {
-        LinearGradient(colors: [color.opacity(0.5), color.opacity(0.12), .black], startPoint: .top, endPoint: .bottom)
     }
 }
