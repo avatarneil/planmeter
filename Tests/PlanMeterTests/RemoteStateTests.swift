@@ -21,9 +21,10 @@ final class RemoteStateTests: XCTestCase {
     }
 
     private final class Calls: @unchecked Sendable {
-        let lock = NSLock()
-        var count = 0
-        func next() -> Int { lock.lock(); defer { lock.unlock() }; count += 1; return count }
+        private let lock = NSLock()
+        private var calls = 0
+        var count: Int { lock.lock(); defer { lock.unlock() }; return calls }
+        func next() -> Int { lock.lock(); defer { lock.unlock() }; calls += 1; return calls }
     }
 
     /// A refresh that began before a restart (stop) must not overwrite the
