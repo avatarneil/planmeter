@@ -70,23 +70,23 @@ final class TailscaleServeTests: XCTestCase {
     }
 
     #if os(macOS)
-    /// Running the app's binary while the app is closed starts the app, and
-    /// that process never exits, so it is only used while the app runs.
-    func testAppBinaryIsOnlyUsedWhileTheAppRuns() {
-        let app = TailscaleServe.appCLIPath
-        let brew = "/opt/homebrew/bin/tailscale"
-        let candidates = [app, brew]
-        var checks = 0
-        let running = { () -> Bool in checks += 1; return true }
-        let closed = { () -> Bool in checks += 1; return false }
-        XCTAssertEqual(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { _ in true }, appIsRunning: running), app)
-        XCTAssertEqual(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { _ in true }, appIsRunning: closed), brew)
-        XCTAssertNil(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { $0 == app }, appIsRunning: closed))
-        checks = 0
-        XCTAssertEqual(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { $0 == brew }, appIsRunning: closed), brew)
-        XCTAssertEqual(checks, 0, "no app check when only Homebrew's CLI is installed")
+    /// The Tailscale app's binary picks CLI or GUI behavior on its own; as a
+    /// GUI it never exits. Every run forces CLI behavior.
+    func testRunForcesCLIBehavior() {
+        let result = TailscaleServe.run(["-c", "printf '%s' \"$TAILSCALE_BE_CLI:${HOME:+home}\""],
+                                        executableURL: URL(fileURLWithPath: "/bin/sh"))
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.standardOutput, "true:home", "forced, and the rest of the environment is kept")
     }
     #endif
+
+    func testMagicDNSNameFromStatus() {
+        let named = #"{"BackendState":"Running","Self":{"DNSName":"mac.tail1234.ts.net."}}"#
+        XCTAssertEqual(TailscaleInfo.magicDNSName(fromStatus: .init(ok: true, standardOutput: named)), .some("mac.tail1234.ts.net"))
+        let unnamed = #"{"BackendState":"NeedsLogin","Self":{}}"#
+        XCTAssertEqual(TailscaleInfo.magicDNSName(fromStatus: .init(ok: true, standardOutput: unnamed)), .some(nil))
+        XCTAssertNil(TailscaleInfo.magicDNSName(fromStatus: .init(ok: false, standardError: "The Tailscale CLI did not finish within 10 seconds.")))
+    }
 
     func testInvalidJSONIsNotReportedAsDisabledCertificates() {
         let status = TailscaleServe.certificateStatus(from: .init(ok: true, standardOutput: "not JSON"))

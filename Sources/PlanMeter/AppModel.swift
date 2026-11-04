@@ -213,7 +213,6 @@ final class AppModel {
                 }
                 // Resolve the MagicDNS name and Tailscale Serve first so the
                 // links use them when they are available.
-                await remote.magicDNSLookup?.value
                 await remote.refreshHTTPSStatus(ensure: remote.httpsEnabled)
                 remote.newInvite()
                 if let invite = remote.invite {

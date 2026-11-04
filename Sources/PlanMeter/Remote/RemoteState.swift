@@ -56,11 +56,6 @@ final class RemoteState {
     let serverKeyIsEnclave: Bool
     @ObservationIgnored let service: RemoteService
     @ObservationIgnored private var server: RemoteHTTPServer?
-    /// Bumped by every start/stop so a slow Tailscale lookup from an earlier
-    /// start cannot overwrite newer state.
-    @ObservationIgnored private var lifecycleGeneration = 0
-    /// The MagicDNS lookup started by the latest `start()`.
-    @ObservationIgnored private(set) var magicDNSLookup: Task<Void, Never>?
 
     init() {
         serverName = Host.current().localizedName ?? "Mac"
@@ -88,14 +83,9 @@ final class RemoteState {
     func start() {
         stop()
         bindAddress = TailscaleInfo.ipv4()
-        // The name needs the Tailscale CLI, which can be slow or stuck, so it
-        // never runs on the main actor: this is called during app launch.
-        let generation = lifecycleGeneration
-        magicDNSLookup = Task { [weak self] in
-            let name = await Task.detached(priority: .utility) { TailscaleInfo.magicDNSName() }.value
-            guard let self, generation == self.lifecycleGeneration else { return }
-            self.magicDNSName = name
-        }
+        // The MagicDNS name comes from the Tailscale CLI, which must never
+        // run on the main actor (this runs during app launch), so
+        // `refreshHTTPSStatus` fills it in.
         guard let bindAddress else {
             status = "Tailscale is not connected. Remote access only listens on the tailnet."
             isListening = false
@@ -142,14 +132,16 @@ final class RemoteState {
         return URL(string: "https://\(domain)/")
     }
 
-    /// Reads the current serve state; when `ensure` is set, re-applies our
-    /// mapping (idempotent) so it survives Tailscale restarts.
+    /// Reads the MagicDNS name and current serve state; when `ensure` is set,
+    /// re-applies our mapping (idempotent) so it survives Tailscale restarts.
     func refreshHTTPSStatus(ensure: Bool) async {
         let port = self.port
-        let (domain, active, message) = await Task.detached(priority: .utility) { () -> (String?, Bool, String?) in
-            guard TailscaleServe.isAvailable else { return (nil, false, "Tailscale CLI not found. Install the macOS app or Homebrew package.") }
-            let certificate = TailscaleServe.certificateStatus()
-            guard let domain = certificate.domain else { return (nil, false, certificate.message) }
+        let (dnsName, domain, active, message) = await Task.detached(priority: .utility) { () -> (String??, String?, Bool, String?) in
+            guard TailscaleServe.isAvailable else { return (nil, nil, false, "Tailscale CLI not found. Install the macOS app or Homebrew package.") }
+            let status = TailscaleServe.run(["status", "--json"])
+            let dnsName = TailscaleInfo.magicDNSName(fromStatus: status)
+            let certificate = TailscaleServe.certificateStatus(from: status)
+            guard let domain = certificate.domain else { return (dnsName, nil, false, certificate.message) }
             var active = TailscaleServe.isActive(localPort: port)
             var message: String?
             if ensure && !active {
@@ -157,8 +149,10 @@ final class RemoteState {
                 active = result.ok && TailscaleServe.isActive(localPort: port)
                 if !active { message = result.output.isEmpty ? "tailscale serve failed" : result.output }
             }
-            return (domain, active, message)
+            return (dnsName, domain, active, message)
         }.value
+        // Keep the last known name when the CLI gave no usable answer.
+        if let dnsName { magicDNSName = dnsName }
         httpsDomain = domain
         httpsActive = active
         httpsMessage = message
@@ -196,9 +190,6 @@ final class RemoteState {
     }
 
     func stop() {
-        lifecycleGeneration &+= 1
-        magicDNSLookup?.cancel()
-        magicDNSLookup = nil
         server?.stop()
         server = nil
         isListening = false

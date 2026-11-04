@@ -1,7 +1,4 @@
 import Foundation
-#if canImport(AppKit)
-import AppKit
-#endif
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -39,29 +36,12 @@ public enum TailscaleServe {
     }
 
     #if os(macOS)
-    /// The Tailscale app's own binary doubles as its CLI, but only while the
-    /// app is running. Otherwise running it with CLI arguments starts the app
-    /// itself, which never exits: PlanMeter launched at login hung waiting
-    /// for `status --json`, and that process stayed on as the Tailscale app.
-    static let appCLIPath = cliCandidates[0]
-    static let appBundleIdentifiers = ["io.tailscale.ipn.macsys", "io.tailscale.ipn.macos"]
-
-    static var isAppRunning: Bool {
-        appBundleIdentifiers.contains { identifier in
-            NSRunningApplication.runningApplications(withBundleIdentifier: identifier).contains { !$0.isTerminated }
-        }
-    }
-
-    /// The first installed CLI that can run without starting the app.
-    static func runnablePath(candidates: [String], isExecutable: (String) -> Bool, appIsRunning: () -> Bool) -> String? {
-        var appRunning: Bool?
-        return candidates.first { path in
-            guard isExecutable(path) else { return false }
-            guard path == appCLIPath else { return true }
-            if appRunning == nil { appRunning = appIsRunning() }
-            return appRunning == true
-        }
-    }
+    /// The Tailscale app's own binary doubles as its CLI and guesses which
+    /// one it is meant to be. Run from an app with piped output while the
+    /// Tailscale app was not running, it came up as the app itself and never
+    /// exited: PlanMeter launched at login hung waiting for `status --json`.
+    /// This variable makes it a CLI regardless. Other CLIs ignore it.
+    static let forceCLIEnvironment = ["TAILSCALE_BE_CLI": "true"]
     #endif
 
     public struct Result: Sendable {
@@ -84,7 +64,7 @@ public enum TailscaleServe {
 
     /// How long a read-only command such as `status --json` may take. It
     /// normally answers in well under a second; this is a backstop against a
-    /// CLI that never returns (see `appCLIPath` on macOS).
+    /// CLI that never returns (see `forceCLIEnvironment` on macOS).
     public static let defaultTimeout: TimeInterval = 10
     /// `serve` may wait for Serve to be enabled in the admin console, so it
     /// gets longer before being stopped.
@@ -92,15 +72,7 @@ public enum TailscaleServe {
 
     public static func run(_ arguments: [String], timeout: TimeInterval = defaultTimeout) -> Result {
         guard let executablePath else { return Result(ok: false, standardError: "Tailscale CLI not found.") }
-        #if os(macOS)
-        guard let path = runnablePath(candidates: cliCandidates, isExecutable: FileManager.default.isExecutableFile(atPath:),
-                                      appIsRunning: { isAppRunning }) else {
-            return Result(ok: false, standardError: "The Tailscale app is not running. Open Tailscale and try again.")
-        }
-        return run(arguments, executableURL: URL(fileURLWithPath: path), timeout: timeout)
-        #else
         return run(arguments, executableURL: URL(fileURLWithPath: executablePath), timeout: timeout)
-        #endif
     }
 
     /// Runs the CLI and returns its output. Never blocks much past `timeout`:
@@ -111,6 +83,9 @@ public enum TailscaleServe {
         process.executableURL = executableURL
         process.arguments = arguments
         process.standardInput = FileHandle.nullDevice
+        #if os(macOS)
+        process.environment = ProcessInfo.processInfo.environment.merging(forceCLIEnvironment) { $1 }
+        #endif
         let out = Pipe()
         let err = Pipe()
         process.standardOutput = out
@@ -122,7 +97,10 @@ public enum TailscaleServe {
         // Drain both streams as data arrives so neither pipe can block the
         // child. Diagnostics stay separate from the JSON on stdout.
         let capture = PipeCapture([out.fileHandleForReading, err.fileHandleForReading])
-        let finished = exited.wait(timeout: deadline) == .success && capture.waitForEnd(until: deadline)
+        // Once the child has exited, its output is at most moments behind,
+        // even right at the deadline.
+        let finished = exited.wait(timeout: deadline) == .success
+            && capture.waitForEnd(until: max(deadline, .now() + 0.5))
         if !finished {
             if process.isRunning {
                 process.terminate()
@@ -311,9 +289,11 @@ public enum TailscaleInfo {
         ip == "127.0.0.1" || ip == "::1" || ip.hasPrefix("127.")
     }
 
-    public static func magicDNSName() -> String? {
-        guard TailscaleServe.isAvailable else { return nil }
-        return statusObject(TailscaleServe.run(["status", "--json"])).flatMap(dnsName(in:))
+    /// The MagicDNS name in `status --json` output. `.some(nil)` when
+    /// Tailscale answered without one; nil when the output is unusable.
+    public static func magicDNSName(fromStatus result: TailscaleServe.Result) -> String?? {
+        guard let root = statusObject(result), root["BackendState"] is String else { return nil }
+        return .some(dnsName(in: root))
     }
 }
 
@@ -323,29 +303,27 @@ public enum TailscaleInfo {
 /// such as a descendant of a child that was stopped.
 private final class PipeCapture: @unchecked Sendable {
     private let lock = NSLock()
-    private let count: Int
     private var buffers: [Data]
-    private let ended = DispatchSemaphore(value: 0)
+    private let readers = DispatchGroup()
 
     init(_ handles: [FileHandle]) {
-        count = handles.count
         buffers = Array(repeating: Data(), count: handles.count)
         for (index, handle) in handles.enumerated() {
+            readers.enter()
             DispatchQueue.global(qos: .utility).async { [self] in
                 while case let data = handle.availableData, !data.isEmpty {
                     lock.lock()
                     buffers[index].append(data)
                     lock.unlock()
                 }
-                ended.signal()
+                readers.leave()
             }
         }
     }
 
     /// True once every stream reached end of file before `deadline`.
     func waitForEnd(until deadline: DispatchTime) -> Bool {
-        for _ in 0..<count where ended.wait(timeout: deadline) != .success { return false }
-        return true
+        readers.wait(timeout: deadline) == .success
     }
 
     var data: [Data] {
