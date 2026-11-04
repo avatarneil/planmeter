@@ -56,6 +56,11 @@ final class RemoteState {
     let serverKeyIsEnclave: Bool
     @ObservationIgnored let service: RemoteService
     @ObservationIgnored private var server: RemoteHTTPServer?
+    /// Bumped by every start/stop so a slow Tailscale lookup from an earlier
+    /// start cannot overwrite newer state.
+    @ObservationIgnored private var lifecycleGeneration = 0
+    /// The MagicDNS lookup started by the latest `start()`.
+    @ObservationIgnored private(set) var magicDNSLookup: Task<Void, Never>?
 
     init() {
         serverName = Host.current().localizedName ?? "Mac"
@@ -83,7 +88,14 @@ final class RemoteState {
     func start() {
         stop()
         bindAddress = TailscaleInfo.ipv4()
-        magicDNSName = TailscaleInfo.magicDNSName()
+        // The name needs the Tailscale CLI, which can be slow or stuck, so it
+        // never runs on the main actor: this is called during app launch.
+        let generation = lifecycleGeneration
+        magicDNSLookup = Task { [weak self] in
+            let name = await Task.detached(priority: .utility) { TailscaleInfo.magicDNSName() }.value
+            guard let self, generation == self.lifecycleGeneration else { return }
+            self.magicDNSName = name
+        }
         guard let bindAddress else {
             status = "Tailscale is not connected. Remote access only listens on the tailnet."
             isListening = false
@@ -184,6 +196,9 @@ final class RemoteState {
     }
 
     func stop() {
+        lifecycleGeneration &+= 1
+        magicDNSLookup?.cancel()
+        magicDNSLookup = nil
         server?.stop()
         server = nil
         isListening = false

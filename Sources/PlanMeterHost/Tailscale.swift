@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -30,9 +33,36 @@ public enum TailscaleServe {
     #endif
     public static let httpsPort = 443
 
+    /// The installed CLI, whether or not it can be run right now.
     public static var executablePath: String? {
         cliCandidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
+
+    #if os(macOS)
+    /// The Tailscale app's own binary doubles as its CLI, but only while the
+    /// app is running. Otherwise running it with CLI arguments starts the app
+    /// itself, which never exits: PlanMeter launched at login hung waiting
+    /// for `status --json`, and that process stayed on as the Tailscale app.
+    static let appCLIPath = cliCandidates[0]
+    static let appBundleIdentifiers = ["io.tailscale.ipn.macsys", "io.tailscale.ipn.macos"]
+
+    static var isAppRunning: Bool {
+        appBundleIdentifiers.contains { identifier in
+            NSRunningApplication.runningApplications(withBundleIdentifier: identifier).contains { !$0.isTerminated }
+        }
+    }
+
+    /// The first installed CLI that can run without starting the app.
+    static func runnablePath(candidates: [String], isExecutable: (String) -> Bool, appIsRunning: () -> Bool) -> String? {
+        var appRunning: Bool?
+        return candidates.first { path in
+            guard isExecutable(path) else { return false }
+            guard path == appCLIPath else { return true }
+            if appRunning == nil { appRunning = appIsRunning() }
+            return appRunning == true
+        }
+    }
+    #endif
 
     public struct Result: Sendable {
         public var ok: Bool
@@ -52,44 +82,75 @@ public enum TailscaleServe {
 
     public static var isAvailable: Bool { executablePath != nil }
 
-    public static func run(_ arguments: [String]) -> Result {
+    /// How long a read-only command such as `status --json` may take. It
+    /// normally answers in well under a second; this is a backstop against a
+    /// CLI that never returns (see `appCLIPath` on macOS).
+    public static let defaultTimeout: TimeInterval = 10
+    /// `serve` may wait for Serve to be enabled in the admin console, so it
+    /// gets longer before being stopped.
+    public static let serveTimeout: TimeInterval = 30
+
+    public static func run(_ arguments: [String], timeout: TimeInterval = defaultTimeout) -> Result {
         guard let executablePath else { return Result(ok: false, standardError: "Tailscale CLI not found.") }
-        return run(arguments, executableURL: URL(fileURLWithPath: executablePath))
+        #if os(macOS)
+        guard let path = runnablePath(candidates: cliCandidates, isExecutable: FileManager.default.isExecutableFile(atPath:),
+                                      appIsRunning: { isAppRunning }) else {
+            return Result(ok: false, standardError: "The Tailscale app is not running. Open Tailscale and try again.")
+        }
+        return run(arguments, executableURL: URL(fileURLWithPath: path), timeout: timeout)
+        #else
+        return run(arguments, executableURL: URL(fileURLWithPath: executablePath), timeout: timeout)
+        #endif
     }
 
-    public static func run(_ arguments: [String], executableURL: URL) -> Result {
+    /// Runs the CLI and returns its output. Never blocks much past `timeout`:
+    /// a child that is still running then is terminated (killed if it ignores
+    /// SIGTERM) and the result fails with whatever it had printed.
+    public static func run(_ arguments: [String], executableURL: URL, timeout: TimeInterval = defaultTimeout) -> Result {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
+        process.standardInput = FileHandle.nullDevice
         let out = Pipe()
         let err = Pipe()
         process.standardOutput = out
         process.standardError = err
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         do { try process.run() } catch { return Result(ok: false, standardError: error.localizedDescription) }
-        // Drain both streams concurrently so neither pipe can block the child.
-        // Diagnostics must stay separate from the JSON on stdout.
-        final class ErrorBuffer: @unchecked Sendable { var data = Data() }
-        let errors = ErrorBuffer()
-        let reader = DispatchWorkItem { errors.data = err.fileHandleForReading.readDataToEndOfFile() }
-        DispatchQueue.global(qos: .utility).async(execute: reader)
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        reader.wait()
-        return Result(
-            ok: process.terminationStatus == 0,
-            standardOutput: String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines),
-            standardError: String(decoding: errors.data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        let deadline = DispatchTime.now() + timeout
+        // Drain both streams as data arrives so neither pipe can block the
+        // child. Diagnostics stay separate from the JSON on stdout.
+        let capture = PipeCapture([out.fileHandleForReading, err.fileHandleForReading])
+        let finished = exited.wait(timeout: deadline) == .success && capture.waitForEnd(until: deadline)
+        if !finished {
+            if process.isRunning {
+                process.terminate()
+                // Bound teardown even if the child ignores SIGTERM.
+                if exited.wait(timeout: .now() + 0.5) != .success, process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                    _ = exited.wait(timeout: .now() + 0.5)
+                }
+            }
+            // Let the readers collect what the child wrote before it stopped.
+            _ = capture.waitForEnd(until: .now() + 0.2)
+        }
+        let streams = capture.data.map { String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard finished else {
+            let note = "The Tailscale CLI did not finish within \(Int(timeout)) seconds."
+            return Result(ok: false, standardOutput: streams[0], standardError: [streams[1], note].filter { !$0.isEmpty }.joined(separator: "\n"))
+        }
+        return Result(ok: process.terminationStatus == 0, standardOutput: streams[0], standardError: streams[1])
     }
 
     /// Proxies HTTPS 443 on the tailnet to the loopback listener. Persists in
     /// tailscaled until turned off, so it survives app restarts.
     public static func enable(localPort: UInt16) -> Result {
-        run(["serve", "--bg", "--https=\(httpsPort)", "http://127.0.0.1:\(localPort)"])
+        run(["serve", "--bg", "--https=\(httpsPort)", "http://127.0.0.1:\(localPort)"], timeout: serveTimeout)
     }
 
     public static func disable() -> Result {
-        run(["serve", "--https=\(httpsPort)", "off"])
+        run(["serve", "--https=\(httpsPort)", "off"], timeout: serveTimeout)
     }
 
     /// True when the current serve config points 443 at our loopback port.
@@ -253,5 +314,43 @@ public enum TailscaleInfo {
     public static func magicDNSName() -> String? {
         guard TailscaleServe.isAvailable else { return nil }
         return statusObject(TailscaleServe.run(["status", "--json"])).flatMap(dnsName(in:))
+    }
+}
+
+/// Reads a child's output streams on background threads. Blocking reads
+/// rather than readability handlers: on Linux a handler can miss end of file.
+/// A reader stays blocked only while something still holds the pipe open,
+/// such as a descendant of a child that was stopped.
+private final class PipeCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private let count: Int
+    private var buffers: [Data]
+    private let ended = DispatchSemaphore(value: 0)
+
+    init(_ handles: [FileHandle]) {
+        count = handles.count
+        buffers = Array(repeating: Data(), count: handles.count)
+        for (index, handle) in handles.enumerated() {
+            DispatchQueue.global(qos: .utility).async { [self] in
+                while case let data = handle.availableData, !data.isEmpty {
+                    lock.lock()
+                    buffers[index].append(data)
+                    lock.unlock()
+                }
+                ended.signal()
+            }
+        }
+    }
+
+    /// True once every stream reached end of file before `deadline`.
+    func waitForEnd(until deadline: DispatchTime) -> Bool {
+        for _ in 0..<count where ended.wait(timeout: deadline) != .success { return false }
+        return true
+    }
+
+    var data: [Data] {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffers
     }
 }

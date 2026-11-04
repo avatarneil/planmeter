@@ -25,6 +25,69 @@ final class TailscaleServeTests: XCTestCase {
         XCTAssertEqual(status.message, "Could not read Tailscale status: permission denied")
     }
 
+    /// A CLI that never exits (the macOS app binary can come up as a GUI
+    /// app) must not hang the caller: app launch waited on this forever.
+    func testHungCommandTimesOutAndIsStopped() {
+        let start = Date()
+        let result = TailscaleServe.run([
+            "-c", "printf 'partial'; printf 'starting' >&2; exec sleep 30",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"), timeout: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.standardOutput, "partial")
+        XCTAssertTrue(result.standardError.hasPrefix("starting\n"), result.standardError)
+        XCTAssertTrue(result.standardError.contains("did not finish within"), result.standardError)
+    }
+
+    func testCommandIgnoringTerminateIsKilled() {
+        let start = Date()
+        let result = TailscaleServe.run([
+            "-c", "trap '' TERM; while :; do sleep 0.1; done",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"), timeout: 0.3)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+        XCTAssertFalse(result.ok)
+    }
+
+    /// A descendant that inherits stdout keeps the pipe open after the child
+    /// exits; the wait for end of file is bounded too.
+    func testInheritedPipeDoesNotBlockPastTimeout() {
+        let start = Date()
+        let result = TailscaleServe.run([
+            "-c", "sleep 5 & echo started",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"), timeout: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.standardOutput, "started")
+    }
+
+    func testLargeOutputOnBothStreamsIsDrained() {
+        let result = TailscaleServe.run([
+            "-c", "head -c 300000 /dev/zero | tr '\\0' a; head -c 300000 /dev/zero | tr '\\0' b >&2",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"))
+        XCTAssertTrue(result.ok, result.standardError)
+        XCTAssertEqual(result.standardOutput.count, 300_000)
+        XCTAssertEqual(result.standardError.count, 300_000)
+    }
+
+    #if os(macOS)
+    /// Running the app's binary while the app is closed starts the app, and
+    /// that process never exits, so it is only used while the app runs.
+    func testAppBinaryIsOnlyUsedWhileTheAppRuns() {
+        let app = TailscaleServe.appCLIPath
+        let brew = "/opt/homebrew/bin/tailscale"
+        let candidates = [app, brew]
+        var checks = 0
+        let running = { () -> Bool in checks += 1; return true }
+        let closed = { () -> Bool in checks += 1; return false }
+        XCTAssertEqual(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { _ in true }, appIsRunning: running), app)
+        XCTAssertEqual(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { _ in true }, appIsRunning: closed), brew)
+        XCTAssertNil(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { $0 == app }, appIsRunning: closed))
+        checks = 0
+        XCTAssertEqual(TailscaleServe.runnablePath(candidates: candidates, isExecutable: { $0 == brew }, appIsRunning: closed), brew)
+        XCTAssertEqual(checks, 0, "no app check when only Homebrew's CLI is installed")
+    }
+    #endif
+
     func testInvalidJSONIsNotReportedAsDisabledCertificates() {
         let status = TailscaleServe.certificateStatus(from: .init(ok: true, standardOutput: "not JSON"))
         XCTAssertNil(status.domain)
