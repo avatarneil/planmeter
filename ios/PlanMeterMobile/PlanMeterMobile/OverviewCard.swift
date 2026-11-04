@@ -54,17 +54,7 @@ struct OverviewCard: View {
                 sparkline(series)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-            shape.fill(Color(.secondarySystemGroupedBackground))
-                .overlay {
-                    shape.fill(LinearGradient(colors: [Palette.group("work").opacity(0.20), Palette.group("personal").opacity(0.10), .clear],
-                                              startPoint: .topLeading, endPoint: .bottomTrailing))
-                }
-                .overlay { shape.strokeBorder(Color.primary.opacity(0.06)) }
-        }
+        .modifier(CardBackground())
     }
 
     private var donut: some View {
@@ -72,7 +62,7 @@ struct OverviewCard: View {
         return Chart(groups) { group in
             SectorMark(angle: .value("Cost", group.totals.costUsd), innerRadius: .ratio(0.64), angularInset: 1.5)
                 .cornerRadius(3)
-                .foregroundStyle(Palette.group(group.group).gradient)
+                .foregroundStyle(Palette.group(group.group))
         }
         .chartLegend(.hidden)
         .frame(width: 88, height: 88)
@@ -102,15 +92,15 @@ struct OverviewCard: View {
     }
 
     private func sparkline(_ series: [(period: Date, cost: Double)]) -> some View {
-        let tint = Palette.group("work")
+        let tint = Color.accentColor
         return Chart {
             ForEach(series, id: \.period) { point in
                 AreaMark(x: .value("Period", point.period), y: .value("Cost", point.cost))
                     .interpolationMethod(.monotone)
-                    .foregroundStyle(LinearGradient(colors: [tint.opacity(0.35), tint.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    .foregroundStyle(tint.opacity(0.12))
                 LineMark(x: .value("Period", point.period), y: .value("Cost", point.cost))
                     .interpolationMethod(.monotone)
-                    .foregroundStyle(tint.gradient)
+                    .foregroundStyle(tint)
                     .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
             }
             if let last = series.last {

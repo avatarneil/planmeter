@@ -13,8 +13,7 @@ struct RootView: View {
             } else {
                 NavigationStack {
                     DashboardView()
-                        .navigationTitle("PlanMeter")
-                        .navigationBarTitleDisplayMode(.large)
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarTrailing) {
                                 Button { model.showSettings = true } label: { Image(systemName: "gearshape") }

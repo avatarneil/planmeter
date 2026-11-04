@@ -67,22 +67,11 @@ struct DashboardView: View {
 }
 
 struct CardBackground: ViewModifier {
-    /// A faint wash of this color from the top-leading corner.
-    var tint: Color?
-
     func body(content: Content) -> some View {
         content
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
-                shape.fill(Color(.secondarySystemGroupedBackground))
-                    .overlay {
-                        if let tint {
-                            shape.fill(LinearGradient(colors: [tint.opacity(0.14), tint.opacity(0)], startPoint: .topLeading, endPoint: .center))
-                        }
-                    }
-            }
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -107,7 +96,7 @@ struct GroupCardView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.15))
-                    Capsule().fill(Palette.group(group.group).gradient).frame(width: max(0, min(1, total.costUsd > 0 ? group.totals.costUsd / total.costUsd : 0)) * geo.size.width)
+                    Capsule().fill(Palette.group(group.group)).frame(width: max(0, min(1, total.costUsd > 0 ? group.totals.costUsd / total.costUsd : 0)) * geo.size.width)
                 }
             }
             .frame(height: 6)
@@ -133,7 +122,7 @@ struct GroupCardView: View {
                 .font(.callout)
             }
         }
-        .modifier(CardBackground(tint: Palette.group(group.group)))
+        .modifier(CardBackground())
     }
 
     private func stat(_ label: String, _ value: String) -> some View {
@@ -345,7 +334,7 @@ struct LimitsCardView: View {
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
                                     Capsule().fill(Color.secondary.opacity(0.15))
-                                    Capsule().fill(Palette.usage(w.usedPercent).gradient)
+                                    Capsule().fill(Palette.usage(w.usedPercent))
                                         .frame(width: max(0, min(1, w.usedPercent / 100)) * geo.size.width)
                                 }
                             }
