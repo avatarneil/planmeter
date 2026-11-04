@@ -82,4 +82,13 @@ final class WatchPayloadTests: XCTestCase {
         XCTAssertEqual(MemoryLayout.size(ofValue: payload.accounts[0].tokens), 8)
         XCTAssertEqual(WatchPayload.tokens(payload.workTokens), "7.0B")
     }
+
+    func testUsdFormatting() {
+        XCTAssertEqual(WatchPayload.usd(0), "$0.00")
+        XCTAssertEqual(WatchPayload.usd(0.004), "<$0.01")
+        XCTAssertEqual(WatchPayload.usd(47.413), "$47.41")
+        XCTAssertEqual(WatchPayload.usd(284.17), "$284")
+        XCTAssertEqual(WatchPayload.usd(1_465.4), "$1,465")
+        XCTAssertEqual(WatchPayload.usd(1_234_567), "$1,234,567")
+    }
 }

@@ -9,14 +9,27 @@ import WidgetKit
 @Observable
 @MainActor
 final class WatchModel: NSObject, WCSessionDelegate {
-    var payload: WatchPayload? = WatchPayload.load()
+    var payload: WatchPayload? = {
+        #if DEBUG
+        if WatchDemo.isEnabled { return WatchDemo.payload() }
+        #endif
+        return WatchPayload.load()
+    }()
     var isRefreshing = false
     var status: String?
     var cloudChoices: [WatchPayload] = []
     private var activated = false
 
+    private var isDemo: Bool {
+        #if DEBUG
+        return WatchDemo.isEnabled
+        #else
+        return false
+        #endif
+    }
+
     func activate() {
-        guard !activated, WCSession.isSupported() else { return }
+        guard !activated, !isDemo, WCSession.isSupported() else { return }
         activated = true
         let session = WCSession.default
         session.delegate = self
@@ -24,7 +37,7 @@ final class WatchModel: NSObject, WCSessionDelegate {
     }
 
     func refresh() {
-        guard !isRefreshing else { return }
+        guard !isRefreshing, !isDemo else { return }
         isRefreshing = true
         status = "Syncing with iCloud…"
         Task {
