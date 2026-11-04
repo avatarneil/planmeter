@@ -195,6 +195,9 @@ final class MobileModel {
         }
     }
 
+    /// DEBUG `--demo` sample data: shown without pairing, never refreshed or relayed.
+    private(set) var isDemo = false
+
     private var refreshLoop: Task<Void, Never>?
     private var started = false
 
@@ -242,6 +245,19 @@ final class MobileModel {
     func start() async {
         guard !started else { return }
         started = true
+        #if DEBUG
+        if MobileDemo.isEnabled {
+            let demo = MobileDemo.data()
+            isDemo = true
+            isLocked = false
+            summary = demo.summary
+            timeline = demo.timeline
+            limits = demo.limits
+            models = demo.models
+            lastUpdated = Date()
+            return
+        }
+        #endif
         prepareRelay()
         isForeground = UIApplication.shared.applicationState == .active
         guard isForeground else { return }
@@ -431,7 +447,7 @@ final class MobileModel {
     // MARK: Data
 
     func refresh() async {
-        guard !isLocked, !Task.isCancelled, usesCloud || client != nil else { return }
+        guard !isDemo, !isLocked, !Task.isCancelled, usesCloud || client != nil else { return }
         refreshGeneration += 1
         let generation = refreshGeneration
         isLoading = true
