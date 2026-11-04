@@ -211,8 +211,8 @@ final class AppModel {
                     FileHandle.standardError.write(Data("pairing-link: remote listener did not start (\(remote.status))\n".utf8))
                     return
                 }
-                // Resolve Tailscale Serve first so the web link uses the HTTPS
-                // origin when it is available.
+                // Resolve the MagicDNS name and Tailscale Serve first so the
+                // links use them when they are available.
                 await remote.refreshHTTPSStatus(ensure: remote.httpsEnabled)
                 remote.newInvite()
                 if let invite = remote.invite {

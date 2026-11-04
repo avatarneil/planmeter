@@ -56,14 +56,39 @@ final class RemoteState {
     let serverKeyIsEnclave: Bool
     @ObservationIgnored let service: RemoteService
     @ObservationIgnored private var server: RemoteHTTPServer?
+    @ObservationIgnored private let probeHTTPS: HTTPSProber
+    /// Bumped by every stop (and so every start): a refresh that began
+    /// before it must not overwrite what a later one found, such as the
+    /// name after a tailnet change or serve state for an older port.
+    @ObservationIgnored private var lifecycleGeneration = 0
 
-    init() {
-        serverName = Host.current().localizedName ?? "Mac"
+    /// What one Tailscale status pass found. `dnsName` is nil when the CLI
+    /// gave no usable answer, `.some(nil)` when Tailscale reports no name.
+    struct HTTPSProbe: Sendable {
+        var dnsName: String??
+        var domain: String?
+        var active: Bool
+        var message: String?
+    }
+    typealias HTTPSProber = @Sendable (_ port: UInt16, _ ensure: Bool) async -> HTTPSProbe
+
+    convenience init() {
         let store = FileSecretStore(directory: AppPaths.supportDirectory().appendingPathComponent("remote", isDirectory: true))
         let loaded = RemoteService.loadServerKey(store: store, load: AgreementKeys.load, make: AgreementKeys.make)
-        serverKey = loaded.key
-        if case .enclave = loaded.blob { serverKeyIsEnclave = true } else { serverKeyIsEnclave = false }
-        service = RemoteService(serverName: serverName, serverKey: serverKey, store: store, version: Self.appVersion)
+        let isEnclave: Bool
+        if case .enclave = loaded.blob { isEnclave = true } else { isEnclave = false }
+        let name = Host.current().localizedName ?? "Mac"
+        self.init(serverName: name, serverKey: loaded.key, serverKeyIsEnclave: isEnclave,
+                  service: RemoteService(serverName: name, serverKey: loaded.key, store: store, version: Self.appVersion),
+                  probeHTTPS: { port, ensure in await RemoteState.tailscaleProbe(port: port, ensure: ensure) })
+    }
+
+    init(serverName: String, serverKey: ServerAgreementKey, serverKeyIsEnclave: Bool, service: RemoteService, probeHTTPS: @escaping HTTPSProber) {
+        self.serverName = serverName
+        self.serverKey = serverKey
+        self.serverKeyIsEnclave = serverKeyIsEnclave
+        self.service = service
+        self.probeHTTPS = probeHTTPS
         service.webDirectory = { WebAssets.directory }
         service.onChange = { [weak self] in self?.syncFromService() }
         syncFromService()
@@ -83,7 +108,11 @@ final class RemoteState {
     func start() {
         stop()
         bindAddress = TailscaleInfo.ipv4()
-        magicDNSName = TailscaleInfo.magicDNSName()
+        // The MagicDNS name comes from the Tailscale CLI, which must never
+        // run on the main actor (this runs during app launch), so
+        // `refreshHTTPSStatus` fills it in. Until then invites use the
+        // address, never a name from before the restart.
+        magicDNSName = nil
         guard let bindAddress else {
             status = "Tailscale is not connected. Remote access only listens on the tailnet."
             isListening = false
@@ -130,14 +159,32 @@ final class RemoteState {
         return URL(string: "https://\(domain)/")
     }
 
-    /// Reads the current serve state; when `ensure` is set, re-applies our
-    /// mapping (idempotent) so it survives Tailscale restarts.
+    /// Reads the MagicDNS name and current serve state; when `ensure` is set,
+    /// re-applies our mapping (idempotent) so it survives Tailscale restarts.
     func refreshHTTPSStatus(ensure: Bool) async {
-        let port = self.port
-        let (domain, active, message) = await Task.detached(priority: .utility) { () -> (String?, Bool, String?) in
-            guard TailscaleServe.isAvailable else { return (nil, false, "Tailscale CLI not found. Install the macOS app or Homebrew package.") }
-            let certificate = TailscaleServe.certificateStatus()
-            guard let domain = certificate.domain else { return (nil, false, certificate.message) }
+        let generation = lifecycleGeneration
+        let probe = await probeHTTPS(port, ensure)
+        guard generation == lifecycleGeneration else { return }
+        // Keep the last known name when the CLI gave no usable answer.
+        if let dnsName = probe.dnsName { magicDNSName = dnsName }
+        httpsDomain = probe.domain
+        httpsActive = probe.active
+        httpsMessage = probe.message
+        if let message = probe.message { log("tailscale serve: \(message)") }
+    }
+
+    /// Runs the Tailscale CLI off the main actor; it can take seconds.
+    nonisolated static func tailscaleProbe(port: UInt16, ensure: Bool) async -> HTTPSProbe {
+        await Task.detached(priority: .utility) { () -> HTTPSProbe in
+            guard TailscaleServe.isAvailable else {
+                return HTTPSProbe(dnsName: nil, domain: nil, active: false, message: "Tailscale CLI not found. Install the macOS app or Homebrew package.")
+            }
+            let status = TailscaleServe.run(["status", "--json"])
+            let dnsName = TailscaleInfo.magicDNSName(fromStatus: status)
+            let certificate = TailscaleServe.certificateStatus(from: status)
+            guard let domain = certificate.domain else {
+                return HTTPSProbe(dnsName: dnsName, domain: nil, active: false, message: certificate.message)
+            }
             var active = TailscaleServe.isActive(localPort: port)
             var message: String?
             if ensure && !active {
@@ -145,12 +192,8 @@ final class RemoteState {
                 active = result.ok && TailscaleServe.isActive(localPort: port)
                 if !active { message = result.output.isEmpty ? "tailscale serve failed" : result.output }
             }
-            return (domain, active, message)
+            return HTTPSProbe(dnsName: dnsName, domain: domain, active: active, message: message)
         }.value
-        httpsDomain = domain
-        httpsActive = active
-        httpsMessage = message
-        if let message { log("tailscale serve: \(message)") }
     }
 
     func setHTTPS(enabled: Bool) async {
@@ -184,6 +227,7 @@ final class RemoteState {
     }
 
     func stop() {
+        lifecycleGeneration &+= 1
         server?.stop()
         server = nil
         isListening = false

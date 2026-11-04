@@ -25,6 +25,84 @@ final class TailscaleServeTests: XCTestCase {
         XCTAssertEqual(status.message, "Could not read Tailscale status: permission denied")
     }
 
+    /// A CLI that never exits (the macOS app binary can come up as a GUI
+    /// app) must not hang the caller: app launch waited on this forever.
+    func testHungCommandTimesOutAndIsStopped() {
+        let start = Date()
+        let result = TailscaleServe.run([
+            "-c", "printf 'partial'; printf 'starting' >&2; exec sleep 30",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"), timeout: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.standardOutput, "partial")
+        XCTAssertTrue(result.standardError.hasPrefix("starting\n"), result.standardError)
+        XCTAssertTrue(result.standardError.contains("did not finish within"), result.standardError)
+    }
+
+    func testCommandIgnoringTerminateIsKilled() {
+        let start = Date()
+        let result = TailscaleServe.run([
+            "-c", "trap '' TERM; while :; do sleep 0.1; done",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"), timeout: 0.3)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+        XCTAssertFalse(result.ok)
+    }
+
+    /// A descendant that inherits stdout keeps the pipe open after the child
+    /// exits; the wait for end of file is bounded too.
+    func testInheritedPipeDoesNotBlockPastTimeout() {
+        let start = Date()
+        let result = TailscaleServe.run([
+            "-c", "sleep 5 & echo started",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"), timeout: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(result.standardOutput, "started")
+    }
+
+    #if os(Linux)
+    /// swift-corelibs-foundation releases a finished child's resources in
+    /// `waitUntilExit`; skipping it leaked descriptors on every call, and
+    /// the daemon probes Tailscale every 30 seconds.
+    func testRepeatedRunsDoNotLeakDescriptors() throws {
+        func openDescriptors() throws -> Int { try FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd").count }
+        _ = TailscaleServe.run(["-c", "echo warm"], executableURL: URL(fileURLWithPath: "/bin/sh"))
+        let before = try openDescriptors()
+        for _ in 0..<10 {
+            XCTAssertTrue(TailscaleServe.run(["-c", "echo ok"], executableURL: URL(fileURLWithPath: "/bin/sh")).ok)
+        }
+        XCTAssertLessThan(try openDescriptors() - before, 5)
+    }
+    #endif
+
+    func testLargeOutputOnBothStreamsIsDrained() {
+        let result = TailscaleServe.run([
+            "-c", "head -c 300000 /dev/zero | tr '\\0' a; head -c 300000 /dev/zero | tr '\\0' b >&2",
+        ], executableURL: URL(fileURLWithPath: "/bin/sh"))
+        XCTAssertTrue(result.ok, result.standardError)
+        XCTAssertEqual(result.standardOutput.count, 300_000)
+        XCTAssertEqual(result.standardError.count, 300_000)
+    }
+
+    #if os(macOS)
+    /// The Tailscale app's binary picks CLI or GUI behavior on its own; as a
+    /// GUI it never exits. Every run forces CLI behavior.
+    func testRunForcesCLIBehavior() {
+        let result = TailscaleServe.run(["-c", "printf '%s' \"$TAILSCALE_BE_CLI:${HOME:+home}\""],
+                                        executableURL: URL(fileURLWithPath: "/bin/sh"))
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(result.standardOutput, "true:home", "forced, and the rest of the environment is kept")
+    }
+    #endif
+
+    func testMagicDNSNameFromStatus() {
+        let named = #"{"BackendState":"Running","Self":{"DNSName":"mac.tail1234.ts.net."}}"#
+        XCTAssertEqual(TailscaleInfo.magicDNSName(fromStatus: .init(ok: true, standardOutput: named)), .some("mac.tail1234.ts.net"))
+        let unnamed = #"{"BackendState":"NeedsLogin","Self":{}}"#
+        XCTAssertEqual(TailscaleInfo.magicDNSName(fromStatus: .init(ok: true, standardOutput: unnamed)), .some(nil))
+        XCTAssertNil(TailscaleInfo.magicDNSName(fromStatus: .init(ok: false, standardError: "The Tailscale CLI did not finish within 10 seconds.")))
+    }
+
     func testInvalidJSONIsNotReportedAsDisabledCertificates() {
         let status = TailscaleServe.certificateStatus(from: .init(ok: true, standardOutput: "not JSON"))
         XCTAssertNil(status.domain)
