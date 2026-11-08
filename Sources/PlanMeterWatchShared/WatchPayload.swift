@@ -174,11 +174,21 @@ public struct WatchPayload: Codable, Equatable, Sendable {
     // MARK: Formatting shared by watch views and the complication
 
     public static func usd(_ value: Double) -> String {
-        if value >= 1000 { return String(format: "$%.0f", value) }
-        if value >= 100 { return String(format: "$%.0f", value) }
+        if value >= 100 { return "$" + (wholeDollars.string(from: NSNumber(value: value.rounded())) ?? String(format: "%.0f", value)) }
         if value > 0, value < 0.005 { return "<$0.01" }
         return String(format: "$%.2f", value)
     }
+
+    /// Grouped whole dollars ("1,465"), fixed to US separators to match the "$" prefix.
+    private static let wholeDollars: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.numberStyle = .decimal
+        f.usesGroupingSeparator = true
+        f.groupingSeparator = ","
+        f.maximumFractionDigits = 0
+        return f
+    }()
 
     public static func compactUsd(_ value: Double) -> String {
         if value >= 10_000 { return String(format: "$%.0fK", value / 1000) }
