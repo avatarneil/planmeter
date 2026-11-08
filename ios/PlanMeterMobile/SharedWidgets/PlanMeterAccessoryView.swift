@@ -33,7 +33,8 @@ struct PlanMeterAccessoryView: View {
         case .accessoryCircular:
             if let target = entry.configuration.target, let today = entry.today {
                 Gauge(value: min(1, max(0, today / target))) {
-                    Text(entry.configuration.label)
+                    Image(systemName: "chart.bar.fill")
+                        .accessibilityLabel(entry.configuration.label)
                 } currentValueLabel: { Text(entry.todayText).font(.system(size: 22, weight: .bold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.6) }
                 .gaugeStyle(.accessoryCircular)
             } else {
