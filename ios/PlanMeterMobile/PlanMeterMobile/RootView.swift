@@ -8,13 +8,12 @@ struct RootView: View {
         Group {
             if model.isLocked {
                 LockView()
-            } else if !model.usesCloud && model.server == nil {
+            } else if !model.isDemo && !model.usesCloud && model.server == nil {
                 PairingView()
             } else {
                 NavigationStack {
                     DashboardView()
-                        .navigationTitle("PlanMeter")
-                        .navigationBarTitleDisplayMode(.large)
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarTrailing) {
                                 Button { model.showSettings = true } label: { Image(systemName: "gearshape") }

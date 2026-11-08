@@ -57,6 +57,11 @@ enum Palette {
         Color(hex: "#e5484d")!, Color(hex: "#0aa8a7")!, Color(hex: "#d9a400")!, Color(hex: "#8b8f98")!,
     ]
 
+    /// Plan-limit usage: green, then orange from 70%, red from 90%.
+    static func usage(_ percent: Double) -> Color {
+        percent >= 90 ? .red : percent >= 70 ? .orange : .green
+    }
+
     static func group(_ raw: String) -> Color {
         switch raw {
         case "personal": return Color(hex: "#0891b2")!
