@@ -45,6 +45,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
     case grok
     case opencode
     case antigravity
+    case cursor
 
     public var displayName: String {
         switch self {
@@ -53,6 +54,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .grok: return "Grok Build"
         case .opencode: return "OpenCode"
         case .antigravity: return "Antigravity"
+        case .cursor: return "Cursor"
         }
     }
 
@@ -64,6 +66,7 @@ public enum ProviderKind: String, Codable, CaseIterable, Hashable, Sendable {
         case .grok: return "grok"
         case .opencode: return "opencode"
         case .antigravity: return "antigravity"
+        case .cursor: return "cursor"
         }
     }
 
@@ -119,6 +122,8 @@ public struct Account: Identifiable, Hashable, Codable, Sendable {
     public static func codexId(planType: String) -> String { "codex:plan:\(planType)" }
     public static func claudeId(transcriptDir: String) -> String { "claude:home:\(transcriptDir)" }
     public static func antigravityId(conversationsDir: String) -> String { "antigravity:home:\(conversationsDir)" }
+    /// `user` is a hash of the Cursor login's stable user ID.
+    public static func cursorId(user: String) -> String { "cursor:user:\(user)" }
     public static let grokDefaultId = "grok:default"
     public static let openCodeLocalId = "opencode:local"
 
@@ -137,6 +142,9 @@ public struct Account: Identifiable, Hashable, Codable, Sendable {
         } else if id.hasPrefix("antigravity:") {
             provider = .antigravity
             name = "Antigravity"
+        } else if id.hasPrefix("cursor:") {
+            provider = .cursor
+            name = "Cursor"
         } else if id.hasPrefix("grok:") {
             provider = .grok
             name = "Grok Build"

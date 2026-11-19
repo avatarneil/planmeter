@@ -137,9 +137,11 @@ final class AppModel {
     var accountUsage: [AccountUsageSnapshot] = []
     var dailyUsage: [CodexDailyUsageSnapshot] = [] { didSet { mixedCells = nil } }
     var cloudUsage: [CodexCloudUsageSnapshot] = []
+    /// Cursor's usage log per login; it has no local transcripts.
+    var cursorUsage: [CursorUsageSnapshot] = []
     var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
-    /// Claude Code and Antigravity windows read from the provider, by account id.
+    /// Claude Code, Antigravity, and Cursor windows read from the provider, by account id.
     var planLimits: [String: PlanLimitSnapshot] = [:]
     var sources: [SourceReport] = []
     var rates = RateTable()
@@ -282,7 +284,11 @@ final class AppModel {
         // time zones and files that were touched after their sessions ended.
         let sinceMs = Int64((Date().timeIntervalSince1970 - TimeInterval(TimeRange.quarter.dayCount + 1) * 86_400) * 1000)
         let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
-        cells = output.cells
+        // Keep the last Cursor reading in the interim so its usage doesn't
+        // drop out of the chart while the refresh is in flight.
+        let cursorTargets = Set(discovery.cursorUsageTargets.map(\.id))
+        cursorUsage = cursorUsage.filter { cursorTargets.contains($0.target.id) }
+        cells = CursorUsageProjection.merging(cursorUsage, into: output).cells
         threadCells = output.threads
         threadCatalog = ThreadCatalog.load(discovery: discovery)
         rateLimits = output.rateLimits
@@ -292,11 +298,13 @@ final class AppModel {
         async let daily = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         async let limits = PlanLimits.shared.load(targets: discovery.planLimitTargets, force: forceAccountUsage)
+        async let cursor = CursorUsage.shared.load(targets: discovery.cursorUsageTargets, sinceMs: sinceMs, force: forceAccountUsage)
         accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets, force: forceAccountUsage)
         dailyUsage = await daily
         cloudUsage = await cloud
         planLimits = Dictionary((await limits).map { ($0.target.accountId, $0) }, uniquingKeysWith: { first, _ in first })
-        let combined = CodexCloudProjection.merging(cloudUsage, into: output)
+        cursorUsage = await cursor
+        let combined = CursorUsageProjection.merging(cursorUsage, into: CodexCloudProjection.merging(cloudUsage, into: output))
         cells = combined.cells
         threadCells = combined.threads
         sources = combined.sources

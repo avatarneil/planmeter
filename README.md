@@ -1,7 +1,7 @@
 # PlanMeter
 
 A native macOS app that shows local AI coding-agent usage split by subscription: personal plans on
-one side and work plans on the other. It reads Codex, Claude Code, Antigravity, Grok Build, and OpenCode usage,
+one side and work plans on the other. It reads Codex, Claude Code, Antigravity, Grok Build, OpenCode, and Cursor usage,
 and includes a CLI, a read-only MCP server, and optional iPhone, iPad, Apple Watch, and web clients.
 On Linux, the headless `planmeterd` host and a native GNOME app do the same job, and an Android
 companion joins the iPhone over Tailscale.
@@ -10,7 +10,9 @@ companion joins the iPhone over Tailscale.
 environment variables. When it finds T3 Code settings, it uses T3's provider instances to discover
 additional account homes and preserve their names and colors.
 
-PlanMeter reads local files and never modifies provider transcripts or credentials. Pricing is
+PlanMeter reads local files and never modifies provider transcripts or credentials. Cursor is the
+exception to local-only reading: it stores no token counts on disk, so PlanMeter reads its usage log
+from cursor.com with the login Cursor saved (see [Cursor](#cursor)). Pricing is
 fetched from LiteLLM and cached locally; remote access is off by default.
 
 ## Supported platforms
@@ -104,12 +106,13 @@ testing. Sparkle's private EdDSA update key remains in the release maintainer's 
 | Antigravity | `$ANTIGRAVITY_DATA_DIR`, otherwise `~/.gemini/antigravity*` and `~/.config/antigravity` `conversations/*.db` | Each conversation directory or T3 instance profile; identity from `settings.json` / `google_accounts.json` |
 | Grok Build | `$GROK_HOME`, otherwise `~/.grok`; reads `sessions/*/updates.jsonl` | One local account |
 | OpenCode | `$XDG_DATA_HOME/opencode/opencode.db`, otherwise `~/.local/share/opencode/opencode.db` | One local account; token counts and cost per assistant message |
+| Cursor | cursor.com usage log, signed in with the editor's saved login (`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`; `~/.config/Cursor/…` on Linux) or the CLI's `auth.json` | Each distinct login's user ID; email and plan from the editor's cached profile |
 
 In standalone mode PlanMeter discovers one configured home per provider. If
 `$T3CODE_HOME/userdata/settings.json` or `~/.t3/userdata/settings.json` contains T3 Code
 `providerInstances`, those instances take precedence. This enables multiple Codex, Claude, or
-Antigravity homes, custom display names, colors, and disabled-provider settings. Cursor has no local
-usage data and is listed as unsupported when it appears in T3 settings.
+Antigravity homes, custom display names, colors, and disabled-provider settings. T3 Cursor instances
+name and color Cursor logins; an instance's `homePath` points at another login (see [Cursor](#cursor)).
 
 ### Plan limits
 
@@ -127,6 +130,10 @@ provider, at most once per five minutes per login (**Refresh** forces a new read
   Cloud Code API, as T3 Code does. The token file is never modified and the access token is not
   stored. The standalone `agy` CLI keeps its login in the Keychain, which PlanMeter does not read.
 
+- **Cursor**: PlanMeter reads the billing cycle from cursor.com's `usage-summary` with the saved
+  login: included usage (total, Auto + Composer, and API models) and on-demand budgets with a
+  limit, all resetting at the cycle's end. On-demand spend without a limit is shown as a note.
+
 The iPhone, watch, and web clients receive windows that have a reset time; quotas without one are
 shown only on the Mac. `planmeter-cli --limits` prints the same readings as JSON.
 
@@ -138,6 +145,40 @@ Parsers are ports of T3 Code's `usageTranscripts.ts` and `antigravityUsageReader
 suppression, per-content-block dedup for Claude, Antigravity protobuf trajectory decoding and deduplication, Grok cost pro-rating), so totals match T3's Usage
 page where the inputs overlap. Pricing uses LiteLLM's `model_prices_and_context_window.json`, read
 from T3 Code's cached copy when present and fetched directly otherwise.
+
+## Cursor
+
+Cursor's chat records keep token counts at zero and its CLI stores none, so local transcripts can't
+measure Cursor usage. PlanMeter instead reads the per-request usage log behind Cursor's dashboard
+(`cursor.com/api/dashboard/get-filtered-usage-events`). Each event has a time, model, input, cache
+read and write, and output tokens, and Cursor's API-rate cost (`tokenUsage.totalCents`). Those
+figures enter charts, model breakdowns, widgets, CLI/MCP reports, and companion reports, the same as
+transcript usage. Requests are grouped into sessions by Cursor conversation. Plan-included events
+still carry their API-rate cost. That matches the token-price estimates used for other providers,
+not what Cursor bills.
+
+- **Sign-in.** PlanMeter uses the access token the Cursor editor saved in `state.vscdb`, or the
+  Cursor CLI's `auth.json` (`$XDG_CONFIG_HOME/cursor/auth.json` on Linux, `~/.cursor/auth.json` on
+  macOS when the CLI can't use the Keychain). The token is read for each request and is sent only
+  to `https://cursor.com`, with redirects refused. It is never refreshed, copied, or stored. An
+  expired login asks you to open Cursor. PlanMeter does not read the CLI's macOS Keychain entry or
+  decrypt logins that newer Cursor builds encrypt (`cursor-safe-storage:`).
+- **Refresh.** At most once per five minutes per login; **Refresh** forces a reading. Fetched
+  events (never credentials) are cached in `cursor-usage.json` (mode 0600) under PlanMeter's state
+  directory. Later refreshes re-read only the last six hours. The 90-day window is read in pages of
+  500 events, up to 30,000; a larger log is marked incomplete.
+- **Several logins.** Each distinct Cursor login (by user ID) is its own account. Saved copies of
+  the same login (the editor and the CLI) merge into one. A second login can live in:
+  - a T3 Code Cursor instance's `homePath`;
+  - a comma-separated `PLANMETER_CURSOR_HOMES` list;
+  - for the standalone CLI, `CURSOR_CONFIG_DIR`.
+
+  Each folder can be an editor `--user-data-dir`, a CLI config folder, or an `XDG_CONFIG_HOME`
+  holding either. If a saved login later signs in as someone else, its readings stop instead of
+  being credited to the wrong account.
+- These dashboard routes are not a public API. If Cursor changes them, readings become unavailable
+  with an explicit message; local data for other providers is unaffected. `--offline` on
+  `planmeterd` skips them.
 
 ## Account-wide usage
 
@@ -249,6 +290,8 @@ and [app-server protocol](https://learn.chatgpt.com/docs/app-server).
   the transcripts and are shown as one account.
 - Claude Code does not write subscription-window readings locally, so the Limits panel only covers
   Codex.
+- Cursor usage needs network access to cursor.com and an unexpired saved login; Cursor's
+  per-request cost is an API-rate estimate, not the amount Cursor bills under the plan.
 - Dated workspace chart costs use the provider's credit conversion; local transcript
   costs use API-equivalent token prices. Detailed Codex thread views label service
   billing estimates separately from standard token-rate estimates.
@@ -609,7 +652,8 @@ unit suite does not require provider credentials or T3 Code.
 
 ## Privacy and security
 
-PlanMeter reads local transcript and identity files to attribute usage. It stores its scan cache,
+PlanMeter reads local transcript and identity files to attribute usage. For Cursor it also sends the
+saved Cursor login to cursor.com to read that login's own usage log and billing cycle. It stores its scan cache,
 pricing cache, group choices, and remote-pairing state under the current user's Application Support
 directory (on Linux, `~/.local/state/planmeter` and `~/.config/planmeter`). Do not publish those local files or pairing links. Remote access is opt-in and restricted
 to Tailscale or loopback peers. Optional iCloud sync uploads aggregate snapshots to your private

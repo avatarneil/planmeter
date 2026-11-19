@@ -51,6 +51,34 @@ final class HostEngineTests: XCTestCase {
         XCTAssertEqual(engine.hourCells.values.reduce(0) { $0 + $1.reportedCostUsd }, 3, accuracy: 1e-9)
     }
 
+    func testRefreshMergesCursorUsage() async throws {
+        let dir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let account = Account(id: "cursor:user:abc", provider: .cursor, displayName: "Cursor", suggestedGroup: .work, sourceDescription: "test")
+        var discovery = Discovery(accounts: [account])
+        let target = CursorUsageTarget(id: "abc", accountId: account.id, name: "Cursor", sources: [])
+        discovery.cursorUsageTargets = [target]
+        var snapshot = CursorUsageSnapshot(target: target)
+        snapshot.fetchedAt = ControlHarness.now
+        snapshot.status = .ok
+        snapshot.events = [CursorUsageEvent(timestampMs: nowMs - 60_000, model: "gpt-5.5", inputTokens: 10, outputTokens: 5,
+                                            costCents: 250, conversationId: "conv")]
+        let reading = snapshot
+        let calls = ScanGate()
+        var loader = HostEngine.Loader.fixed(discovery: discovery, scan: ScanOutput(scannedAt: Date()), rates: RateTable(source: "cached"))
+        loader.cursorUsage = { targets, _, _ in
+            calls.hit()
+            return calls.count == 1 && targets == [target] ? [reading] : []
+        }
+        let engine = HostEngine(serverName: "box", scanCache: dir.appendingPathComponent("scan-cache.json"), loader: loader)
+        engine.clock = { ControlHarness.now }
+        await engine.refresh()
+        XCTAssertEqual(engine.todayTotal.costUsd, 2.5, accuracy: 1e-9)
+        XCTAssertEqual(engine.threadCells.map(\.sessionId), ["conv"])
+        XCTAssertTrue(engine.sources.contains { $0.provider == .cursor && $0.status == .ok })
+        XCTAssertEqual(engine.cursorUsage.count, 1)
+    }
+
     func testConcurrentRefreshesShareOneScan() async throws {
         let gate = ScanGate()
         let (engine, dir) = try engine(gate: gate, delay: 200_000_000)

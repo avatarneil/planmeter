@@ -9,8 +9,8 @@
   <summary>See what your AI coding agents cost</summary>
   <description>
     <p>
-      PlanMeter shows spend, tokens, cache savings, and Codex rate limits for your Codex,
-      Claude Code, and OpenCode accounts, split into Personal and Work plans.
+      PlanMeter shows spend, tokens, cache savings, and plan limits for your Codex,
+      Claude Code, OpenCode, and Cursor accounts, split into Personal and Work plans.
     </p>
     <ul>
       <li>Totals for the last hour, today, or the last 24 hours, 7, 30, or 90 days</li>
@@ -54,6 +54,11 @@
   </branding>
 
   <releases>
+    <release version="0.5.0" date="2026-11-19">
+      <description>
+        <p>Cursor support: usage and billing-cycle limits for each Cursor login, read from cursor.com.</p>
+      </description>
+    </release>
     <release version="0.4.2" date="2026-11-03">
       <description>
         <p>Redesigned Apple Watch app and a new overview on iPhone.</p>

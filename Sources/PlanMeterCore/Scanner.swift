@@ -299,7 +299,7 @@ public enum Scanner {
                 if let r = CodexParser.parse(line: line, state: &codexState) { fold(r) }
             case .grok:
                 for r in GrokParser.parse(line: line) { fold(r) }
-            case .antigravity, .opencode:
+            case .antigravity, .opencode, .cursor:
                 break
             }
         }

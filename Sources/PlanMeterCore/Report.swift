@@ -35,7 +35,7 @@ public struct ReportContext: Sendable {
 }
 
 public enum Report {
-    /// `planLimits` asks Claude Code and Antigravity for their subscription
+    /// `planLimits` asks Claude Code, Antigravity, and Cursor for their subscription
     /// windows, which starts a CLI or network request; only limit reports need it.
     public static func load(days: Int, cache: ScanCache? = nil, dailyDate: String? = nil, planLimits: Bool = false) async -> ReportContext {
         let settings = T3Settings.load()
@@ -55,11 +55,12 @@ public enum Report {
         async let daily = loadDaily(targets: discovery.codexUsageTargets, date: dailyDate)
         async let cloud = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets)
         async let limits = planLimits ? PlanLimits.shared.load(targets: discovery.planLimitTargets) : []
+        async let cursor = CursorUsage.shared.load(targets: discovery.cursorUsageTargets, sinceMs: sinceMs)
         context.accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
         context.dailyUsage = await daily
         context.cloudUsage = await cloud
         context.planLimits = await limits
-        context.scan = CodexCloudProjection.merging(context.cloudUsage, into: scan)
+        context.scan = CursorUsageProjection.merging(await cursor, into: CodexCloudProjection.merging(context.cloudUsage, into: scan))
         context.threadCatalog = CodexCloudProjection.catalog(context.cloudUsage, local: ThreadCatalog.load(discovery: discovery))
         return context
     }
@@ -364,7 +365,7 @@ public enum Report {
         return [
             "codex": rows,
             "plans": plans,
-            "note": "Codex writes rate-limit windows into every session transcript; readings reflect the last turn each account ran. Claude Code limits come from its CLI (get_usage) and Antigravity quotas from Google's Cloud Code API, at most once per five minutes per login.",
+            "note": "Codex writes rate-limit windows into every session transcript; readings reflect the last turn each account ran. Claude Code limits come from its CLI (get_usage), Antigravity quotas from Google's Cloud Code API, and Cursor billing-cycle usage from cursor.com (usage-summary), at most once per five minutes per login.",
         ]
     }
 

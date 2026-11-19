@@ -17,7 +17,8 @@ public struct PlanLimitTarget: Hashable, Codable, Sendable, Identifiable {
     public var provider: ProviderKind
     /// Claude: the login's `CLAUDE_CONFIG_DIR`, or nil for the default login.
     public var configDir: String?
-    /// Antigravity: the profile's `acp_token.json`.
+    /// Antigravity: the profile's `acp_token.json`. Cursor: the saved login's
+    /// `state.vscdb` or `auth.json`, with its kind in `authMethod`.
     public var tokenPath: String?
     /// Expected login email, checked against the CLI's reported account.
     public var email: String?
@@ -123,6 +124,7 @@ public actor PlanLimits {
         switch target.provider {
         case .claude: return ClaudePlanLimits.read(target: target)
         case .antigravity: return await AntigravityPlanLimits.read(target: target)
+        case .cursor: return await CursorPlanLimits.read(target: target)
         default:
             var snapshot = PlanLimitSnapshot(target: target)
             snapshot.message = "\(target.provider.displayName) does not report plan limits."

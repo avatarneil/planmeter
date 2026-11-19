@@ -25,6 +25,7 @@ fn provider_name(raw: &str) -> &str {
         "grok" => "Grok Build",
         "opencode" => "OpenCode",
         "antigravity" => "Antigravity",
+        "cursor" => "Cursor",
         other => other,
     }
 }

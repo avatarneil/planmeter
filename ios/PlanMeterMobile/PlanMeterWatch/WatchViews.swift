@@ -642,6 +642,7 @@ enum Palette {
         case "grok": return "bolt.fill"
         case "opencode": return "curlybraces"
         case "antigravity": return "arrow.up.forward"
+        case "cursor": return "cursorarrow.rays"
         default: return "cpu"
         }
     }
