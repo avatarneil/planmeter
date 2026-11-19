@@ -442,7 +442,7 @@ offer to pair again.
 | `days` | integer, optional | summary, models, timeline | Window length. Default 30, clamped to 1–365. `1` is a rolling 24 hours: the host's current clock hour and the 23 before it. Larger values are whole local calendar days in the host's time zone, ending at the end of today. |
 | `minutes` | integer, optional | summary, models, timeline | A window shorter than a day, clamped to 5–1440, ending at the next five-minute boundary. Overrides `days`. Send `days` too: hosts older than this field ignore it. |
 | `resolution` | string, optional | timeline | `minute`, `5m`, `15m`, `hour`, or `day`. Default and unknown values mean `day`. The host may coarsen it (see below). |
-| `account` | string, optional | models | Filter: case-insensitive substring of the account id or name, or an exact provider (`codex`, `claude`, `grok`, `opencode`). |
+| `account` | string, optional | models | Filter: case-insensitive substring of the account id or name, or an exact provider (`codex`, `claude`, `grok`, `opencode`, `antigravity`, `cursor`). |
 
 The host never uses buckets coarser than `hour` for `minutes` windows or `days = 1`, never
 coarser than `day` otherwise, and coarsens until the window has at most about 1,500 buckets. The
@@ -460,7 +460,7 @@ and the reply has only `error`, for example `{"error": "server not ready"}`. Cli
 Examples of every reply are in [`fixtures/replies/`](fixtures/replies/). Field reference:
 
 **`RemoteAccount`**: `id` (string, stable), `name`, `provider` (`codex`, `claude`, `grok`,
-`opencode`), `providerName`, `group` (`personal`, `work`, or `other`), and optional `email`,
+`opencode`, `antigravity`, `cursor`; clients should accept others), `providerName`, `group` (`personal`, `work`, or `other`), and optional `email`,
 `plan`, `accentColorHex` (`#RRGGBB`).
 
 **`RemoteTotals`**: `costUsd` (number), `tokens` (input + output), `inputTokens` (including

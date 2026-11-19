@@ -73,12 +73,13 @@ Task {
     let output = await Scanner.scan(sources: discovery.sources, openCodeDatabase: discovery.openCodeDatabase, sinceMs: sinceMs, cache: cache)
     async let dailyUsage = CodexDailyUsage.shared.load(targets: discovery.codexUsageTargets)
     async let cloudUsage = CodexCloudUsage.shared.load(targets: discovery.codexUsageTargets)
+    async let cursorUsage = CursorUsage.shared.load(targets: discovery.cursorUsageTargets, sinceMs: sinceMs)
     let accountUsage = await CodexAccountUsage.shared.load(targets: discovery.codexUsageTargets)
     var ctx = ReportContext(discovery: discovery, accounts: discovery.accounts, rates: rates, scan: output, overrides: GroupOverrides.load())
     ctx.accountUsage = accountUsage
     ctx.dailyUsage = await dailyUsage
     ctx.cloudUsage = await cloudUsage
-    ctx.scan = CodexCloudProjection.merging(ctx.cloudUsage, into: output)
+    ctx.scan = CursorUsageProjection.merging(await cursorUsage, into: CodexCloudProjection.merging(ctx.cloudUsage, into: output))
     ctx.threadCatalog = CodexCloudProjection.catalog(ctx.cloudUsage, local: ThreadCatalog.load(discovery: discovery))
     ctx.accounts = discovery.accounts
     let buckets = Report.buckets(ctx, days: days)
@@ -100,10 +101,11 @@ Task {
                 "id": a.id, "name": a.displayName, "provider": a.provider.rawValue, "email": a.email ?? "",
                 "plan": a.planLabel ?? "", "group": a.suggestedGroup.rawValue, "accent": a.accentColorHex ?? "",
                 "costUsd": agg.costUsd, "tokens": agg.totals.total, "sessions": agg.sessions, "cacheSavingsUsd": agg.cacheSavingsUsd,
-                "usageSource": buckets.contains { $0.accountId == a.id && $0.costSource.isWorkspace } ? "Dated workspace credits with local fallback" : "Local transcripts",
+                "usageSource": a.provider == .cursor ? "cursor.com usage log"
+                    : buckets.contains { $0.accountId == a.id && $0.costSource.isWorkspace } ? "Dated workspace credits with local fallback" : "Local transcripts",
             ]
         }
-        out["sources"] = output.sources.map { ["provider": $0.provider.rawValue, "path": $0.path, "status": $0.status.rawValue, "parsed": $0.scannedFiles, "cached": $0.reusedFiles, "message": $0.message ?? ""] }
+        out["sources"] = ctx.scan.sources.map { ["provider": $0.provider.rawValue, "path": $0.path, "status": $0.status.rawValue, "parsed": $0.scannedFiles, "cached": $0.reusedFiles, "message": $0.message ?? ""] }
         let data = try! JSONSerialization.data(withJSONObject: out, options: [.prettyPrinted, .sortedKeys])
         print(String(decoding: data, as: UTF8.self))
     } else {
@@ -142,7 +144,7 @@ Task {
         }
         print("")
         print("SOURCES")
-        for s in output.sources {
+        for s in ctx.scan.sources {
             print("  [\(s.status.rawValue)] \(s.provider.displayName): \(s.path)  parsed=\(s.scannedFiles) cached=\(s.reusedFiles) \(s.message ?? "")")
         }
         for u in discovery.unsupported { print("  [skip] \(u.displayName) (\(u.driver)): \(u.reason)") }

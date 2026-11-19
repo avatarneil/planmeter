@@ -39,6 +39,7 @@ public struct Discovery: Sendable {
     public var notes: [String]
     public var codexUsageTargets: [CodexUsageTarget] = []
     public var planLimitTargets: [PlanLimitTarget] = []
+    public var cursorUsageTargets: [CursorUsageTarget] = []
 
     public init(accounts: [Account] = [], sources: [ScanSource] = [], openCodeDatabase: String? = nil, unsupported: [UnsupportedInstance] = [], notes: [String] = []) {
         self.accounts = accounts
@@ -303,8 +304,25 @@ public enum AccountDiscovery {
             result.openCodeDatabase = db
         }
 
+        // Cursor ---------------------------------------------------------
+        // Usage comes from cursor.com with each saved login; one account per
+        // distinct login, so several logins are reported separately.
+        let cursor = CursorDiscovery.discover(instances: instances, usesT3Configuration: usesT3Configuration,
+                                              environment: environment, home: home)
+        result.accounts.append(contentsOf: cursor.accounts)
+        result.cursorUsageTargets = cursor.targets
+        result.planLimitTargets.append(contentsOf: cursor.planLimitTargets)
+        result.notes.append(contentsOf: cursor.notes)
+        if usesT3Configuration, cursor.accounts.isEmpty {
+            for instance in instances where instance.driver == "cursor" && instance.enabled {
+                result.unsupported.append(UnsupportedInstance(id: instance.id, driver: instance.driver,
+                    displayName: instance.displayName ?? instance.id,
+                    reason: "No saved Cursor login found. Sign in to the Cursor editor or CLI, then refresh."))
+            }
+        }
+
         // Everything else -----------------------------------------------
-        for instance in instances where !["codex", "claudeAgent", "antigravity", "grok", "opencode"].contains(instance.driver) {
+        for instance in instances where !["codex", "claudeAgent", "antigravity", "grok", "opencode", "cursor"].contains(instance.driver) || (instance.driver == "cursor" && !instance.enabled) {
             result.unsupported.append(UnsupportedInstance(
                 id: instance.id,
                 driver: instance.driver,

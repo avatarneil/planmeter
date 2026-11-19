@@ -25,6 +25,7 @@ public final class HostEngine: RemoteReportSource {
         public var dailyUsage: @Sendable ([CodexUsageTarget], Bool) async -> [CodexDailyUsageSnapshot]
         public var cloudUsage: @Sendable ([CodexUsageTarget], Bool) async -> [CodexCloudUsageSnapshot]
         public var planLimits: @Sendable ([PlanLimitTarget], Bool) async -> [PlanLimitSnapshot]
+        public var cursorUsage: @Sendable ([CursorUsageTarget], Int64, Bool) async -> [CursorUsageSnapshot]
         public var loadCachedRates: @Sendable () -> RateTable?
         public var fetchRates: @Sendable () async throws -> RateTable
 
@@ -36,7 +37,8 @@ public final class HostEngine: RemoteReportSource {
                     cloudUsage: @escaping @Sendable ([CodexUsageTarget], Bool) async -> [CodexCloudUsageSnapshot],
                     loadCachedRates: @escaping @Sendable () -> RateTable?,
                     fetchRates: @escaping @Sendable () async throws -> RateTable,
-                    planLimits: @escaping @Sendable ([PlanLimitTarget], Bool) async -> [PlanLimitSnapshot] = { _, _ in [] }) {
+                    planLimits: @escaping @Sendable ([PlanLimitTarget], Bool) async -> [PlanLimitSnapshot] = { _, _ in [] },
+                    cursorUsage: @escaping @Sendable ([CursorUsageTarget], Int64, Bool) async -> [CursorUsageSnapshot] = { _, _, _ in [] }) {
             self.discover = discover
             self.scan = scan
             self.threadCatalog = threadCatalog
@@ -44,13 +46,14 @@ public final class HostEngine: RemoteReportSource {
             self.dailyUsage = dailyUsage
             self.cloudUsage = cloudUsage
             self.planLimits = planLimits
+            self.cursorUsage = cursorUsage
             self.loadCachedRates = loadCachedRates
             self.fetchRates = fetchRates
         }
 
         /// The real thing. `pricingCache` is where fetched prices are kept;
         /// `offline` skips every network call (Codex account-wide readings,
-        /// Claude Code and Antigravity plan limits, and the pricing refresh)
+        /// Cursor usage, Claude Code, Antigravity, and Cursor plan limits, and the pricing refresh)
         /// and reports from local data only.
         public static func live(pricingCache: URL, offline: Bool = false) -> Loader {
             Loader(
@@ -67,7 +70,10 @@ public final class HostEngine: RemoteReportSource {
                     if offline { throw HostEngineError.offline }
                     return try await PricingLoader.fetch(cacheURL: pricingCache)
                 },
-                planLimits: { targets, force in offline ? [] : await PlanLimits.shared.load(targets: targets, force: force) }
+                planLimits: { targets, force in offline ? [] : await PlanLimits.shared.load(targets: targets, force: force) },
+                cursorUsage: { targets, sinceMs, force in
+                    offline ? [] : await CursorUsage.shared.load(targets: targets, sinceMs: sinceMs, force: force)
+                }
             )
         }
     }
@@ -95,9 +101,11 @@ public final class HostEngine: RemoteReportSource {
     public var accountUsage: [AccountUsageSnapshot] = []
     public var dailyUsage: [CodexDailyUsageSnapshot] = [] { didSet { mixedCells = nil } }
     public var cloudUsage: [CodexCloudUsageSnapshot] = []
+    /// Cursor's usage log per login; it has no local transcripts.
+    public var cursorUsage: [CursorUsageSnapshot] = []
     public var threadCatalog: [String: ThreadLink] = [:]
     public var rateLimits: [String: RateLimitSnapshot] = [:]
-    /// Claude Code and Antigravity windows read from the provider, by account id.
+    /// Claude Code, Antigravity, and Cursor windows read from the provider, by account id.
     public var planLimits: [String: PlanLimitSnapshot] = [:]
     public var sources: [SourceReport] = []
     public var rates = RateTable()
@@ -211,7 +219,12 @@ public final class HostEngine: RemoteReportSource {
         cloudUsage = retarget(cloudUsage, target: \.target)
         let sinceMs = Int64((Date().timeIntervalSince1970 - TimeInterval(Self.scanDays) * 86_400) * 1000)
         let output = await loader.scan(discovery, sinceMs, cache)
-        cells = output.cells
+        // Keep the last Cursor reading in the interim so its usage doesn't
+        // drop out of the chart while the refresh is in flight.
+        let cursorTargets = Set(discovery.cursorUsageTargets.map(\.id))
+        cursorUsage = cursorUsage.filter { cursorTargets.contains($0.target.id) }
+        let interim = CursorUsageProjection.merging(cursorUsage, into: output)
+        cells = interim.cells
         threadCells = output.threads
         threadCatalog = loader.threadCatalog(discovery)
         rateLimits = output.rateLimits
@@ -220,11 +233,13 @@ public final class HostEngine: RemoteReportSource {
         async let daily = loader.dailyUsage(targets, forceAccountUsage)
         async let cloud = loader.cloudUsage(targets, forceAccountUsage)
         async let limits = loader.planLimits(discovery.planLimitTargets, forceAccountUsage)
+        async let cursor = loader.cursorUsage(discovery.cursorUsageTargets, sinceMs, forceAccountUsage)
         accountUsage = await loader.accountUsage(targets, forceAccountUsage)
         dailyUsage = await daily
         cloudUsage = await cloud
         planLimits = Dictionary((await limits).map { ($0.target.accountId, $0) }, uniquingKeysWith: { first, _ in first })
-        let combined = CodexCloudProjection.merging(cloudUsage, into: output)
+        cursorUsage = await cursor
+        let combined = CursorUsageProjection.merging(cursorUsage, into: CodexCloudProjection.merging(cloudUsage, into: output))
         cells = combined.cells
         threadCells = combined.threads
         sources = combined.sources

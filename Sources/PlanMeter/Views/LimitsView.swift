@@ -5,7 +5,7 @@ struct LimitsCard: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        Card(title: "Subscription limits", info: "Codex records its rate-limit windows in each session transcript, so these reflect the last turn each account ran. Claude Code limits come from its CLI and Antigravity quotas from Google, refreshed at most every five minutes.") {
+        Card(title: "Subscription limits", info: "Codex records its rate-limit windows in each session transcript, so these reflect the last turn each account ran. Claude Code limits come from its CLI, Antigravity quotas from Google, and Cursor's billing-cycle usage from cursor.com, refreshed at most every five minutes.") {
             // Placeholder accounts never carry limit readings.
             let configured = Set(model.discovery.accounts.map(\.id))
             let codex = model.accounts.filter { account in
@@ -14,7 +14,7 @@ struct LimitsCard: View {
             }
             let providers = model.accounts.filter { model.planLimits[$0.id] != nil }
             if codex.isEmpty && providers.isEmpty {
-                Text("No Codex, Claude Code, or Antigravity accounts configured.").foregroundStyle(.secondary)
+                Text("No Codex, Claude Code, Antigravity, or Cursor accounts configured.").foregroundStyle(.secondary)
             }
             ForEach(codex) { account in
                 let plan = account.id.replacingOccurrences(of: "codex:plan:", with: "")
