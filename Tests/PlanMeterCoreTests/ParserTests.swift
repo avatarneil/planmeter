@@ -171,7 +171,8 @@ final class AccountDiscoveryTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(Set(discovery.accounts.map(\.provider)), Set(ProviderKind.allCases))
+        // Cursor accounts exist only for a saved login, which this machine may not have.
+        XCTAssertEqual(Set(discovery.accounts.map(\.provider)).subtracting([.cursor]), Set(ProviderKind.allCases).subtracting([.cursor]))
         XCTAssertEqual(
             discovery.sources.filter { $0.provider == .codex }.map(\.rootDir),
             ["/tmp/planmeter-codex/sessions", "/tmp/planmeter-codex/archived_sessions"]
