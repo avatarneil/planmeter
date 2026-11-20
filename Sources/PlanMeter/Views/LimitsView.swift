@@ -48,6 +48,9 @@ struct LimitsCard: View {
                         if let message = snapshot.message {
                             Text(message).font(.caption).foregroundStyle(snapshot.status == .failed || snapshot.status == .partial ? .orange : .secondary)
                         }
+                        if account.provider == .cursor, model.cursorNeedsKeychain {
+                            CursorKeychainButton()
+                        }
                         if let fetchedAt = snapshot.fetchedAt {
                             Text("As of \(Format.relative(fetchedAt))").font(.caption2).foregroundStyle(.tertiary)
                         }
@@ -62,6 +65,22 @@ struct LimitsCard: View {
         if s.unlimitedCredits == true { return "No windows reported; unlimited credits." }
         if s.hasCredits == true { return "No windows reported; billed against credits\(s.creditsBalance.map { " (balance \($0))" } ?? "")." }
         return "No usage windows reported for this plan."
+    }
+}
+
+/// Asks again for Cursor's Keychain key, explaining why first.
+private struct CursorKeychainButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button("Allow Keychain Access…") { Task { await model.offerCursorKeychainAccess() } }
+                .controlSize(.small)
+                .disabled(model.isRequestingCursorKeychain)
+            if let error = model.cursorKeychainError {
+                Text(error).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

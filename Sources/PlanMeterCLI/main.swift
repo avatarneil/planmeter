@@ -4,6 +4,17 @@ import PlanMeterCore
 // planmeter-cli [--days N] [--json]
 // Prints the same numbers the app shows for scripting and diagnostics.
 
+// Cursor's saved login is encrypted with a Keychain key; say why before
+// macOS asks, since its dialog can't carry an explanation.
+CursorSafeStorage.promptNotice = {
+    FileHandle.standardError.write(Data("""
+        PlanMeter: macOS is about to ask whether planmeter-cli may use "Cursor Safe Storage" from your Keychain.
+        \(CursorSafeStorage.accessExplanation)
+        Choose Always Allow so planmeter-cli doesn't ask again.
+
+        """.utf8))
+}
+
 var days = 30
 var json = false
 var report = "summary"

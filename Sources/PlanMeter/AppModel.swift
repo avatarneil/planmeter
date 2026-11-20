@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import PlanMeterCore
@@ -143,6 +144,14 @@ final class AppModel {
     var rateLimits: [String: RateLimitSnapshot] = [:]
     /// Claude Code, Antigravity, and Cursor windows read from the provider, by account id.
     var planLimits: [String: PlanLimitSnapshot] = [:]
+    /// Cursor's encrypted login needs its Keychain key, and macOS hasn't granted it yet.
+    var cursorNeedsKeychain = false
+    var isRequestingCursorKeychain = false
+    /// Why the last Keychain request failed, shown beside the button.
+    var cursorKeychainError: String?
+    /// The explanation opens by itself at most once per launch, and not after "Not Now".
+    @ObservationIgnored private var offeredCursorKeychain = false
+    private static let cursorKeychainDeclinedKey = "cursorKeychainDeclined"
     var sources: [SourceReport] = []
     var rates = RateTable()
     var buckets: [Bucket] = []
@@ -191,6 +200,9 @@ final class AppModel {
     func start() async {
         guard !started else { return }
         started = true
+        // Never let a background refresh raise the Keychain dialog: the app
+        // explains why it needs Cursor's key first (`offerCursorKeychainAccess`).
+        CursorSafeStorage.keychainAccess = .askFirst
         remote.dataProvider = { [weak self] request in
             guard let self else { return RemoteReply(error: "server not ready") }
             // A phone refresh should see fresh numbers, but not hammer the disk.
@@ -310,6 +322,42 @@ final class AppModel {
         sources = combined.sources
         threadCatalog = CodexCloudProjection.catalog(cloudUsage, local: threadCatalog)
         recompute()
+        cursorNeedsKeychain = CursorSafeStorage.needsApproval
+        if cursorNeedsKeychain, !offeredCursorKeychain, !SnapshotMode.isCapturing,
+           !UserDefaults.standard.bool(forKey: Self.cursorKeychainDeclinedKey) {
+            offeredCursorKeychain = true
+            Task { await offerCursorKeychainAccess() }
+        }
+    }
+
+    /// Explains why PlanMeter wants Cursor's Keychain key, then lets macOS ask.
+    /// The system dialog can't say why, so this comes first.
+    func offerCursorKeychainAccess() async {
+        guard !isRequestingCursorKeychain else { return }
+        let alert = NSAlert()
+        alert.messageText = "Allow PlanMeter to read your Cursor login?"
+        alert.informativeText = CursorSafeStorage.accessExplanation + """
+
+
+            Next, macOS will ask whether PlanMeter may use "Cursor Safe Storage". Enter your Mac login \
+            password if asked, then choose Always Allow so it doesn't ask again.
+            """
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Not Now")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            UserDefaults.standard.set(true, forKey: Self.cursorKeychainDeclinedKey)
+            return
+        }
+        UserDefaults.standard.removeObject(forKey: Self.cursorKeychainDeclinedKey)
+        isRequestingCursorKeychain = true
+        // The request blocks while macOS's dialog is open.
+        cursorKeychainError = await Task.detached { CursorSafeStorage.requestAccess() }.value
+        isRequestingCursorKeychain = false
+        cursorNeedsKeychain = CursorSafeStorage.needsApproval
+        guard cursorKeychainError == nil else { return }
+        while isScanning { try? await Task.sleep(for: .milliseconds(200)) }
+        await refresh(forceAccountUsage: true)
     }
 
     var coverage: [UsageReconciliation] {

@@ -121,7 +121,7 @@ final class CursorUsageTests: XCTestCase {
 
     func testUnreadableLoginsAreNotedNotGuessed() throws {
         let encrypted = root.appendingPathComponent("encrypted")
-        _ = try editorDatabase(at: encrypted, rows: ["cursorAuth/accessToken": "cursor-safe-storage:v1:abcdef"])
+        _ = try editorDatabase(at: encrypted, rows: ["cursorAuth/accessToken": "cursor-safe-storage:v1:djExAAAA"])
         let garbage = root.appendingPathComponent("garbage")
         try cliHome(at: garbage, token: "not-a-jwt", email: "x@example.com")
         let result = CursorDiscovery.discover(instances: [], usesT3Configuration: false,
@@ -144,6 +144,62 @@ final class CursorUsageTests: XCTestCase {
         XCTAssertEqual(discovery.unsupported.map(\.reason), ["Disabled in T3 Code."])
         XCTAssertTrue(discovery.planLimitTargets.contains { $0.provider == .cursor })
     }
+
+    // MARK: Encrypted logins (Cursor 3.x)
+
+    func testEncryptedEditorLoginIsFoundByItsMembershipAuthId() throws {
+        let plain = root.appendingPathComponent("plain")
+        _ = try editorDatabase(at: plain, rows: ["cursorAuth/accessToken": Self.token(sub: "google-oauth2|user_01WORK")])
+        let encrypted = root.appendingPathComponent("encrypted")
+        _ = try editorDatabase(at: encrypted, rows: [
+            // Malformed, so a regression fails here instead of asking the Keychain.
+            "cursorAuth/accessToken": "cursor-safe-storage:v1:djEwAAAA",
+            "cursorAuth/stripeMembershipAuthId": "google-oauth2|user_01WORK",
+            "cursorAuth/cachedEmail": "me@company.example",
+            "cursorAuth/stripeMembershipType": "enterprise",
+        ])
+        let before = CursorDiscovery.discover(instances: [], usesT3Configuration: false,
+            environment: ["PLANMETER_CURSOR_HOMES": plain.path], home: root.appendingPathComponent("none").path)
+        let after = CursorDiscovery.discover(instances: [], usesT3Configuration: false,
+            environment: ["PLANMETER_CURSOR_HOMES": encrypted.path], home: root.appendingPathComponent("none").path)
+        XCTAssertEqual(after.accounts.count, 1)
+        XCTAssertEqual(after.accounts.first?.id, before.accounts.first?.id, "the same login keeps its account and cached history")
+        XCTAssertEqual(after.accounts.first?.email, "me@company.example")
+        XCTAssertEqual(after.accounts.first?.planLabel, "Enterprise")
+        XCTAssertEqual(after.targets.first?.id, before.targets.first?.id)
+        XCTAssertTrue(after.notes.isEmpty)
+    }
+
+    func testEncryptedLoginWithoutIdentityExplainsWhyCursorIsMissing() throws {
+        let editor = root.appendingPathComponent("editor")
+        _ = try editorDatabase(at: editor, rows: ["cursorAuth/accessToken": "cursor-safe-storage:v2:future"])
+        let settings = T3Settings(instances: [T3ProviderInstance(id: "cursor", driver: "cursor", homePath: editor.path)],
+                                  settingsPath: root.appendingPathComponent("settings.json"))
+        let discovery = AccountDiscovery.discover(settings: settings, environment: ["HOME": root.path])
+        XCTAssertTrue(discovery.cursorUsageTargets.isEmpty)
+        XCTAssertEqual(discovery.unsupported.count, 1)
+        XCTAssertTrue(discovery.unsupported[0].reason.contains("encrypts its saved login"), discovery.unsupported[0].reason)
+    }
+
+    #if os(macOS)
+    func testDecryptsElectronSafeStorageValues() throws {
+        // Produced independently with Python's PBKDF2 and `openssl enc -aes-128-cbc`.
+        let key = try XCTUnwrap(CursorSafeStorage.deriveKey(password: Data("test-safe-storage-password".utf8)))
+        XCTAssertEqual(key.map { String(format: "%02x", $0) }.joined(), "8d980c26091f4ec99749af7dd4090b2e")
+        let saved = "cursor-safe-storage:v1:djEwdE8L7nxyrMRcsOhRHXQqKwfLG+7MlPhWkPQz1B3vQ40="
+        XCTAssertEqual(try CursorSafeStorage.decrypt(saved, key: key), "header.payload.signature")
+
+        let token = Self.token(sub: "auth0|user_X")
+        XCTAssertEqual(try CursorSafeStorage.decrypt(try CursorSafeStorage.encrypt(token, key: key), key: key), token)
+
+        let wrong = try XCTUnwrap(CursorSafeStorage.deriveKey(password: Data("other".utf8)))
+        XCTAssertThrowsError(try CursorSafeStorage.decrypt(saved, key: wrong)) { XCTAssertEqual($0 as? CursorError, .unreadable) }
+        XCTAssertThrowsError(try CursorSafeStorage.decrypt("cursor-safe-storage:v1:!!", key: key)) { XCTAssertEqual($0 as? CursorError, .unreadable) }
+        XCTAssertThrowsError(try CursorSafeStorage.decrypt("cursor-safe-storage:v1:djExAAAAAAAAAAAAAAAAAAAAAA==", key: key)) {
+            XCTAssertEqual($0 as? CursorError, .encrypted, "v11 is Linux's libsecret scheme")
+        }
+    }
+    #endif
 
     func testExpiredLoginIsReportedAtRequestTime() throws {
         XCTAssertThrowsError(try CursorCredentials.credential(token: Self.token(sub: "auth0|user_X", exp: 100), email: nil, membership: nil,
@@ -238,6 +294,33 @@ final class CursorUsageTests: XCTestCase {
         let mode = try FileManager.default.attributesOfItem(atPath: cacheURL.path)[.posixPermissions] as? Int
         XCTAssertEqual(mode, 0o600)
         #endif
+    }
+
+    func testProcessWithoutKeychainAccessShowsTheAppsNewestReading() async throws {
+        let target = CursorUsageTarget(id: String(AntigravityIdentity.sha256Hex("cursor:user_X").prefix(16)), accountId: "cursor:user:x",
+                                       name: "Cursor", sources: [CursorCredentialSource(kind: .editor, path: "/unused")])
+        let credential = try CursorCredentials.credential(token: Self.token(sub: "auth0|user_X"), email: nil, membership: nil)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let sinceMs = Int64(now.timeIntervalSince1970 * 1000) - 86_400_000
+        let cacheURL = root.appendingPathComponent("cursor-usage.json")
+        let mcp = CursorUsage(cacheURL: cacheURL, credentials: { _ in throw CursorError.keychainUnavailable },
+                              fetchPage: { _, _, _, _ in XCTFail("no key, no request"); return CursorEventPage(events: [], rows: 0, total: 0) })
+        // Started before the app had read anything.
+        let empty = await mcp.load(targets: [target], sinceMs: sinceMs, now: now)
+        XCTAssertEqual(empty.first?.status, .failed)
+        XCTAssertTrue(empty.first?.message?.contains("doesn't show the Keychain prompt") == true)
+
+        // The app (which has the key) writes a reading to the shared cache.
+        let app = CursorUsage(cacheURL: cacheURL, credentials: { _ in credential }, fetchPage: { _, _, _, _ in
+            CursorEventPage(events: [CursorUsageEvent(timestampMs: sinceMs + 60_000, model: "gpt-5.5", inputTokens: 10, costCents: 1)],
+                            rows: 1, total: 1)
+        })
+        _ = await app.load(targets: [target], sinceMs: sinceMs, now: now.addingTimeInterval(60))
+
+        let shared = await mcp.load(targets: [target], sinceMs: sinceMs, force: true, now: now.addingTimeInterval(120))
+        XCTAssertEqual(shared.first?.status, .partial)
+        XCTAssertEqual(shared.first?.events.count, 1)
+        XCTAssertTrue(shared.first?.message?.hasPrefix("Showing the PlanMeter app's last Cursor reading.") == true)
     }
 
     func testLoginNowSignedInAsSomeoneElseIsRejected() async throws {

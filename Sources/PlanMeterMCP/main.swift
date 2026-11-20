@@ -7,7 +7,7 @@ import PlanMeterCore
 // agents actually use: initialize, ping, tools/list, tools/call. Everything is
 // read-only against the same transcripts and cache the app uses.
 
-let serverVersion = "0.5.0"
+let serverVersion = "0.5.1"
 let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 struct Tool {
@@ -95,6 +95,9 @@ func textResult(_ payload: [String: Any], isError: Bool = false) -> [String: Any
 // MARK: - Tool execution
 
 let cache = ScanCache()
+// Agents call this unattended: a Keychain dialog would stall the request, so a
+// Cursor login that needs one reports why instead of asking.
+CursorSafeStorage.keychainAccess = .never
 var cacheLoaded = false
 
 func intArg(_ args: [String: Any], _ key: String, default def: Int, range: ClosedRange<Int>) -> Int {

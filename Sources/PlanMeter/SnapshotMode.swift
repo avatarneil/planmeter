@@ -7,6 +7,11 @@ import PlanMeterDesktopShared
 /// after the first scan and exits. Used for visual checks without needing
 /// Screen Recording permission for a terminal.
 enum SnapshotMode {
+    /// A capture run renders and exits; it must never stop on a dialog.
+    static var isCapturing: Bool {
+        path != nil || menuPath != nil || remotePath != nil || diagnosticsPath != nil || desktopPath != nil
+    }
+
     static var path: String? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return nil }
