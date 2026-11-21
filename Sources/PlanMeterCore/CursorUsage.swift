@@ -67,11 +67,16 @@ struct CursorCredential: Sendable {
 
 enum CursorError: Error, Equatable {
     case missing, encrypted, unreadable, expired, signedOut, http, invalid
+    case keychainMissing, keychainDenied, keychainUnavailable, keychainNeedsApproval
 
     var message: String {
         switch self {
         case .missing: return "No saved Cursor login. Sign in to Cursor, then refresh."
-        case .encrypted: return "This Cursor version encrypts its saved login, which PlanMeter does not decrypt."
+        case .encrypted: return "This Cursor version encrypts its saved login in a form PlanMeter can't decrypt here; it reads only Cursor's macOS Keychain encryption."
+        case .keychainMissing: return "Cursor's saved login is encrypted, but its \"Cursor Safe Storage\" Keychain key is missing. Open Cursor to recreate it, then refresh."
+        case .keychainDenied: return "Cursor encrypts its saved login, and Keychain access to its \"Cursor Safe Storage\" key was not allowed. Choose Allow Keychain Access in PlanMeter to ask again."
+        case .keychainUnavailable: return "Cursor encrypts its saved login, and planmeter-mcp doesn't show the Keychain prompt needed to read its key."
+        case .keychainNeedsApproval: return "Cursor encrypts its saved login. Choose Allow Keychain Access to let PlanMeter read its key from the Keychain."
         case .unreadable: return "Could not read the saved Cursor login."
         case .expired: return "The saved Cursor login has expired. Open Cursor (or run `cursor-agent login`) to renew it, then refresh."
         case .signedOut: return "cursor.com rejected the saved login. Sign in to Cursor again, then refresh."
@@ -81,8 +86,16 @@ enum CursorError: Error, Equatable {
     }
 }
 
+/// Who a saved login belongs to, read without decrypting anything.
+struct CursorIdentity: Sendable, Equatable {
+    var userId: String
+    var email: String?
+    var membership: String?
+}
+
 enum CursorCredentials {
-    static let editorKeys = ["cursorAuth/accessToken", "cursorAuth/cachedEmail", "cursorAuth/stripeMembershipType"]
+    static let editorKeys = ["cursorAuth/accessToken", "cursorAuth/cachedEmail", "cursorAuth/stripeMembershipType",
+                             "cursorAuth/stripeMembershipAuthId"]
 
     static func read(_ source: CursorCredentialSource, now: Date = Date()) throws -> CursorCredential {
         var token: String?
@@ -94,6 +107,9 @@ enum CursorCredentials {
             token = values["cursorAuth/accessToken"]
             email = values["cursorAuth/cachedEmail"]
             membership = values["cursorAuth/stripeMembershipType"]
+            if let saved = token, CursorSafeStorage.isEncrypted(saved) {
+                token = try CursorSafeStorage.decrypt(saved)
+            }
         case .cli:
             guard let data = FileManager.default.contents(atPath: source.path) else { throw CursorError.missing }
             guard let root = JSON.object(data) else { throw CursorError.unreadable }
@@ -105,18 +121,42 @@ enum CursorCredentials {
             }
         }
         guard let raw = token?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { throw CursorError.missing }
-        if raw.hasPrefix("cursor-safe-storage:") { throw CursorError.encrypted }
+        if CursorSafeStorage.isEncrypted(raw) { throw CursorError.encrypted }
         return try credential(token: raw, email: email, membership: membership, now: now)
+    }
+
+    /// The login's owner, for discovery. An encrypted editor login is named by
+    /// `cursorAuth/stripeMembershipAuthId`, the same `<provider>|<user id>` as
+    /// the token's `sub`, so finding accounts never needs the Keychain.
+    static func identity(_ source: CursorCredentialSource) throws -> CursorIdentity {
+        if source.kind == .editor {
+            let values = try editorValues(path: source.path)
+            guard let token = values["cursorAuth/accessToken"], !token.isEmpty else { throw CursorError.missing }
+            // Without that row, fall through and decrypt the token instead.
+            if CursorSafeStorage.isEncrypted(token), let subject = values["cursorAuth/stripeMembershipAuthId"],
+               let userId = userId(subject: subject) {
+                return CursorIdentity(userId: userId, email: values["cursorAuth/cachedEmail"],
+                                      membership: values["cursorAuth/stripeMembershipType"])
+            }
+        }
+        // Identity only: expiry is checked again on every request, and an
+        // expired login still names its account.
+        let credential = try read(source, now: .distantPast)
+        return CursorIdentity(userId: credential.userId, email: credential.email, membership: credential.membership)
+    }
+
+    /// `sub` is `<identity provider>|<user id>`; the dashboard wants the user id.
+    static func userId(subject: String) -> String? {
+        let userId = subject.split(separator: "|").last.map(String.init) ?? subject
+        guard !userId.isEmpty, userId.utf8.count <= 200,
+              userId.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }) else { return nil }
+        return userId
     }
 
     static func credential(token: String, email: String?, membership: String?, now: Date = Date()) throws -> CursorCredential {
         guard token.utf8.count <= 8_192, token.allSatisfy({ $0.isASCII && !$0.isWhitespace }),
-              let claims = JWT.payload(token), let subject = JSON.string(claims["sub"]) else { throw CursorError.unreadable }
-        // `sub` is `<identity provider>|<user id>`; the dashboard wants the user id.
-        let userId = subject.split(separator: "|").last.map(String.init) ?? subject
-        guard !userId.isEmpty, userId.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }) else {
-            throw CursorError.unreadable
-        }
+              let claims = JWT.payload(token), let subject = JSON.string(claims["sub"]),
+              let userId = userId(subject: subject) else { throw CursorError.unreadable }
         let expiresAt = JSON.double(claims["exp"]).map { Date(timeIntervalSince1970: $0) }
         if let expiresAt, expiresAt.timeIntervalSince(now) < 60 { throw CursorError.expired }
         return CursorCredential(token: token, userId: userId, expiresAt: expiresAt, email: email, membership: membership)
@@ -178,6 +218,9 @@ public enum CursorDiscovery {
         public var targets: [CursorUsageTarget] = []
         public var planLimitTargets: [PlanLimitTarget] = []
         public var notes: [String] = []
+        /// Why the first saved login that exists could not be used, for when no
+        /// account was found.
+        public var failureReason: String?
     }
 
     /// The editor's database and the CLI's `auth.json` in their standard places.
@@ -245,9 +288,7 @@ public enum CursorDiscovery {
                 guard FileManager.default.fileExists(atPath: path), seenPaths.insert(path).inserted else { continue }
                 let normalized = CursorCredentialSource(kind: source.kind, path: path)
                 do {
-                    // Identity only: expiry is checked again on every request,
-                    // and an expired login still names its account.
-                    let credential = try CursorCredentials.read(normalized, now: .distantPast)
+                    let credential = try CursorCredentials.identity(normalized)
                     if let index = logins.firstIndex(where: { $0.userId == credential.userId }) {
                         logins[index].sources.append(normalized)
                         if logins[index].email == nil { logins[index].email = credential.email }
@@ -256,10 +297,11 @@ public enum CursorDiscovery {
                         logins.append(Login(userId: credential.userId, instance: candidate.instance, sources: [normalized],
                                             email: credential.email, membership: credential.membership))
                     }
-                } catch let error as CursorError {
-                    if error != .missing { result.notes.append("Cursor login at \(path): \(error.message)") }
                 } catch {
-                    result.notes.append("Cursor login at \(path): \(CursorError.unreadable.message)")
+                    let error = (error as? CursorError) ?? .unreadable
+                    guard error != .missing else { continue }
+                    result.notes.append("Cursor login at \(path): \(error.message)")
+                    if result.failureReason == nil { result.failureReason = error.message }
                 }
             }
         }
@@ -539,9 +581,17 @@ public actor CursorUsage {
             return snapshot
         } catch {
             let reason = (error as? CursorError)?.message ?? CursorError.http.message
+            // A process that may not read the Keychain shows the app's newest
+            // reading, which the app keeps writing to the shared cache.
+            if (error as? CursorError) == .keychainUnavailable, var shared = readCache()[target.id],
+               let fetched = shared.fetchedAt, fetched > (previous?.fetchedAt ?? .distantPast) {
+                shared.target = target
+                previous = shared
+            }
             if var stale = previous, stale.fetchedAt != nil {
                 stale.status = .partial
-                stale.message = "Stale reading. " + reason
+                stale.message = ((error as? CursorError) == .keychainUnavailable
+                    ? "Showing the PlanMeter app's last Cursor reading. " : "Stale reading. ") + reason
                 return stale
             }
             var snapshot = CursorUsageSnapshot(target: target)
@@ -598,9 +648,13 @@ public actor CursorUsage {
     private func loadCache() {
         guard !loaded else { return }
         loaded = true
+        cached.merge(readCache()) { current, _ in current }
+    }
+
+    private func readCache() -> [String: CursorUsageSnapshot] {
         guard let cacheURL, let data = try? Data(contentsOf: cacheURL),
-              let doc = try? JSONDecoder().decode(CacheDocument.self, from: data), doc.version == 1 else { return }
-        for snapshot in doc.snapshots { cached[snapshot.target.id] = snapshot }
+              let doc = try? JSONDecoder().decode(CacheDocument.self, from: data), doc.version == 1 else { return [:] }
+        return Dictionary(doc.snapshots.map { ($0.target.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private func saveCache() {

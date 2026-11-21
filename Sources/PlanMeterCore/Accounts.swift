@@ -317,7 +317,7 @@ public enum AccountDiscovery {
             for instance in instances where instance.driver == "cursor" && instance.enabled {
                 result.unsupported.append(UnsupportedInstance(id: instance.id, driver: instance.driver,
                     displayName: instance.displayName ?? instance.id,
-                    reason: "No saved Cursor login found. Sign in to the Cursor editor or CLI, then refresh."))
+                    reason: cursor.failureReason ?? "No saved Cursor login found. Sign in to the Cursor editor or CLI, then refresh."))
             }
         }
 

@@ -54,6 +54,11 @@
   </branding>
 
   <releases>
+    <release version="0.5.1" date="2026-11-20">
+      <description>
+        <p>Clearer Cursor status: a Cursor login is identified even when its saved token is encrypted, and the reason is shown when it can't be read.</p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-11-19">
       <description>
         <p>Cursor support: usage and billing-cycle limits for each Cursor login, read from cursor.com.</p>

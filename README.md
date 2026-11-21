@@ -161,8 +161,18 @@ not what Cursor bills.
   Cursor CLI's `auth.json` (`$XDG_CONFIG_HOME/cursor/auth.json` on Linux, `~/.cursor/auth.json` on
   macOS when the CLI can't use the Keychain). The token is read for each request and is sent only
   to `https://cursor.com`, with redirects refused. It is never refreshed, copied, or stored. An
-  expired login asks you to open Cursor. PlanMeter does not read the CLI's macOS Keychain entry or
-  decrypt logins that newer Cursor builds encrypt (`cursor-safe-storage:`).
+  expired login asks you to open Cursor. PlanMeter does not read the CLI's macOS Keychain entry.
+- **Encrypted logins.** Cursor 3.x encrypts the editor's saved token (`cursor-safe-storage:v1:`)
+  with Electron's safeStorage. On macOS, PlanMeter decrypts it in memory for each request with the
+  "Cursor Safe Storage" key from your login Keychain. Only the derived key is kept, in memory, until
+  PlanMeter quits. macOS's own dialog can't say why it's asking, so PlanMeter explains first: the
+  app checks silently, and only if access hasn't been granted does it show what the key is for
+  before macOS asks (choose **Always Allow**). **Not Now** leaves an **Allow Keychain Access…**
+  button under Cursor in Subscription limits. `planmeter-cli` prints the same explanation before
+  the dialog. `planmeter-mcp` never asks, since an agent's request would stall on the dialog; it
+  shows the app's last Cursor reading instead. Accounts are found without the Keychain, from the
+  login's plain-text `cursorAuth/stripeMembershipAuthId`, so a login that can't be decrypted still
+  appears with the reason. Encrypted logins on Linux aren't decrypted.
 - **Refresh.** At most once per five minutes per login; **Refresh** forces a reading. Fetched
   events (never credentials) are cached in `cursor-usage.json` (mode 0600) under PlanMeter's state
   directory. Later refreshes re-read only the last six hours. The 90-day window is read in pages of
