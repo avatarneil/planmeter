@@ -1,7 +1,4 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -17,12 +14,11 @@ public struct PlanLimitTarget: Hashable, Codable, Sendable, Identifiable {
     public var provider: ProviderKind
     /// Claude: the login's `CLAUDE_CONFIG_DIR`, or nil for the default login.
     public var configDir: String?
-    /// Antigravity: the profile's `acp_token.json`. Cursor: the saved login's
-    /// `state.vscdb` or `auth.json`, with its kind in `authMethod`.
+    /// Cursor: the saved login's `state.vscdb` or `auth.json`.
     public var tokenPath: String?
     /// Expected login email, checked against the CLI's reported account.
     public var email: String?
-    /// Antigravity: T3's auth method; only Google sign-in has quotas.
+    /// Cursor credential source kind (editor or CLI).
     public var authMethod: String?
     public var id: String { accountId }
 
@@ -123,7 +119,6 @@ public actor PlanLimits {
     static func read(target: PlanLimitTarget) async -> PlanLimitSnapshot {
         switch target.provider {
         case .claude: return ClaudePlanLimits.read(target: target)
-        case .antigravity: return await AntigravityPlanLimits.read(target: target)
         case .cursor: return await CursorPlanLimits.read(target: target)
         default:
             var snapshot = PlanLimitSnapshot(target: target)
@@ -234,7 +229,7 @@ public enum ClaudePlanLimits {
 }
 
 enum PlanLimitError: Error {
-    case identity, unsupported, timeout, closed, protocolError, signedOut, http
+    case identity, unsupported, timeout, closed, protocolError
 
     func description(provider: ProviderKind) -> String {
         let name = provider.displayName
@@ -244,8 +239,6 @@ enum PlanLimitError: Error {
         case .timeout: return "\(name) plan limits timed out."
         case .closed: return "\(name) exited before returning plan limits."
         case .protocolError: return "\(name) rejected the plan limit request. Check the CLI version and login."
-        case .signedOut: return "Sign in to \(name) with Google to see plan limits."
-        case .http: return "Could not read \(name) plan limits. Refresh to retry."
         }
     }
 }
@@ -341,149 +334,5 @@ private final class ClaudeControlClient: @unchecked Sendable {
         process.waitUntilExit()
         try? output.fileHandleForReading.close()
         try? FileManager.default.removeItem(at: workDir)
-    }
-}
-
-// MARK: - Antigravity
-
-/// Reads Antigravity quotas the way T3 Code does: the profile's refresh token
-/// is exchanged for a short-lived access token, which reads the quota summary.
-/// The token file is never written; the access token is never stored.
-public enum AntigravityPlanLimits {
-    static let endpoints = ["https://daily-cloudcode-pa.googleapis.com", "https://cloudcode-pa.googleapis.com"]
-
-    static func read(target: PlanLimitTarget, session: URLSession = .shared) async -> PlanLimitSnapshot {
-        var snapshot = PlanLimitSnapshot(target: target)
-        if let method = target.authMethod, method != "oauth-personal", method != "oauth-business" {
-            snapshot.message = "Plan limits apply only to Google sign-in."
-            return snapshot
-        }
-        guard let tokenPath = target.tokenPath, let data = FileManager.default.contents(atPath: tokenPath),
-              let token = JSON.object(data), let clientId = JSON.string(token["client_id"]),
-              let clientSecret = JSON.string(token["client_secret"]), let refreshToken = JSON.string(token["refresh_token"]) else {
-            snapshot.message = "Plan limits need an Antigravity profile signed in through T3 Code; the standalone CLI keeps its login in the Keychain."
-            return snapshot
-        }
-        let project = JSON.string(token["project_id"])
-        do {
-            let accessToken = try await refresh(clientId: clientId, clientSecret: clientSecret, refreshToken: refreshToken, session: session)
-            var windows = await fetch("retrieveUserQuotaSummary", accessToken: accessToken, project: project, session: session, parse: summaryWindows)
-            if windows.isEmpty {
-                windows = await fetch("fetchAvailableModels", accessToken: accessToken, project: project, session: session, parse: modelWindows)
-            }
-            guard !windows.isEmpty else { throw PlanLimitError.unsupported }
-            snapshot.windows = windows
-            snapshot.status = .ok
-            snapshot.fetchedAt = Date()
-        } catch {
-            snapshot = PlanLimitSnapshot(target: target)
-            snapshot.status = .failed
-            snapshot.message = (error as? PlanLimitError)?.description(provider: .antigravity)
-                ?? "Could not read Antigravity plan limits. Refresh to retry."
-        }
-        return snapshot
-    }
-
-    private static func refresh(clientId: String, clientSecret: String, refreshToken: String, session: URLSession) async throws -> String {
-        var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!, timeoutInterval: 10)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-        let form = [("client_id", clientId), ("client_secret", clientSecret), ("refresh_token", refreshToken), ("grant_type", "refresh_token")]
-            .map { "\($0)=\($1.addingPercentEncoding(withAllowedCharacters: unreserved) ?? "")" }
-            .joined(separator: "&")
-        request.httpBody = Data(form.utf8)
-        let (data, response) = try await session.portableDataWithoutRedirects(for: request)
-        guard let http = response as? HTTPURLResponse else { throw PlanLimitError.http }
-        if http.statusCode == 400 || http.statusCode == 401 { throw PlanLimitError.signedOut }
-        guard http.statusCode == 200, let body = JSON.object(data), let token = JSON.string(body["access_token"]) else { throw PlanLimitError.http }
-        return token
-    }
-
-    /// Both endpoints are asked; for a quota both report, the higher reading wins.
-    private static func fetch(_ operation: String, accessToken: String, project: String?, session: URLSession,
-                              parse: @escaping @Sendable ([String: Any]) -> [PlanLimitWindow]) async -> [PlanLimitWindow] {
-        let body = (try? JSONSerialization.data(withJSONObject: project.map { ["project": $0] } ?? [:])) ?? Data("{}".utf8)
-        let responses = await withTaskGroup(of: [PlanLimitWindow].self) { group in
-            for endpoint in endpoints {
-                group.addTask {
-                    var request = URLRequest(url: URL(string: "\(endpoint)/v1internal:\(operation)")!, timeoutInterval: 10)
-                    request.httpMethod = "POST"
-                    request.httpBody = body
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-                    request.setValue("antigravity/hub/1.0.0 (aidev_client; os_type=darwin; arch=arm64)", forHTTPHeaderField: "User-Agent")
-                    guard let (data, response) = try? await session.portableDataWithoutRedirects(for: request),
-                          (response as? HTTPURLResponse)?.statusCode == 200, let json = JSON.object(data) else { return [] }
-                    return parse(json)
-                }
-            }
-            var all: [[PlanLimitWindow]] = []
-            for await windows in group { all.append(windows) }
-            return all
-        }
-        return merge(responses)
-    }
-
-    static func merge(_ responses: [[PlanLimitWindow]]) -> [PlanLimitWindow] {
-        var byId: [String: PlanLimitWindow] = [:]
-        var order: [String] = []
-        for window in responses.joined() {
-            if let previous = byId[window.id] {
-                if window.usedPercent > previous.usedPercent { byId[window.id] = window }
-            } else {
-                byId[window.id] = window
-                order.append(window.id)
-            }
-        }
-        return order.compactMap { byId[$0] }
-    }
-
-    private static func window(id: String, label: String, quota: [String: Any], minutes: Int?) -> PlanLimitWindow? {
-        guard let remaining = JSON.double(quota["remainingFraction"]) else { return nil }
-        return PlanLimitWindow(id: id, label: label, usedPercent: (1 - max(0, min(1, remaining))) * 100,
-                               windowMinutes: minutes, resetsAt: PlanLimits.date(quota["resetTime"]))
-    }
-
-    static func summaryWindows(_ summary: [String: Any]) -> [PlanLimitWindow] {
-        let groups = (summary["groups"] as? [[String: Any]]) ?? []
-        let effective = groups.contains { !(($0["buckets"] as? [[String: Any]]) ?? []).isEmpty } ? groups : [["buckets": summary["buckets"] ?? []]]
-        var windows: [PlanLimitWindow] = []
-        for group in effective {
-            for bucket in (group["buckets"] as? [[String: Any]]) ?? [] {
-                guard let id = JSON.string(bucket["bucketId"]), JSON.bool(bucket["disabled"]) != true,
-                      !windows.contains(where: { $0.id == id }) else { continue }
-                let family = id.hasPrefix("gemini-") ? "Gemini"
-                    : id.hasPrefix("3p-") ? "Claude & GPT (shared)"
-                    : JSON.string(group["displayName"])?.trimmingCharacters(in: .whitespaces) ?? id
-                let cadence = JSON.string(bucket["window"])
-                let name = cadence == "weekly" ? "Weekly" : cadence == "5h" ? "5-hour"
-                    : JSON.string(bucket["displayName"])?.trimmingCharacters(in: .whitespaces) ?? "Quota"
-                let minutes = cadence == "weekly" ? 10080 : cadence == "5h" ? 300 : nil
-                if let window = window(id: id, label: "\(family) · \(name)", quota: bucket, minutes: minutes) { windows.append(window) }
-            }
-        }
-        return windows
-    }
-
-    /// Older accounts expose per-model quotas without a window length; no reset
-    /// cadence is invented for them.
-    static func modelWindows(_ response: [String: Any]) -> [PlanLimitWindow] {
-        var groups: [[PlanLimitWindow]] = []
-        for (modelId, value) in (JSON.object(response["models"]) ?? [:]).sorted(by: { $0.key < $1.key }) {
-            guard let model = JSON.object(value) else { continue }
-            let provider = JSON.string(model["modelProvider"])
-            let family = provider == "MODEL_PROVIDER_GOOGLE" || modelId.hasPrefix("gemini-") ? "Gemini"
-                : provider == "MODEL_PROVIDER_ANTHROPIC" || modelId.hasPrefix("claude-") ? "Claude"
-                : provider == "MODEL_PROVIDER_OPENAI" || modelId.hasPrefix("gpt-") ? "GPT" : nil
-            guard let family else { continue }
-            var found: [PlanLimitWindow] = []
-            if let quota = JSON.object(model["quotaInfo"]),
-               let w = window(id: "\(family.lowercased())-quota", label: "\(family) · Quota", quota: quota, minutes: nil) { found.append(w) }
-            if let quota = JSON.object(model["weeklyQuotaInfo"]),
-               let w = window(id: "\(family.lowercased())-weekly", label: "\(family) · Weekly", quota: quota, minutes: 10080) { found.append(w) }
-            groups.append(found)
-        }
-        return merge(groups)
     }
 }

@@ -7,7 +7,7 @@ import PlanMeterCore
 // agents actually use: initialize, ping, tools/list, tools/call. Everything is
 // read-only against the same transcripts and cache the app uses.
 
-let serverVersion = "0.5.1"
+let serverVersion = "0.5.2"
 let supportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"]
 
 struct Tool {
@@ -47,7 +47,7 @@ let tools: [Tool] = [
     ),
     Tool(
         name: "plan_limits",
-        description: "Subscription limit windows (used percent and reset time) per account: Codex windows from the most recent session each account ran (codex), and Claude Code, Antigravity, and Cursor windows read from the provider (plans). Provider readings are refreshed at most once per five minutes.",
+        description: "Subscription limit windows (used percent and reset time) per account. The codex field uses the most recent session each account ran. The plans field contains Claude Code and Cursor readings, refreshed at most once every five minutes.",
         schema: ["type": "object", "properties": [:], "additionalProperties": false]
     ),
     Tool(
