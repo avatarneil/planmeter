@@ -142,7 +142,7 @@ final class AppModel {
     var cursorUsage: [CursorUsageSnapshot] = []
     var threadCatalog: [String: ThreadLink] = [:]
     var rateLimits: [String: RateLimitSnapshot] = [:]
-    /// Claude Code, Antigravity, and Cursor windows read from the provider, by account id.
+    /// Claude Code and Cursor windows read from the provider, by account id.
     var planLimits: [String: PlanLimitSnapshot] = [:]
     /// Cursor's encrypted login needs its Keychain key, and macOS hasn't granted it yet.
     var cursorNeedsKeychain = false

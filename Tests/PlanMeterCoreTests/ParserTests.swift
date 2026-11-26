@@ -185,6 +185,7 @@ final class AccountDiscoveryTests: XCTestCase {
             discovery.sources.first { $0.provider == .antigravity }?.rootDir,
             "/tmp/planmeter-antigravity/conversations"
         )
+        XCTAssertFalse(discovery.planLimitTargets.contains { $0.provider == .antigravity })
         XCTAssertEqual(
             discovery.sources.first { $0.provider == .grok }?.rootDir,
             "/tmp/planmeter-grok/sessions"
@@ -213,6 +214,7 @@ final class AccountDiscoveryTests: XCTestCase {
         try Data("""
         {"active":"dev@gmail.com"}
         """.utf8).write(to: acpDir.appendingPathComponent("google_accounts.json"))
+        try Data(#"{"refresh_token":"fixture"}"#.utf8).write(to: acpDir.appendingPathComponent("acp_token.json"))
 
         let settings = T3Settings(
             instances: [
@@ -239,6 +241,7 @@ final class AccountDiscoveryTests: XCTestCase {
             discovery.sources.filter { $0.provider == .antigravity }.map(\.rootDir),
             [conversationsDir.standardizedFileURL.path]
         )
+        XCTAssertFalse(discovery.planLimitTargets.contains { $0.provider == .antigravity })
     }
 
     func testAntigravityReaderAndScannerParseProtoTrajectoryAndEffortPricing() async throws {

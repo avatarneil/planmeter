@@ -35,7 +35,7 @@ public struct ReportContext: Sendable {
 }
 
 public enum Report {
-    /// `planLimits` asks Claude Code, Antigravity, and Cursor for their subscription
+    /// `planLimits` asks Claude Code and Cursor for their subscription
     /// windows, which starts a CLI or network request; only limit reports need it.
     public static func load(days: Int, cache: ScanCache? = nil, dailyDate: String? = nil, planLimits: Bool = false) async -> ReportContext {
         let settings = T3Settings.load()
@@ -365,7 +365,7 @@ public enum Report {
         return [
             "codex": rows,
             "plans": plans,
-            "note": "Codex writes rate-limit windows into every session transcript; readings reflect the last turn each account ran. Claude Code limits come from its CLI (get_usage), Antigravity quotas from Google's Cloud Code API, and Cursor billing-cycle usage from cursor.com (usage-summary), at most once per five minutes per login.",
+            "note": "Codex limits reflect the last turn each account ran. PlanMeter checks the Claude Code CLI (get_usage) and cursor.com (usage-summary) for limits at most once every five minutes per login.",
         ]
     }
 

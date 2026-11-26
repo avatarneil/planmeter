@@ -54,6 +54,11 @@
   </branding>
 
   <releases>
+    <release version="0.5.2" date="2026-11-25">
+      <description>
+        <p>Removed live Antigravity quota checks. Usage history still comes from local conversation databases.</p>
+      </description>
+    </release>
     <release version="0.5.1" date="2026-11-20">
       <description>
         <p>Clearer Cursor status: a Cursor login is identified even when its saved token is encrypted, and the reason is shown when it can't be read.</p>

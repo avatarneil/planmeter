@@ -53,7 +53,7 @@ public final class HostEngine: RemoteReportSource {
 
         /// The real thing. `pricingCache` is where fetched prices are kept;
         /// `offline` skips every network call (Codex account-wide readings,
-        /// Cursor usage, Claude Code, Antigravity, and Cursor plan limits, and the pricing refresh)
+        /// Cursor usage, Claude Code and Cursor plan limits, and the pricing refresh)
         /// and reports from local data only.
         public static func live(pricingCache: URL, offline: Bool = false) -> Loader {
             Loader(
@@ -105,7 +105,7 @@ public final class HostEngine: RemoteReportSource {
     public var cursorUsage: [CursorUsageSnapshot] = []
     public var threadCatalog: [String: ThreadLink] = [:]
     public var rateLimits: [String: RateLimitSnapshot] = [:]
-    /// Claude Code, Antigravity, and Cursor windows read from the provider, by account id.
+    /// Claude Code and Cursor windows read from the provider, by account id.
     public var planLimits: [String: PlanLimitSnapshot] = [:]
     public var sources: [SourceReport] = []
     public var rates = RateTable()

@@ -212,8 +212,6 @@ public enum AccountDiscovery {
                     sourceDescription: normalizedDir
                 ))
                 result.sources.append(ScanSource(provider: .antigravity, rootDir: normalizedDir, fixedAccountId: id))
-                result.planLimitTargets.append(PlanLimitTarget(
-                    accountId: id, provider: .antigravity, tokenPath: "\(profileDir)/acp_token.json", authMethod: identity.authType))
             }
         } else {
             let envDirs = (environment["ANTIGRAVITY_DATA_DIR"] ?? "")
@@ -263,8 +261,6 @@ public enum AccountDiscovery {
                 for dir in uniqueDirs {
                     result.sources.append(ScanSource(provider: .antigravity, rootDir: dir, fixedAccountId: id))
                 }
-                result.planLimitTargets.append(PlanLimitTarget(
-                    accountId: id, provider: .antigravity, tokenPath: "\(profileDir)/acp_token.json", authMethod: identity.authType))
             }
         }
 
